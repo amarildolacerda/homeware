@@ -3,7 +3,6 @@ Arduino Homeware IO
 
 # Commands
 <pre>
- *   set board [esp8266]
  *   show config
  *   gpio <pin> mode [in,out,adc,lc,ldr]
  *   gpio <pin> defult <n>(usado no setup)
@@ -21,4 +20,4 @@ Arduino Homeware IO
 
 </pre>
 
-
+# 
