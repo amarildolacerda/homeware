@@ -2,7 +2,7 @@
 Arduino Homeware IO
 
 =Commands=
- *   "set board <esp8266>\r\n"
+ *   "set board /<esp8266/>"
  *   "show config\r\n"
  *   "gpio <pin> mode <in,out,adc,lc,ldr>\r\n"
  *   "gpio <pin> defult <n>(usado no setup)\r\n"
