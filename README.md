@@ -33,4 +33,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   set adc_max 512
 </pre>
 
-# 
+
+
+# Contribuindo
+Se você gostaria de contribuir para o Homeware para Arduino, por favor, crie uma nova issue descrevendo o que você gostaria de adicionar ou consertar. Em seguida, crie um fork do repositório e faça suas alterações em um branch separado. Quando terminar, abra um pull request para revisão.
