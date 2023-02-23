@@ -24,6 +24,26 @@
       "name": "ArduinoJson",
       "platforms":["espressif32","espressif8266"]
     },
+    {
+      "name": "ESP Telnet",      
+      "platforms":["espressif32","espressif8266"]
+    },
+    {
+      "name": "LittleFS_esp32",
+      "platforms":["espressif32","espressif8266"]
+    },
+    {
+      "name":"ElegantOTA",
+      "platforms":["espressif32","espressif8266"]
+    },
+    {
+      "name":"PubSubClient",
+      "platforms":["espressif32","espressif8266"]
+    },
+    {
+      "name":"SinricPro",
+      "platforms":["espressif32","espressif8266"]
+    }
   ],
   "examples":[
     "examples/*/*.cpp",
