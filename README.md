@@ -9,14 +9,14 @@ Na primeira carga do dispositivo será inciado um roteador para se conectar, faz
 # Commands
 Os comandos são enviados por TELNET na porta 23. Para ajudar nos principais itens de HELP é possivel pedir um "help" no terminal que irá mostrar os principais itens a serem utilizados;
 Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo:
-> gpio 4 mode in  [diz que o pino 4 é um pino de aquisição]
-> gpio 15 mode out [indica que o pino 15 é um acionamento (saída)]
-> gpio 4 trigger 15 monostable [indica que ao acionar o 4 é para disparar um evento para o pino 15 com mesmo valor de acionamento]
-> gpio 4 trigger 15 bistrable [indica que dispara um evento somente quando o valor do pino 4 for HIGH, ignora os LOW]
-> gpio 15 device onoff [fazer um registro de integração externa padrão "onoff" - usado na alexa]
-> save [guarda as configurações]
+* gpio 4 mode in  [diz que o pino 4 é um pino de aquisição]
+* gpio 15 mode out [indica que o pino 15 é um acionamento (saída)]
+* gpio 4 trigger 15 monostable [indica que ao acionar o 4 é para disparar um evento para o pino 15 com mesmo valor de acionamento]
+* gpio 4 trigger 15 bistable [indica que dispara um evento somente quando o valor do pino 4 for HIGH, ignora os LOW]
+* gpio 15 device onoff [fazer um registro de integração externa padrão "onoff" - usado na alexa]
+* save [guarda as configurações]
    
-><pre>
+<pre>
  *   show config 
  *   gpio [pin] mode [in,out,adc,lc,ldr]
  *   gpio [pin] default [n](usado no setup inicial)
