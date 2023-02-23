@@ -2,8 +2,9 @@
 Arduino Homeware IO
 
 # Commands
-<pre>
- *   show config
+*** show config ***
+
+<pre>   
  *   gpio <pin> mode [in,out,adc,lc,ldr]
  *   gpio <pin> defult <n>(usado no setup)
  *   gpio <pin> mode gus (groove ultrasonic)
