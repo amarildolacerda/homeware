@@ -1,5 +1,5 @@
 # HomewareIO
-Arduino Homeware IO
+Arduino Homeware IO [ESP8266 /  ESP32]
 
 Na primeira carga do dispositivo será inciado um roteador para se conectar, fazendo a conexão o servidor estará disponível em  [http://192.168.4.1:80] onde permitirá indicar o roteador WiFi a ser utilizado.
 
