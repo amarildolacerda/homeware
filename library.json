@@ -26,8 +26,8 @@
     },
   ],
   "examples":[
-    "examples/*/*.ino",
-    "examples/*/*/*.ino"
+    "examples/*/*.cpp",
+    "examples/*/*/*.cpp"
   ],
   "license": "CC-BY-SA-4.0"
 }
