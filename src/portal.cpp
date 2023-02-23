@@ -36,7 +36,7 @@ void onStationDisconnected(const WiFiEventSoftAPModeStationDisconnected &evt)
 void wifiCallback()
 {
     // Serial.print("looping [...");
-    homeware.loop();
+     homeware.loop();
     // Serial.println("]");
 }
 void Portal::autoConnect(const String slabel)
@@ -70,7 +70,7 @@ void Portal::autoConnect(const String slabel)
         hostname = stringf("%s.local", slabel);
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
-        wifiManager.setConfigWaitingcallback(wifiCallback);
+        //wifiManager.setConfigWaitingcallback(wifiCallback);
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
