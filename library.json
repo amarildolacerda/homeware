@@ -1,19 +1,19 @@
 {
-  "name": "SinricPro",
-  "keywords": "ethernet, sinric, alexa, iot",
-  "description": "Library for https://sinric.pro - simple way to connect your device to alexa",
+  "name": "HomewareIO",
+  "keywords": "gpio, http, telnet, sinric, alexa, iot, mqtt",
+  "description": "Library for commands",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sinricpro/esp8266-esp32-sdk"
+    "url": "https://github.com/amarildolacerda/homeware.git"
   },
   "authors": [
     {
-      "name": "Boris Jaeger",
-      "email": "sivar2311@gmail.com",
+      "name": "Amarildo Lacerda",
+      "email": "amarildo.lacerda@wbagestao.com",
       "maintainer": true
     }
   ],
-  "version": "2.10.3",
+  "version": "22.02.23",
   "frameworks": "arduino",
   "platforms": [
     "espressif8266",
@@ -24,10 +24,6 @@
       "name": "ArduinoJson",
       "platforms":["espressif32","espressif8266"]
     },
-    {
-      "name": "WebSockets",
-      "platforms":["espressif32","espressif8266"]
-    }
   ],
   "examples":[
     "examples/*/*.ino",
