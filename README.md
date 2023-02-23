@@ -1,5 +1,6 @@
-# HomewareIO
-Arduino Homeware IO [ESP8266 /  ESP32]
+# Arduino Homeware IO [ESP8266 /  ESP32]
+
+Homeware é uma biblioteca para a criação de aplicativos de automação em Arduino. Ele permite controlar vários dispositivos, como lâmpadas, termostatos, através de uma API RESTful [http://ip:porta/cmd?q=commando].
 
 Na primeira carga do dispositivo será inciado um roteador para se conectar, fazendo a conexão o servidor estará disponível em  [http://192.168.4.1:80] onde permitirá indicar o roteador WiFi a ser utilizado.
 
