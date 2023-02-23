@@ -16,9 +16,8 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
 * gpio 15 device onoff [fazer um registro de integração externa padrão "onoff" - usado na alexa]
 * save [guarda as configurações]
    
-#### show config 
-Mostra os parametros de configução. 
-<pre>   
+<pre>
+ *   show config 
  *   gpio [pin] mode [in,out,adc,lc,ldr]
  *   gpio [pin] default [n](usado no setup inicial)
  *   gpio [pin] mode gus (opcional groove ultrasonic)
