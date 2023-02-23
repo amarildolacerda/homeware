@@ -2,9 +2,10 @@
 Arduino Homeware IO
 
 =Commands=
- *   "set board /<esp8266/>"
- *   "show config\r\n"
- *   "gpio <pin> mode <in,out,adc,lc,ldr>\r\n"
+<pre>
+ *   "set board [esp8266]"
+ *   "show config"
+ *   "gpio <pin> mode [in,out,adc,lc,ldr]"
  *   "gpio <pin> defult <n>(usado no setup)\r\n"
  *   "gpio <pin> mode gus (groove ultrasonic)\r\n"
  *   "gpio <pin> trigger <pin> [monostable,bistable]\r\n"
@@ -18,3 +19,4 @@ Arduino Homeware IO
  *   "set adc_min 511\r\n"
  *   "set adc_max 512\r\n";
 
+</pre>
