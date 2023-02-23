@@ -1,14 +1,26 @@
 # HomewareIO
 Arduino Homeware IO
 
+Na primeira carga do dispositivo será inciado um roteador para se conectar, fazendo a conexão o servidor estará disponível em  [http://192.168.4.1:80] onde permitirá indicar o roteador WiFi a ser utilizado.
+
 ---
 
-# Commands
-*** show config ***
 
+# Commands
+Os comandos são enviados por TELNET na porta 23. Para ajudar nos principais itens de HELP é possivel pedir um "help" no terminal que irá mostrar os principais itens a serem utilizados;
+Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo:
+* gpio 4 mode in  [diz que o pino 4 é um pino de aquisição]
+* gpio 15 mode out [indica que o pino 15 é um acionamento (saída)]
+* gpio 4 trigger 15 monostable [indica que ao acionar o 4 é para disparar um evento para o pino 15 com mesmo valor de acionamento]
+* gpio 4 trigger 15 bistrable [indica que dispara um evento somente quando o valor do pino 4 for HIGH, ignora os LOW]
+* gpio 15 device onoff [fazer um registro de integração externa padrão "onoff" - usado na alexa]
+* save [guarda as configurações]
+   
+#### show config 
+Mostra os parametros de configução. 
 <pre>   
  *   gpio <pin> mode [in,out,adc,lc,ldr]
- *   gpio <pin> defult <n>(usado no setup)
+ *   gpio <pin> default <n>(usado no setup inicial)
  *   gpio <pin> mode gus (groove ultrasonic)
  *   gpio <pin> trigger <pin> [monostable,bistable]
  *   gpio <pin> device <onoff,dimmable> (usado na alexa)
