@@ -45,7 +45,7 @@ void wifiCallback()
 {
     // Serial.print("looping [...");
     homeware.loop();
-    Serial.print(".");
+    //Serial.print(".");
 }
 void Portal::autoConnect(const String slabel)
 {
@@ -53,6 +53,7 @@ void Portal::autoConnect(const String slabel)
     unsigned timeLimitMsec = 20000;
 
     label = slabel;
+    wifiManager.setHostname(homeware.hostname.c_str());
     if (homeware.config["password"] && homeware.config["ssid"])
     {
         WiFi.onSoftAPModeStationConnected(&onStationConnected);
@@ -76,8 +77,7 @@ void Portal::autoConnect(const String slabel)
     if (!connected)
     {
         WiFi.mode(WIFI_AP_STA);
-        hostname = stringf("%s.local", slabel);
-        WiFi.setHostname(hostname);
+        WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
         wifiManager.setConfigWaitingcallback(wifiCallback);
@@ -86,14 +86,13 @@ void Portal::autoConnect(const String slabel)
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
         }
         else
-            wifiManager.autoConnect(hostname);
+            wifiManager.autoConnect(homeware.hostname.c_str());
         connected = (WiFi.status() == WL_CONNECTED);
         if (connected)
         {
             WiFi.enableAP(false);
         }
     }
-
     if (!connected)
     {
         ESP.reset();
@@ -121,7 +120,7 @@ String inputH(const String name, const String value)
 
 void setManager(WiFiManager *wf)
 {
-    String hostname = stringf("%s-local", portal.label);
+    String hostname = stringf("%s.local", portal.label);
 #ifdef WIFI_NEW
     wf->setHostname(hostname);
     wf->setTitle("Homeware");

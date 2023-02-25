@@ -482,6 +482,7 @@ public:
 
     // get hostname helper
     String getWiFiHostname();
+    bool setupHostname(bool restart);
 
     void pageSend(const String payload);
     String pageMake(const String stitle, const String payload);
@@ -623,7 +624,6 @@ private:
 
     void setupConfigPortal();
     bool shutdownConfigPortal();
-    bool setupHostname(bool restart);
 
 #ifdef NO_EXTRA_4K_HEAP
     boolean _tryWPS = false; // try WPS on save failure, unsupported

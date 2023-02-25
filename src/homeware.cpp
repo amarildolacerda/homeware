@@ -149,6 +149,10 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 
     defaultConfig();
     restoreConfig();
+    if (config["label"])
+    {
+        hostname = config["label"].as<String>() + ".local";
+    }
     setupPins();
 }
 void Homeware::loop()
@@ -612,8 +616,8 @@ String Homeware::doCommand(String command)
             return help();
         else if (cmd[0] == "show")
         {
-            if (cmd[1]=="resources")
-               return resources;
+            if (cmd[1] == "resources")
+                return resources;
             else if (cmd[1] == "config")
                 return config.as<String>();
             else if (cmd[1] == "gpio")
@@ -625,7 +629,7 @@ String Homeware::doCommand(String command)
             FSInfo fs_info;
             LittleFS.info(fs_info);
             // ADC_MODE(ADC_VCC);
-            sprintf(buffer, "{ 'version':'%s', 'name': '%s', 'ip': '%s', 'total': %d, 'free': %s }", VERSION, String(config["label"]), ip, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes));
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s', 'total': %d, 'free': %s }", hostname.c_str(), VERSION, String(config["label"]), ip, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes));
             return buffer;
         }
         else if (cmd[0] == "reset")

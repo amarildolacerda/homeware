@@ -41,6 +41,7 @@ public:
 #ifdef TELNET
     ESPTelnet telnet;
 #endif
+    String hostname = "AutoConnect";
     bool inited = false;
     bool connected = false;
     ESP8266WebServer *server;

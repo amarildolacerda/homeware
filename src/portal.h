@@ -13,7 +13,6 @@
 class Portal
 {
 public:
-    char *hostname;
     WiFiManager wifiManager = WiFiManager();
     ESP8266WebServer *server;
     String label;
