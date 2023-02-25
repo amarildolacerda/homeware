@@ -2,7 +2,7 @@
 #define WIFI_NEW
 #include <Arduino.h>
 #define LABEL String(getChipId(), HEX)
-#define VERSION "23.02.24"
+#define VERSION "23.02.25"
 #define ALEXA
 //#define SINRIC
 #define TELNET
