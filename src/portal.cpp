@@ -37,7 +37,7 @@ void wifiCallback()
 {
     // Serial.print("looping [...");
      homeware.loop();
-    // Serial.println("]");
+     Serial.print(".");
 }
 void Portal::autoConnect(const String slabel)
 {
@@ -67,10 +67,12 @@ void Portal::autoConnect(const String slabel)
 
     if (!connected)
     {
+        WiFi.mode(WIFI_AP_STA);
         hostname = stringf("%s.local", slabel);
+        WiFi.setHostname(hostname);
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
-        //wifiManager.setConfigWaitingcallback(wifiCallback);
+        wifiManager.setConfigWaitingcallback(wifiCallback);
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
@@ -78,6 +80,9 @@ void Portal::autoConnect(const String slabel)
         else
             wifiManager.autoConnect(hostname);
         connected = (WiFi.status() == WL_CONNECTED);
+        if (connected){
+           WiFi.enableAP(false);
+        }
     }
 
     if (!connected)
