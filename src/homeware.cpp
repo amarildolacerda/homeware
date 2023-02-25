@@ -1,17 +1,12 @@
 #include <homeware.h>
 #include <functions.h>
-#include <options.h>
+#include "options.h"
 
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <LittleFS.h>
 
-#define WIFI_NEW
 #include <Arduino.h>
-#define ALEXA
-// #define SINRIC
-#define TELNET
-#define OTA
 
 #ifdef WIFI_NEW
 #include <WManager.h>

@@ -11,8 +11,8 @@
 //#define MQTT
 
 
-//#if defined(ESP8285)
-//  #undef SINRIC
-//  #undef GROOVE_ULTRASONIC
-//  #undef MQTT
-//#endif
+#if defined(ESP8285)
+  #undef SINRIC
+  #undef GROOVE_ULTRASONIC
+  #undef MQTT
+#endif
