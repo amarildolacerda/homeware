@@ -11,12 +11,19 @@ void Portal::setup(ESP8266WebServer *externalServer)
 {
     server = externalServer;
 }
+
+bool timeout = millis();
 void Portal::loop()
 {
     if ((WiFi.status() != WL_CONNECTED) || (WiFi.localIP().toString() == "0.0.0.0"))
     {
-        WiFi.reconnect();
+        if (millis() - timeout > 60000)
+            ESP.restart();
+        else
+            WiFi.reconnect();
     }
+    else
+        timeout = millis();
 }
 
 void onStationConnected(const WiFiEventSoftAPModeStationConnected &evt)
@@ -36,8 +43,8 @@ void onStationDisconnected(const WiFiEventSoftAPModeStationDisconnected &evt)
 void wifiCallback()
 {
     // Serial.print("looping [...");
-     homeware.loop();
-     Serial.print(".");
+    homeware.loop();
+    Serial.print(".");
 }
 void Portal::autoConnect(const String slabel)
 {
@@ -80,8 +87,9 @@ void Portal::autoConnect(const String slabel)
         else
             wifiManager.autoConnect(hostname);
         connected = (WiFi.status() == WL_CONNECTED);
-        if (connected){
-           WiFi.enableAP(false);
+        if (connected)
+        {
+            WiFi.enableAP(false);
         }
     }
 

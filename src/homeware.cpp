@@ -1,11 +1,17 @@
 #include <homeware.h>
 #include <functions.h>
+#include <options.h>
 
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <LittleFS.h>
 
-#include <options.h>
+#define WIFI_NEW
+#include <Arduino.h>
+#define ALEXA
+// #define SINRIC
+#define TELNET
+#define OTA
 
 #ifdef WIFI_NEW
 #include <WManager.h>
@@ -41,6 +47,7 @@ void sinricTrigger(int pin, int value);
 #endif
 
 StaticJsonDocument<256> docPinValues;
+String resources = "";
 int sinric_count = 0;
 
 void linha()
@@ -55,6 +62,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
 
 void Homeware::setupServer()
 {
+    resources += "servidor comandos,";
     server->on("/cmd", []()
                {
         if (homeware.server->hasArg("q"))
@@ -111,22 +119,28 @@ void Homeware::begin()
         return;
 
 #ifdef ALEXA
+    resources += "alexa,";
     setupAlexa();
 #endif
     setupServer();
 #ifdef TELNET
+    resources += "telnet,";
     setupTelnet();
 #endif
 
 #ifdef OTA
+
+    resources += "OTA,";
     ElegantOTA.begin(server);
 #endif
     server->begin();
 #ifdef MQTT
+    resources += "MQTT,";
     mqtt.setup(config["mqtt_host"], config["mqtt_port"], config["mqtt_prefix"], (config["mqtt_name"] != NULL) ? config["mqtt_name"] : config["label"]);
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif
     inited = true;
+    Serial.println(resources);
 }
 void Homeware::setup(ESP8266WebServer *externalServer)
 {
@@ -247,6 +261,7 @@ void Homeware::initPinMode(int pin, const String m)
 
 void Homeware::setupPins()
 {
+    Serial.println("configurando os pinos");
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
@@ -602,7 +617,9 @@ String Homeware::doCommand(String command)
             return help();
         else if (cmd[0] == "show")
         {
-            if (cmd[1] == "config")
+            if (cmd[1]=="resources")
+               return resources;
+            else if (cmd[1] == "config")
                 return config.as<String>();
             else if (cmd[1] == "gpio")
                 return showGpio();
@@ -924,6 +941,7 @@ bool onSinricMotionState(const String &deviceId, bool &state)
 
 void Homeware::setupAlexa()
 {
+    Serial.println("preaparando alexa");
     JsonObject devices = getDevices();
 
     Serial.println("\r\nDevices\r\n============================\r\n");
@@ -954,6 +972,7 @@ void Homeware::setupAlexa()
     Serial.println("============================");
 
 #ifdef SINRIC
+    Serial.println("preparando SINRIC");
     if (sinric_count > 0)
     {
         SinricPro.onConnected([]()
@@ -970,6 +989,7 @@ void Homeware::setupAlexa()
 
 void Homeware::setupTelnet()
 {
+    Serial.println("carregando TELNET");
     telnet.onConnect([](String ip)
                      {
         Serial.print("- Telnet: ");
