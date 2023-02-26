@@ -14,9 +14,14 @@ class Portal
 {
 public:
     WiFiManager wifiManager = WiFiManager();
+#ifdef ESP32
+    WebServer *server;
+    void setup(WebServer *externalServer = nullptr);
+#else
     ESP8266WebServer *server;
-    String label;
     void setup(ESP8266WebServer *externalServer = nullptr);
+#endif
+    String label;
     void autoConnect(const String label);
     void reset();
     void loop();

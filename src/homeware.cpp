@@ -18,7 +18,11 @@
 #include <ElegantOTA.h>
 #endif
 
+#ifdef ESP32
+#include "WiFi.h"
+#else
 #include <ESP8266WiFi.h>
+#endif
 
 #ifdef MQTT
 #include <mqtt.h>
@@ -50,10 +54,15 @@ void linha()
     Serial.println("-------------------------------");
 }
 
+#ifdef ESP32
+void Homeware::setServer(WebServer *externalServer)
+#else
 void Homeware::setServer(ESP8266WebServer *externalServer)
+#endif
 {
     server = externalServer;
 }
+
 
 void Homeware::setupServer()
 {
@@ -137,7 +146,12 @@ void Homeware::begin()
     inited = true;
     Serial.println(resources);
 }
+
+#ifdef ESP32
+void Homeware::setup(WebServer *externalServer)
+#else
 void Homeware::setup(ESP8266WebServer *externalServer)
+#endif
 {
     analogWriteRange(1024);
     setServer(externalServer);

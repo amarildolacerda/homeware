@@ -5,10 +5,18 @@
 // #include <wm_strings_pt_BR.h>
 #include <homeware.h>
 
+#ifdef ESP32
+#include "WiFi.h"
+#else
 #include <ESP8266WiFi.h>
+#endif
 #include <chart.h>
 
+#ifdef ESP32
+void Portal::setup(WebServer *externalServer)
+#else
 void Portal::setup(ESP8266WebServer *externalServer)
+#endif
 {
     server = externalServer;
 }
