@@ -3,15 +3,25 @@
 #include "options.h"
 
 #include <ArduinoJson.h>
+
+#ifdef ESP8266
+#define USE_LittleFS
+#endif
+
 #include <FS.h>
+#ifdef USE_LittleFS
+#define SPIFFS LITTLEFS
 #include <LittleFS.h>
+#else
+#include <SPIFFS.h>
+#endif
 
 #include <Arduino.h>
 
 #ifdef WIFI_NEW
 #include <WManager.h>
 #else
-#include <WiFiManager.h>
+#include <ESP_WiFiManager.h>
 #endif
 
 #ifdef OTA
@@ -63,7 +73,6 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
     server = externalServer;
 }
 
-
 void Homeware::setupServer()
 {
     resources += "servidor comandos,";
@@ -87,7 +96,11 @@ String Homeware::restoreConfig()
     try
     {
         String old = config.as<String>();
+#ifdef ESP32
+        File file = SPIFFS.open("/config.json", "r");
+#else
         File file = LittleFS.open("/config.json", "r");
+#endif
         if (!file)
             return "erro ao abrir /config.json";
         String novo = file.readString();
@@ -153,10 +166,16 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
+#ifdef ESP8266
     analogWriteRange(1024);
+#endif
     setServer(externalServer);
 
+#ifdef ESP32
+    if (!SPIFFS.begin())
+#else
     if (!LittleFS.begin())
+#endif
     {
         Serial.println("LittleFS mount failed");
     }
@@ -255,7 +274,11 @@ String Homeware::saveConfig()
 
     base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
     serializeJson(base, Serial);
+#ifdef ESP32
+    File file = SPIFFS.open("/config.json", "w");
+#else
     File file = LittleFS.open("/config.json", "w");
+#endif
     if (serializeJson(base, file) == 0)
         rsp = "não gravou /config.json";
     file.close();
@@ -503,7 +526,12 @@ String Homeware::help()
 
 bool Homeware::readFile(String filename, char *buffer, size_t maxLen)
 {
+#ifdef ESP32
+
+    File file = SPIFFS.open(filename, "r");
+#else
     File file = LittleFS.open(filename, "r");
+#endif
     if (!file)
     {
         return false;
@@ -527,7 +555,7 @@ void Homeware::loopEvent()
         unsigned long interval;
         try
         {
-            interval = String(config["interval"]).toInt();
+            interval = config["interval"].as<String>().toInt();
         }
         catch (char e)
         {
@@ -595,7 +623,11 @@ String Homeware::print(String msg)
 
 void Homeware::resetWiFi()
 {
+#ifdef ESP32
+    ESP_WiFiManager wifiManager;
+#else
     WiFiManager wifiManager;
+#endif
     WiFi.mode(WIFI_STA);
     WiFi.persistent(true);
     WiFi.disconnect(true);
@@ -604,7 +636,7 @@ void Homeware::resetWiFi()
     config.remove("ssid");
     config.remove("password");
     saveConfig();
-    ESP.reset();
+    ESP.restart();
     delay(1000);
 }
 
@@ -615,12 +647,15 @@ String Homeware::doCommand(String command)
         String *cmd = split(command, ' ');
         Serial.print("CMD: ");
         Serial.println(command);
+#ifdef ESP8266
         if (cmd[0] == "format")
         {
             LittleFS.format();
             return "formated";
         }
-        else if (cmd[0] == "open")
+        else
+#endif
+            if (cmd[0] == "open")
         {
             char json[1024];
             readFile(cmd[1], json, 1024);
@@ -640,10 +675,12 @@ String Homeware::doCommand(String command)
             char ip[20];
             IPAddress x = localIP();
             sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
-            FSInfo fs_info;
-            LittleFS.info(fs_info);
-            // ADC_MODE(ADC_VCC);
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s', 'total': %d, 'free': %s }", hostname.c_str(), VERSION, String(config["label"]), ip, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes));
+            // FSInfo fs_info;
+            // LittleFS.info(fs_info);
+            //  ADC_MODE(ADC_VCC);
+            //'total': %d, 'free': %s
+            //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>(), ip);
             return buffer;
         }
         else if (cmd[0] == "reset")
@@ -775,10 +812,10 @@ String Homeware::showGpio()
         if (trig.containsKey(sPin))
         {
             s += ", 'trigger': ";
-            s += String(trig[sPin]);
+            s += trig[sPin].as<String>();
             s += ", 'trigmode':'";
             JsonObject stab = getStable();
-            String st = String(stab[sPin]);
+            String st = stab[sPin].as<String>();
             s += optionStable[st.toInt()];
             s += "'";
             s += " ";
@@ -833,7 +870,18 @@ int Homeware::getAdcState(int pin)
     }
     return rt;
 }
-uint32_t Homeware::getChipId() { return ESP.getChipId(); }
+
+#ifdef ESP32
+const char *Homeware::getChipId()
+{
+    return ESP.getChipModel();
+}
+#else
+uint32_t Homeware::getChipId()
+{
+    return ESP.getChipId();
+}
+#endif
 
 #ifdef SINRIC
 void sinricTrigger(int pin, int value)
@@ -1036,4 +1084,8 @@ IPAddress Homeware::localIP()
 }
 
 Homeware homeware;
+#ifdef ESP32
+WebServer server;
+#else
 ESP8266WebServer server;
+#endif

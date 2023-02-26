@@ -1,6 +1,11 @@
-#include <FS.h>
 
+#include "LittleFS.h"
+#ifdef ESP32
+const char* getChipId() { return ESP.getChipModel(); }
+
+#else
 uint32_t getChipId() { return ESP.getChipId(); }
+#endif
 
 char *stringf(const char *format, ...)
 {

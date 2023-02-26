@@ -5,7 +5,7 @@
 
 #ifdef ESP32
 #include "WiFi.h"
-#include "WebServer.h" 
+#include "WebServer.h"
 #else
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -16,11 +16,10 @@
 #ifdef WIFI_NEW
 #include <WManager.h>
 #else
-#include <WiFiManager.h>
+#include <ESP_WiFiManager.h>
 #endif
 
 #include <ArduinoJson.h>
-
 
 #ifdef ALEXA
 #include <Espalexa.h>
@@ -31,8 +30,7 @@
 
 #include <functions.h>
 
-    void
-    linha();
+void linha();
 
 class Homeware
 {
@@ -94,7 +92,11 @@ public:
 
     void debug(String txt);
     int getAdcState(int pin);
+#ifdef ESP32
+    const char* getChipId();
+#else
     uint32_t getChipId();
+#endif
     void errorMsg(String msg);
     JsonObject getValues();
 

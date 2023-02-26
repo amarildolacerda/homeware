@@ -1,5 +1,8 @@
 
+#ifdef ESP8266
 #define WIFI_NEW
+#endif
+
 #include <Arduino.h>
 #define LABEL String(getChipId(), HEX)
 #define VERSION "23.02.25.6"

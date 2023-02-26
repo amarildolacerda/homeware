@@ -35,6 +35,7 @@ void Portal::loop()
         timeout = millis();
 }
 
+/*
 void onStationConnected(const WiFiEventSoftAPModeStationConnected &evt)
 {
     homeware.connected = true;
@@ -48,6 +49,7 @@ void onStationDisconnected(const WiFiEventSoftAPModeStationDisconnected &evt)
     Serial.print("Station disconnected: ");
     // Serial.println(macToString(evt.mac));
 }
+*/
 
 void wifiCallback()
 {
@@ -61,14 +63,14 @@ void Portal::autoConnect(const String slabel)
     unsigned timeLimitMsec = 20000;
 
     label = slabel;
+    #ifdef ESP8266
     wifiManager.setHostname(homeware.hostname.c_str());
+    #endif
     if (homeware.config["password"] && homeware.config["ssid"])
     {
-        WiFi.onSoftAPModeStationConnected(&onStationConnected);
-        WiFi.onSoftAPModeStationDisconnected(&onStationDisconnected);
         WiFi.enableSTA(true);
-        WiFi.begin(homeware.config["ssid"], String(homeware.config["password"]));
-        Serial.println(String(homeware.config["ssid"]));
+        WiFi.begin(homeware.config["ssid"], homeware.config["password"].as<String>().c_str());
+        Serial.println(homeware.config["ssid"].as<String>());
         while (WiFi.status() != WL_CONNECTED && millis() - start < timeLimitMsec)
         {
             delay(500);
@@ -88,7 +90,10 @@ void Portal::autoConnect(const String slabel)
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
+        #ifdef ESP32
+        #else
         wifiManager.setConfigWaitingcallback(wifiCallback);
+        #endif
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
@@ -103,7 +108,7 @@ void Portal::autoConnect(const String slabel)
     }
     if (!connected)
     {
-        ESP.reset();
+        ESP.restart();
     }
     else
     {
@@ -126,7 +131,11 @@ String inputH(const String name, const String value)
     return String(stringf("<input type=\"hidden\" name=\"%s\" value=\"%s\">", name, value));
 }
 
+#ifdef ESP32
+void setManager(ESP_WiFiManager *wf)
+#else
 void setManager(WiFiManager *wf)
+#endif
 {
     String hostname = stringf("%s.local", portal.label);
 #ifdef WIFI_NEW
