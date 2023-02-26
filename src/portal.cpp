@@ -63,11 +63,13 @@ void Portal::autoConnect(const String slabel)
     unsigned timeLimitMsec = 20000;
 
     label = slabel;
+    #ifdef ESP8266
     wifiManager.setHostname(homeware.hostname.c_str());
+    #endif
     if (homeware.config["password"] && homeware.config["ssid"])
     {
         WiFi.enableSTA(true);
-        WiFi.begin(homeware.config["ssid"], String(homeware.config["password"]));
+        WiFi.begin(homeware.config["ssid"], homeware.config["password"].as<String>().c_str());
         Serial.println(homeware.config["ssid"].as<String>());
         while (WiFi.status() != WL_CONNECTED && millis() - start < timeLimitMsec)
         {

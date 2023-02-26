@@ -3,7 +3,18 @@
 #include "options.h"
 
 #include <ArduinoJson.h>
-#include "LittleFS.h"
+
+#ifdef ESP8266
+#define USE_LittleFS
+#endif
+
+#include <FS.h>
+#ifdef USE_LittleFS
+#define SPIFFS LITTLEFS
+#include <LittleFS.h>
+#else
+#include <SPIFFS.h>
+#endif
 
 #include <Arduino.h>
 
@@ -85,7 +96,11 @@ String Homeware::restoreConfig()
     try
     {
         String old = config.as<String>();
+#ifdef ESP32
+        File file = SPIFFS.open("/config.json", "r");
+#else
         File file = LittleFS.open("/config.json", "r");
+#endif
         if (!file)
             return "erro ao abrir /config.json";
         String novo = file.readString();
@@ -156,7 +171,11 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
     setServer(externalServer);
 
+#ifdef ESP32
+    if (!SPIFFS.begin())
+#else
     if (!LittleFS.begin())
+#endif
     {
         Serial.println("LittleFS mount failed");
     }
@@ -255,7 +274,11 @@ String Homeware::saveConfig()
 
     base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
     serializeJson(base, Serial);
+#ifdef ESP32
+    File file = SPIFFS.open("/config.json", "w");
+#else
     File file = LittleFS.open("/config.json", "w");
+#endif
     if (serializeJson(base, file) == 0)
         rsp = "não gravou /config.json";
     file.close();
@@ -503,7 +526,12 @@ String Homeware::help()
 
 bool Homeware::readFile(String filename, char *buffer, size_t maxLen)
 {
+#ifdef ESP32
+
+    File file = SPIFFS.open(filename, "r");
+#else
     File file = LittleFS.open(filename, "r");
+#endif
     if (!file)
     {
         return false;
