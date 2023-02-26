@@ -527,7 +527,7 @@ void Homeware::loopEvent()
         unsigned long interval;
         try
         {
-            interval = String(config["interval"]).toInt();
+            interval = config["interval"].as<String>().toInt();
         }
         catch (char e)
         {
@@ -647,10 +647,12 @@ String Homeware::doCommand(String command)
             char ip[20];
             IPAddress x = localIP();
             sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
-            FSInfo fs_info;
-            LittleFS.info(fs_info);
-            // ADC_MODE(ADC_VCC);
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s', 'total': %d, 'free': %s }", hostname.c_str(), VERSION, config["label"].as<String>(), ip, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes));
+            // FSInfo fs_info;
+            // LittleFS.info(fs_info);
+            //  ADC_MODE(ADC_VCC);
+            //'total': %d, 'free': %s
+            //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>(), ip);
             return buffer;
         }
         else if (cmd[0] == "reset")
