@@ -167,7 +167,7 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
 #ifdef ESP8266
-    analogWriteRange(1024);
+    analogWriteRange(256);
 #endif
     setServer(externalServer);
 
