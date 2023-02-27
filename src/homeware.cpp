@@ -1033,7 +1033,7 @@ void Homeware::setupAlexa()
     Serial.println("============================");
 
 #ifdef SINRIC
-    resources += "SINRIC,"
+    resources += "SINRIC,";
     if (sinric_count > 0)
     {
         SinricPro.onConnected([]()
