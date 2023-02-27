@@ -29,7 +29,10 @@ void Portal::loop()
         if (millis() - timeout > 60000)
             ESP.restart();
         else
+        {
+            WiFi.setAutoReconnect(true);
             WiFi.reconnect();
+        }
     }
     else
         timeout = millis();
@@ -55,7 +58,7 @@ void wifiCallback()
 {
     // Serial.print("looping [...");
     homeware.loop();
-    //Serial.print(".");
+    // Serial.print(".");
 }
 void Portal::autoConnect(const String slabel)
 {
@@ -63,12 +66,13 @@ void Portal::autoConnect(const String slabel)
     unsigned timeLimitMsec = 20000;
 
     label = slabel;
-    #ifdef ESP8266
+#ifdef ESP8266
     wifiManager.setHostname(homeware.hostname.c_str());
-    #endif
+#endif
     if (homeware.config["password"] && homeware.config["ssid"])
     {
         WiFi.enableSTA(true);
+        WiFi.setAutoReconnect(true);
         WiFi.begin(homeware.config["ssid"], homeware.config["password"].as<String>().c_str());
         Serial.println(homeware.config["ssid"].as<String>());
         while (WiFi.status() != WL_CONNECTED && millis() - start < timeLimitMsec)
@@ -90,10 +94,10 @@ void Portal::autoConnect(const String slabel)
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
-        #ifdef ESP32
-        #else
+#ifdef ESP32
+#else
         wifiManager.setConfigWaitingcallback(wifiCallback);
-        #endif
+#endif
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);

@@ -1,7 +1,7 @@
 
-#ifdef ESP8266
+//#ifdef ESP8266
 #define WIFI_NEW
-#endif
+//#endif
 
 #include <Arduino.h>
 #define LABEL String(getChipId(), HEX)
