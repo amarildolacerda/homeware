@@ -215,6 +215,7 @@ void Homeware::loop()
             SinricPro.handle();
 #endif
     }
+    yield();
 }
 
 DynamicJsonDocument baseConfig()
