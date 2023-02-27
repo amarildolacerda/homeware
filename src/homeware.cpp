@@ -18,11 +18,6 @@
 
 #include <Arduino.h>
 
-#ifdef WIFI_NEW
-#include <WManager.h>
-#else
-#include <ESP_WiFiManager.h>
-#endif
 
 #ifdef OTA
 #include <ElegantOTA.h>
@@ -624,20 +619,20 @@ String Homeware::print(String msg)
 
 void Homeware::resetWiFi()
 {
-#ifdef ESP32
-    ESP_WiFiManager wifiManager;
-#else
-    WiFiManager wifiManager;
-#endif
+    HomewareWiFiManager wifiManager;
     WiFi.mode(WIFI_STA);
     WiFi.persistent(true);
     WiFi.disconnect(true);
     WiFi.persistent(false);
-    wifiManager.resetSettings();
+    //wifiManager.resetSettings();
     config.remove("ssid");
     config.remove("password");
     saveConfig();
+#ifdef ESP8266
+    ESP.reset();
+#else
     ESP.restart();
+#endif
     delay(1000);
 }
 
@@ -699,7 +694,11 @@ String Homeware::doCommand(String command)
             print("reiniciando...");
             delay(1000);
             // telnet.stop();
+#ifdef ESP8266
+            ESP.reset();
+#else
             ESP.restart();
+#endif
             return "OK";
         }
         else if (cmd[0] == "save")
@@ -1034,7 +1033,7 @@ void Homeware::setupAlexa()
     Serial.println("============================");
 
 #ifdef SINRIC
-    Serial.println("preparando SINRIC");
+    resources += "SINRIC,"
     if (sinric_count > 0)
     {
         SinricPro.onConnected([]()

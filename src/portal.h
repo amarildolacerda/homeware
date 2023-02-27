@@ -4,22 +4,17 @@
 
 #include <options.h>
 
-#ifdef WIFI_NEW
-#include <WManager.h>
-#else
-#include <ESP_WiFiManager.h>
-#endif
+#include <homeware.h>
 
 class Portal
 {
 public:
-
 #ifdef ESP32
-    ESP_WiFiManager wifiManager ;
+    HomewareWiFiManager wifiManager;
     WebServer *server;
     void setup(WebServer *externalServer = nullptr);
 #else
-    WiFiManager wifiManager = WiFiManager();
+    HomewareWiFiManager wifiManager = HomewareWiFiManager();
     ESP8266WebServer *server;
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif

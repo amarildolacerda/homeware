@@ -27,7 +27,11 @@ void Portal::loop()
     if ((WiFi.status() != WL_CONNECTED) || (WiFi.localIP().toString() == "0.0.0.0"))
     {
         if (millis() - timeout > 60000)
+#ifdef ESP8266
+            ESP.reset();
+#else
             ESP.restart();
+#endif
         else
         {
             WiFi.setAutoReconnect(true);
@@ -66,11 +70,12 @@ void Portal::autoConnect(const String slabel)
     unsigned timeLimitMsec = 20000;
 
     label = slabel;
-#ifdef ESP8266
-    wifiManager.setHostname(homeware.hostname.c_str());
-#endif
+    /*#ifdef ESP8266
+        wifiManager.setHostname(homeware.hostname.c_str());
+    #endif*/
     if (homeware.config["password"] && homeware.config["ssid"])
     {
+
         WiFi.enableSTA(true);
         WiFi.setAutoReconnect(true);
         WiFi.begin(homeware.config["ssid"], homeware.config["password"].as<String>().c_str());
@@ -90,14 +95,12 @@ void Portal::autoConnect(const String slabel)
 
     if (!connected)
     {
+
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(true);
-#ifdef ESP32
-#else
         wifiManager.setConfigWaitingcallback(wifiCallback);
-#endif
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
@@ -112,7 +115,11 @@ void Portal::autoConnect(const String slabel)
     }
     if (!connected)
     {
+#ifdef ESP8266
+        ESP.reset();
+#else
         ESP.restart();
+#endif
     }
     else
     {
@@ -135,16 +142,12 @@ String inputH(const String name, const String value)
     return String(stringf("<input type=\"hidden\" name=\"%s\" value=\"%s\">", name, value));
 }
 
-#ifdef ESP32
-void setManager(ESP_WiFiManager *wf)
-#else
-void setManager(WiFiManager *wf)
-#endif
+void setManager(HomewareWiFiManager *wf)
 {
     String hostname = stringf("%s.local", portal.label);
 #ifdef WIFI_NEW
-    wf->setHostname(hostname);
-    wf->setTitle("Homeware");
+    // wf->setHostname(hostname);
+    // wf->setTitle("Homeware");
 #endif
 }
 
@@ -189,7 +192,7 @@ void Portal::setupServer()
 
     server->on("/", []()
                {
-        WiFiManager wf;
+        HomewareWiFiManager wf;
         setManager(&wf);
         String head = "";
         head += FPSTR(HTTP_CHART_HEADER);
@@ -270,13 +273,13 @@ void Portal::setupServer()
                         {
                             //String pg = "reiniciando...{c}";
                             //pg.replace("{c}", timereload("/", 1000));
-                            WiFiManager wf;
-        portal.server->send(200, "text/html", wf.pageMake("Homeware", "<a href='/'>reiniciando...</>"));
-    homeware.doCommand("reset"); });
+                            HomewareWiFiManager wf;
+                            portal.server->send(200, "text/html", wf.pageMake("Homeware", "<a href='/'>reiniciando...</>"));
+                            homeware.doCommand("reset"); });
 
     server->on("/gs", []()
                {
-        WiFiManager wf ;
+        HomewareWiFiManager wf ;
         setManager(&wf);
 
         String pg = "GPIO Status<hr>";

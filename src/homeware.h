@@ -13,11 +13,7 @@
 
 #include <options.h>
 
-#ifdef WIFI_NEW
-#include <WManager.h>
-#else
-#include <ESP_WiFiManager.h>
-#endif
+#include "homewareWiFiManager.h"
 
 #include <ArduinoJson.h>
 
@@ -93,7 +89,7 @@ public:
     void debug(String txt);
     int getAdcState(int pin);
 #ifdef ESP32
-    const char* getChipId();
+    const char *getChipId();
 #else
     uint32_t getChipId();
 #endif
