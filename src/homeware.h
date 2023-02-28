@@ -27,7 +27,7 @@
 
 #include <functions.h>
 
-const unsigned long timeoutDeepSleep = 60000;
+const unsigned long timeoutDeepSleep = 10000;
 
 void linha();
 

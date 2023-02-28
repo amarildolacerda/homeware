@@ -83,11 +83,10 @@ void Homeware::setupServer()
         } });
 }
 
-unsigned long sleeptmp = millis() ;
+unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Homeware::resetDeepSleep(const unsigned int t)
 {
     unsigned int v = millis() + t;
-    Serial.print("resetDeepSleep ");
     if (v > sleeptmp)
     {
         sleeptmp = v;
@@ -97,7 +96,7 @@ void Homeware::resetDeepSleep(const unsigned int t)
 
 void doSleep(const int tempo)
 {
-    if (millis() - sleeptmp > timeoutDeepSleep)
+    if (millis() > sleeptmp)
     {
         Serial.print("Sleeping...");
         Serial.println(tempo);
