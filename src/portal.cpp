@@ -268,7 +268,7 @@ void Portal::setupServer()
     server->on("/get", []()
                { 
                String p = portal.server->arg("p");
-               int v = homeware.readPin(p.toInt(), String(homeware.getMode()[p]));
+               int v = homeware.readPin(p.toInt(), homeware.getMode()[p].as<String>());
                Serial.print(p+": ");
                Serial.println(v);
                portal.server->send(200, "text/plain", String(v)); });
