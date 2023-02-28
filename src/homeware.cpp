@@ -93,12 +93,12 @@ void Homeware::resetDeepSleep(const unsigned int t)
         Serial.println(sleeptmp);
     }
 }
-
+const char sleeping[] = "Sleeping: ";
 void doSleep(const int tempo)
 {
     if (millis() > sleeptmp)
     {
-        Serial.print("Sleeping: ");
+        Serial.print(FPSTR(sleeping));
         Serial.println(tempo);
         ESP.deepSleep(tempo * 1000 * 1000);
     }
