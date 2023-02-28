@@ -24,7 +24,10 @@
 #include "ESPTelnet.h"
 #endif
 
+
 #include <functions.h>
+
+const unsigned long timeoutDeepSleep = 60000;
 
 void linha();
 
@@ -67,6 +70,7 @@ public:
     String saveConfig();
     void initPinMode(int pin, const String m);
     void resetWiFi();
+    void resetDeepSleep(const unsigned int t = 60000);
 
     JsonObject getTrigger();
     JsonObject getStable();

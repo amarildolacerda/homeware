@@ -18,7 +18,6 @@
 
 #include <Arduino.h>
 
-
 #ifdef OTA
 #include <ElegantOTA.h>
 #endif
@@ -83,6 +82,29 @@ void Homeware::setupServer()
             return;
         } });
 }
+
+unsigned long sleeptmp = millis() ;
+void Homeware::resetDeepSleep(const unsigned int t)
+{
+    unsigned int v = millis() + t;
+    Serial.print("resetDeepSleep ");
+    if (v > sleeptmp)
+    {
+        sleeptmp = v;
+        Serial.println(sleeptmp);
+    }
+}
+
+void doSleep(const int tempo)
+{
+    if (millis() - sleeptmp > timeoutDeepSleep)
+    {
+        Serial.print("Sleeping...");
+        Serial.println(tempo);
+        ESP.deepSleep(tempo * 1000 * 1000);
+    }
+}
+
 String Homeware::restoreConfig()
 {
     String rt = "nao restaurou config";
@@ -151,6 +173,7 @@ void Homeware::begin()
     mqtt.setup(config["mqtt_host"], config["mqtt_port"], config["mqtt_prefix"], (config["mqtt_name"] != NULL) ? config["mqtt_name"] : config["label"]);
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif
+    resetDeepSleep();
     inited = true;
     Serial.println(resources);
 }
@@ -210,6 +233,11 @@ void Homeware::loop()
             SinricPro.handle();
 #endif
     }
+
+    const int sleep = config["sleep"].as<String>().toInt();
+    if (sleep > 0)
+        doSleep(sleep);
+
     yield();
 }
 
@@ -226,8 +254,9 @@ DynamicJsonDocument baseConfig()
     config.createNestedObject("default");
     config["debug"] = homeware.inDebug ? "on" : "off";
     config["interval"] = "500";
-    config["adc_min"] = "511";
-    config["adc_max"] = "512";
+    config["adc_min"] = "125";
+    config["adc_max"] = "126";
+    config["sleep"] = "0";
 
 #ifdef MQTT
     config["mqtt_host"] = "none"; //"test.mosquitto.org";
@@ -624,7 +653,7 @@ void Homeware::resetWiFi()
     WiFi.persistent(true);
     WiFi.disconnect(true);
     WiFi.persistent(false);
-    //wifiManager.resetSettings();
+    // wifiManager.resetSettings();
     config.remove("ssid");
     config.remove("password");
     saveConfig();
@@ -640,6 +669,7 @@ String Homeware::doCommand(String command)
 {
     try
     {
+        resetDeepSleep();
         String *cmd = split(command, ' ');
         Serial.print("CMD: ");
         Serial.println(command);
@@ -1037,13 +1067,14 @@ void Homeware::setupAlexa()
     if (sinric_count > 0)
     {
         SinricPro.onConnected([]()
-                              { Serial.printf("Connected to SinricPro\r\n"); });
+                              {                           
+                                homeware.resetDeepSleep();
+ Serial.printf("Connected to SinricPro\r\n"); });
         SinricPro.onDisconnected([]()
                                  { Serial.printf("Disconnected from SinricPro\r\n"); });
         SinricPro.begin(config["app_key"], config["app_secret"]);
     }
 #endif
-
     alexa.begin(server);
 }
 #endif
@@ -1053,13 +1084,19 @@ void Homeware::setupTelnet()
     Serial.println("carregando TELNET");
     telnet.onConnect([](String ip)
                      {
+        homeware. resetDeepSleep();
         Serial.print("- Telnet: ");
         Serial.print(ip);
         Serial.println(" conectou");
         homeware.telnet.println("\nhello " + homeware.telnet.getIP());
         homeware.telnet.println("(Use ^] + q  para desligar.)"); });
     telnet.onInputReceived([](String str)
-                           { homeware.print(homeware.doCommand(str)); });
+                           { 
+                            if (str=="exit")
+                               homeware.telnet.disconnectClient();
+                            else {   
+                            homeware.resetDeepSleep();
+                            homeware.print(homeware.doCommand(str));} });
 
     Serial.print("- Telnet: ");
     if (telnet.begin())

@@ -32,6 +32,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   set interval 500
  *   set adc_min 511
  *   set adc_max 512
+ *   set sleep 60 (estabele 60s para deepsleep - depende de conectar RST ao D0)
 </pre>
 
 
