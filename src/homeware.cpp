@@ -98,7 +98,7 @@ void doSleep(const int tempo)
 {
     if (millis() > sleeptmp)
     {
-        Serial.print("Sleeping...");
+        Serial.print("Sleeping: ");
         Serial.println(tempo);
         ESP.deepSleep(tempo * 1000 * 1000);
     }
