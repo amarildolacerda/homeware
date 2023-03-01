@@ -44,6 +44,8 @@
 #include "SinricPro.h"
 #include "SinricProMotionsensor.h"
 #include "SinricProTemperaturesensor.h"
+#include "SinricProDoorbell.h"
+
 #endif
 
 #ifdef ALEXA
@@ -950,7 +952,7 @@ String Homeware::doCommand(String command)
             {
                 JsonObject devices = getDevices();
                 devices[spin] = cmd[3];
-                if (String("motion").indexOf(cmd[3]))
+                if (String("motion,doorbell").indexOf(cmd[3]))
                     getMode()[spin] = "in";
                 if (String("ldr,dht").indexOf(cmd[3]))
                     getMode()[spin] = cmd[3];
@@ -1086,15 +1088,26 @@ uint32_t Homeware::getChipId()
 
 void sinricTrigger(int pin, int value)
 {
-    if (homeware.getSensors()[String(pin)])
+    String id = homeware.getSensors()[String(pin)];
+    if (id)
     {
         String sType = homeware.getDevices()[String(pin)];
         if (sType.startsWith("motion"))
         {
             bool bValue = value > 0;
             Serial.printf("Motion %s\r\n", bValue ? "detected" : "not detected");
-            SinricProMotionsensor &myMotionsensor = SinricPro[homeware.getSensors()[String(pin)]]; // get motion sensor device
+            SinricProMotionsensor &myMotionsensor = SinricPro[id]; // get motion sensor device
+            myMotionsensor.sendPowerStateEvent(bValue);
             myMotionsensor.sendMotionEvent(bValue);
+        }
+        if (sType.startsWith("doorbell"))
+        {
+            bool bValue = value > 0;
+            Serial.printf("Doorbell %s\r\n", bValue ? "detected" : "not detected");
+            SinricProDoorbell &myDoorbell = SinricPro[id];
+            myDoorbell.sendPowerStateEvent(bValue);
+            if (bValue)
+                myDoorbell.sendDoorbellEvent();
         }
     }
 }
@@ -1223,14 +1236,14 @@ void sinricTemperaturesensor()
     }
 }
 
-bool onSinricPowerState(const String &deviceId, bool &state)
+bool onSinricDHTPowerState(const String &deviceId, bool &state)
 {
     Serial.printf("PowerState turned %s  \r\n", state ? "on" : "off");
     sinricTemperaturesensor();
     return true; // request handled properly
 }
 
-bool onSinricMotionState(const String &deviceId, bool &state)
+bool onSinricPowerState(const String &deviceId, bool &state)
 {
     Serial.printf("Device %s turned %s (via SinricPro) \r\n", deviceId.c_str(), state ? "on" : "off");
     int pin = findSinricPin(deviceId.c_str());
@@ -1263,18 +1276,25 @@ void Homeware::setupSensores()
             alexa.addDevice(sName, dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
         }
 #ifdef SINRIC
+        else if (sValue.startsWith("doorbell") && getSensors()[k.key().c_str()])
+        {
+            debug("ativando Doorbell");
+            SinricProDoorbell &myDoorbell = SinricPro[getSensors()[k.key().c_str()]];
+            myDoorbell.onPowerState(onSinricPowerState);
+            sinric_count += 1;
+        }
         else if (sValue.startsWith("motion") && getSensors()[k.key().c_str()])
         {
             debug("ativando PIR");
             SinricProMotionsensor &myMotionsensor = SinricPro[getSensors()[k.key().c_str()]];
-            myMotionsensor.onPowerState(onSinricMotionState);
+            myMotionsensor.onPowerState(onSinricPowerState);
             sinric_count += 1;
         }
         else if (sValue.startsWith("dht") && getSensors()[k.key().c_str()])
         {
             debug("ativando DHT11");
             SinricProTemperaturesensor &mySensor = SinricPro[getSensors()[k.key().c_str()]];
-            mySensor.onPowerState(onSinricPowerState);
+            mySensor.onPowerState(onSinricDHTPowerState);
             sinric_count += 1;
         }
 #endif
