@@ -31,7 +31,6 @@
 #ifdef DHT_SENSOR
 #include "DHTesp.h"
 #endif
-#include <SimpleTimer.h>
 
 #ifdef MQTT
 #include <mqtt.h>
@@ -159,6 +158,7 @@ JsonObject readDht(const int pin)
 {
     if (!dht_inited)
     {
+        resources += "dht,";
         dht.setup(pin, DHTesp::AUTO_DETECT);
         dht_inited = true;
     }
@@ -801,7 +801,7 @@ String Homeware::doCommand(String command)
             }
             return "OK";
         }
-        else if (cmd[0] == "get" )
+        else if (cmd[0] == "get")
         {
             return config[cmd[1]];
         }
