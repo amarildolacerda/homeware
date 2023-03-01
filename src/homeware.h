@@ -24,7 +24,6 @@
 #include "ESPTelnet.h"
 #endif
 
-
 #include <functions.h>
 
 const unsigned long timeoutDeepSleep = 10000;

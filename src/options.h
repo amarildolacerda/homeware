@@ -10,7 +10,7 @@
 #define SINRIC
 #define TELNET
 #define OTA
-#define DHT
+#define DHT_SENSOR
 #define TIMMED
 
 //#define GROOVE_ULTRASONIC

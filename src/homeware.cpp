@@ -28,6 +28,11 @@
 #include <ESP8266WiFi.h>
 #endif
 
+#ifdef DHT_SENSOR
+#include "DHTesp.h"
+#endif
+#include <SimpleTimer.h>
+
 #ifdef MQTT
 #include <mqtt.h>
 #endif
@@ -145,6 +150,27 @@ String Homeware::restoreConfig()
     Serial.println("");
     return rt;
 }
+
+#ifdef DHT_SENSOR
+#define DHTTYPE DHT11
+DHTesp dht;
+bool dht_inited = false;
+JsonObject readDht(const int pin)
+{
+    if (!dht_inited)
+    {
+        dht.setup(pin, DHTesp::AUTO_DETECT);
+        dht_inited = true;
+    }
+
+    delay(dht.getMinimumSamplingPeriod());
+
+    JsonObject result;
+    result["temperature"] = dht.getTemperature();
+    result["humidity"] = dht.getHumidity();
+    return result;
+}
+#endif
 
 void Homeware::begin()
 {
@@ -417,6 +443,12 @@ int Homeware::writePin(const int pin, const int value)
     if (mode != NULL)
         if (mode == "pwm")
             analogWrite(pin, value);
+#ifdef DHT_SENSOR
+        else if (mode == "dht")
+        {
+            return value;
+        }
+#endif
 #ifdef GROOVE_ULTRASONIC
         else if (mode == "gus")
         {
@@ -467,6 +499,12 @@ int Homeware::readPin(const int pin, const String mode)
     {
         newValue = analogRead(pin);
     }
+#ifdef DHT_SENSOR
+    else if (md == "dht")
+    {
+        return readDht(pin)["temperature"];
+    }
+#endif
 #ifdef GROOVE_ULTRASONIC
     else if (md == "gus")
     {
@@ -540,7 +578,7 @@ void Homeware::checkTrigger(int pin, int value)
 const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
-    "gpio <pin> mode <in,out,adc,lc,ldr>\r\n"
+    "gpio <pin> mode <in,out,adc,lc,ldr,dht>\r\n"
     "gpio <pin> defult <n>(usado no setup)\r\n"
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
     "gpio <pin> trigger <pin> [monostable,bistable]\r\n"
@@ -763,7 +801,7 @@ String Homeware::doCommand(String command)
             }
             return "OK";
         }
-        else if (cmd[0] == "get")
+        else if (cmd[0] == "get" )
         {
             return config[cmd[1]];
         }
@@ -776,6 +814,15 @@ String Homeware::doCommand(String command)
                 config["mode"].remove(cmd[1]);
                 return "OK";
             }
+#ifdef DHT_SENSOR
+            else if (cmd[2] == "get" && getMode()[cmd[1]] == "dht")
+            {
+                JsonObject j = readDht(String(cmd[1]).toInt());
+                String result;
+                serializeJson(j, result);
+                return result;
+            }
+#endif
             else if (cmd[2] == "get")
             {
                 int v = digitalRead(pin);
