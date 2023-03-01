@@ -205,39 +205,51 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     }
     setupPins();
 }
+
+bool inLooping = false;
 void Homeware::loop()
 {
-    if (!inited)
-        begin();
+    if (inLooping)
+        return;
+    try
+    {
+        inLooping = true;
+        if (!inited)
+            begin();
 
-    loopEvent();
+        loopEvent();
 
 #ifdef TELNET
 
-    telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
+        telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
 
-    //=========================== usado somente quando conectado
-    if (connected)
-    {
+        //=========================== usado somente quando conectado
+        if (connected)
+        {
 #ifdef MQTT
-        mqtt.loop();
+            mqtt.loop();
 #endif
 #ifdef ALEXA
-        alexa.loop();
+            alexa.loop();
 #endif
 
 #ifdef SINRIC
-        if (sinric_count > 0)
-            SinricPro.handle();
+            if (sinric_count > 0)
+                SinricPro.handle();
 #endif
+        }
+
+        const int sleep = config["sleep"].as<String>().toInt();
+        if (sleep > 0)
+            doSleep(sleep);
+
+        yield();
     }
-
-    const int sleep = config["sleep"].as<String>().toInt();
-    if (sleep > 0)
-        doSleep(sleep);
-
-    yield();
+    catch (int &e)
+    {
+    }
+    inLooping = false;
 }
 
 DynamicJsonDocument baseConfig()

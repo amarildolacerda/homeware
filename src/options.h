@@ -10,6 +10,9 @@
 #define SINRIC
 #define TELNET
 #define OTA
+#define DHT
+#define TIMMED
+
 //#define GROOVE_ULTRASONIC
 //#define MQTT
 
