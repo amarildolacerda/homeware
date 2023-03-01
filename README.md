@@ -19,11 +19,11 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
    
 <pre>
  *   show config 
- *   gpio [pin] mode [in,out,adc,lc,ldr]
+ *   gpio [pin] mode [in,out,adc,lc,ldr,led,dht,rst]
  *   gpio [pin] default [n](usado no setup inicial)
  *   gpio [pin] mode gus (opcional groove ultrasonic)
  *   gpio [pin] trigger [pin] [monostable,bistable]
- *   gpio [pin] device [onoff,dimmable,motion] (usado na alexa)
+ *   gpio [pin] device [onoff,dimmable,motion, dht, ldr] (usado na alexa)
  *   set app_key [x] (SINRIC)
  *   set app_secret [x] (SINRIC)
  *   gpio [pin] sensor [deviceId] (SINRIC)

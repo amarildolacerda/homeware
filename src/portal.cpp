@@ -24,6 +24,7 @@ void Portal::setup(ESP8266WebServer *externalServer)
 #endif
 {
     server = externalServer;
+    homeware.setLedMode(3);
 }
 
 bool timeout = millis();
@@ -31,6 +32,7 @@ void Portal::loop()
 {
     if ((WiFi.status() != WL_CONNECTED) || (WiFi.localIP().toString() == "0.0.0.0"))
     {
+        homeware.setLedMode(5);
         if (millis() - timeout > 60000)
 #ifdef ESP8266
             ESP.reset();
@@ -41,10 +43,14 @@ void Portal::loop()
         {
             WiFi.setAutoReconnect(true);
             WiFi.reconnect();
+            if (WiFi.status() != WL_CONNECTED){
+                homeware.setLedMode(0);
+            }
         }
     }
-    else
+    else {
         timeout = millis();
+    }
 }
 
 /*

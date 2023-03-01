@@ -57,10 +57,50 @@ void sinricTemperaturesensor();
 
 #endif
 
+int findPinByMode(String mode);
+
 StaticJsonDocument<256> docPinValues;
 String resources = "";
-int sinric_count = 0;
+unsigned int sinric_count = 0;
 bool inTelnet = false;
+unsigned int ledTimeChanged = 5000;
+bool ledStatus = false;
+int ledPin = 255;
+unsigned int ultimoLedChanged = millis();
+
+unsigned long loopEventMillis = millis();
+
+#define ledTimeout 200
+
+int Homeware::ledLoop(const int pin)
+{
+    ledPin = pin;
+    if (pin == 255 || pin < 0)
+        ledPin = findPinByMode("led");
+    if (ledPin > -1)
+    {
+        if (pin < 0)
+        {
+            ledStatus = false;
+            digitalWrite(ledPin, ledStatus);
+        }
+        else
+        {
+            if (millis() - ultimoLedChanged > ledTimeChanged)
+            {
+                ledStatus = !ledStatus;
+                digitalWrite(ledPin, ledStatus);
+                ultimoLedChanged = millis();
+            }
+            else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
+            {
+                ledStatus = false;
+                digitalWrite(ledPin, ledStatus);
+            }
+        }
+    }
+    return ledStatus;
+}
 
 void linha()
 {
@@ -74,6 +114,11 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
 #endif
 {
     server = externalServer;
+}
+
+void Homeware::setLedMode(const int mode)
+{
+    ledTimeChanged = (5 - (mode <= 5) ? mode : 4) * 1000;
 }
 
 void Homeware::setupServer()
@@ -169,10 +214,12 @@ JsonObject readDht(const int pin)
         dht_inited = true;
     }
     delay(dht.getMinimumSamplingPeriod());
+    homeware.ledLoop(255); //(-1) desliga
     docDHT["temperature"] = dht.getTemperature();
     docDHT["humidity"] = dht.getHumidity();
     docDHT["fahrenheit"] = dht.toFahrenheit(dht.getTemperature());
-
+    Serial.print("Temperatura: ");
+    Serial.println(dht.getTemperature());
     return docDHT.as<JsonObject>();
 }
 #endif
@@ -271,6 +318,9 @@ void Homeware::loop()
 #ifdef SINRIC
             if (sinric_count > 0 && sinricActive)
                 SinricPro.handle();
+            if (sinric_count > 0 && !sinricActive)
+                setLedMode(4);
+
 #endif
         }
 
@@ -357,9 +407,9 @@ String Homeware::saveConfig()
 
 void Homeware::initPinMode(int pin, const String m)
 {
-    if (m == "in")
+    if (m == "in" || m == "ldr" || m == "dht")
         pinMode(pin, INPUT);
-    else if (m == "out")
+    else if (m == "out" || m == "led")
         pinMode(pin, OUTPUT);
     JsonObject mode = getMode();
     mode[String(pin)] = m;
@@ -499,18 +549,22 @@ JsonObject Homeware::getValues()
 int Homeware::readPin(const int pin, const String mode)
 {
     String md = mode;
-    if (!md || md=="")
+    if (!md || md == "")
         md = getMode()[String(pin)].as<String>();
     int oldValue = docPinValues[String(pin)];
     int newValue = 0;
-    if (md == "pwm")
+    if (md == "led")
+    {
+        newValue = ledLoop(pin);
+    }
+    else if (md == "pwm")
     {
         newValue = analogRead(pin);
     }
 #ifdef DHT_SENSOR
     else if (md == "dht")
     {
-        return readDht(pin)["temperature"];
+        newValue = readDht(pin)["temperature"];
     }
 #endif
 #ifdef GROOVE_ULTRASONIC
@@ -543,6 +597,23 @@ int Homeware::readPin(const int pin, const String mode)
         sprintf(buffer, "pin %d : %d ", pin, newValue);
         debug(buffer);
         docPinValues[String(pin)] = newValue;
+#ifdef DHT_SENSOR
+#ifdef SINRIC
+        if (md == "dht")
+        {
+            sinricTemperaturesensor();
+            return newValue;
+        }
+        else if (md == "rst" && newValue == 1)
+        {
+#ifdef ESP32
+            ESP.restart();
+#else
+            ESP.reset();
+#endif
+        }
+#endif
+#endif
         checkTrigger(pin, newValue);
 #ifdef ALEXA
         alexaTrigger(pin, newValue);
@@ -587,7 +658,7 @@ void Homeware::checkTrigger(int pin, int value)
 const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
-    "gpio <pin> mode <in,out,adc,lc,ldr,dht>\r\n"
+    "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
     "gpio <pin> defult <n>(usado no setup)\r\n"
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
     "gpio <pin> trigger <pin> [monostable,bistable]\r\n"
@@ -630,9 +701,10 @@ bool Homeware::readFile(String filename, char *buffer, size_t maxLen)
     return true;
 }
 
-unsigned long loopEventMillis = millis();
+unsigned int ultimaTemperatura = 0;
 void Homeware::loopEvent()
 {
+    ledLoop(ledPin);
     try
     {
         unsigned long interval;
@@ -653,8 +725,14 @@ void Homeware::loopEvent()
             }
             loopEventMillis = millis();
 #ifdef SINRIC
-            if (sinric_count > 0 && sinricActive && !inTelnet)
-                sinricTemperaturesensor();
+            if (millis() - ultimaTemperatura > 60000)
+            {
+                if (sinric_count > 0 && sinricActive && !inTelnet)
+                {
+                    sinricTemperaturesensor();
+                    ultimaTemperatura = millis();
+                }
+            }
 #endif
         }
     }
@@ -730,7 +808,7 @@ void Homeware::resetWiFi()
 String Homeware::getStatus()
 {
     StaticJsonDocument<256> doc;
-    for (size_t i = 0; i < 16; i++)
+    for (size_t i = 0; i < 18; i++)
     {
         doc[String(i)] = readPin(i, "");
     }
@@ -872,6 +950,10 @@ String Homeware::doCommand(String command)
             {
                 JsonObject devices = getDevices();
                 devices[spin] = cmd[3];
+                if (String("motion").indexOf(cmd[3]))
+                    getMode()[spin] = "in";
+                if (String("ldr,dht").indexOf(cmd[3]))
+                    getMode()[spin] = cmd[3];
                 return "OK";
             }
             else if (cmd[2] == "sensor")
@@ -978,13 +1060,13 @@ int Homeware::getAdcState(int pin)
     const int v_min = config["adc_min"].as<int>();
     const int v_max = config["adc_max"].as<int>();
     if (tmpAdc >= v_max)
-        rt = HIGH;
-    if (tmpAdc < v_min)
         rt = LOW;
+    if (tmpAdc < v_min)
+        rt = HIGH;
     if (rt != currentAdcState)
     {
         char buffer[64];
-        sprintf(buffer, "adc %d,currentAdcState %d, adcState %d  (%i,%i) ", tmpAdc, currentAdcState, rt, v_max, v_min);
+        sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
         debug(buffer);
     }
     return rt;
@@ -1120,7 +1202,7 @@ int findSinricPin(String id)
     return -1;
 }
 
-float ultimaTemperatura = 0;
+int ultimaTemperaturaAferida = 0;
 void sinricTemperaturesensor()
 {
     int pin = findPinByMode("dht");
@@ -1130,11 +1212,13 @@ void sinricTemperaturesensor()
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
-    if (ultimaTemperatura != r["temperature"])
+    float t = r["temperature"];
+    float h = r["humidity"];
+    if (ultimaTemperaturaAferida != t)
     {
-        ultimaTemperatura = r["temperature"];
-        SinricProTemperaturesensor &mySensor = SinricPro[id];           // get temperaturesensor device
-        mySensor.sendTemperatureEvent(r["temperature"], r["humidity"]); // send event
+        ultimaTemperaturaAferida = t;
+        SinricProTemperaturesensor &mySensor = SinricPro[id]; // get temperaturesensor device
+        mySensor.sendTemperatureEvent(t, h);                  // send event
         String result;
         serializeJson(r, result);
         Serial.println(result);
@@ -1213,6 +1297,7 @@ void Homeware::setupSensores()
                                     sinricActive = false; 
                                     Serial.printf("Disconnected from SinricPro\r\n"); });
         SinricPro.begin(config["app_key"], config["app_secret"]);
+        sinricActive = true;
     }
 #endif
     alexa.begin(server);

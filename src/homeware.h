@@ -83,7 +83,9 @@ public:
     int switchPin(const int pin);
     void checkTrigger(int pin, int value);
     String getStatus();
+    int ledLoop(const int pin);
     String help();
+    void setLedMode(const int mode);
     bool readFile(String filename, char *buffer, size_t maxLen);
     String doCommand(String command);
     String print(String msg);
