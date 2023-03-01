@@ -12,6 +12,10 @@
 #endif
 #include <chart.h>
 
+#include <SimpleTimer.h>
+
+SimpleTimer timer;
+
 #ifdef ESP32
 void Portal::setup(WebServer *externalServer)
 #else
@@ -64,10 +68,18 @@ void wifiCallback()
     homeware.loop();
     // Serial.print(".");
 }
+
+void sendUptime()
+{
+    homeware.loop();
+}
+
 void Portal::autoConnect(const String slabel)
 {
     unsigned start = millis();
     unsigned timeLimitMsec = 20000;
+
+    int ntimer = timer.setInterval(1000, sendUptime);
 
     label = slabel;
     /*#ifdef ESP8266
@@ -99,7 +111,7 @@ void Portal::autoConnect(const String slabel)
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
-        homeware.resetDeepSleep(timeoutDeepSleep*5);
+        homeware.resetDeepSleep(timeoutDeepSleep * 5);
         wifiManager.setDebugOutput(true);
         wifiManager.setConfigWaitingcallback(wifiCallback);
         if (homeware.config["ap_ssid"] != "none")
@@ -127,6 +139,7 @@ void Portal::autoConnect(const String slabel)
         homeware.connected = connected;
     }
     setupServer();
+    timer.deleteTimer(ntimer);
 }
 
 void Portal::reset()
