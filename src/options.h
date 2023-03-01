@@ -11,7 +11,7 @@
 #define TELNET
 #define OTA
 #define DHT_SENSOR
-#define TIMMED
+//#define TIMMED
 
 //#define GROOVE_ULTRASONIC
 //#define MQTT

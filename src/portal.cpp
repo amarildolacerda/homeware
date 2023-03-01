@@ -12,9 +12,10 @@
 #endif
 #include <chart.h>
 
+#ifdef TIMMED
 #include <SimpleTimer.h>
-
 SimpleTimer timer;
+#endif
 
 #ifdef ESP32
 void Portal::setup(WebServer *externalServer)
@@ -69,18 +70,20 @@ void wifiCallback()
     // Serial.print(".");
 }
 
+#ifdef TIMMED
 void sendUptime()
 {
     homeware.loop();
 }
+#endif
 
 void Portal::autoConnect(const String slabel)
 {
     unsigned start = millis();
     unsigned timeLimitMsec = 20000;
-
+#ifdef TIMMED
     int ntimer = timer.setInterval(1000, sendUptime);
-
+#endif
     label = slabel;
     /*#ifdef ESP8266
         wifiManager.setHostname(homeware.hostname.c_str());
@@ -139,7 +142,9 @@ void Portal::autoConnect(const String slabel)
         homeware.connected = connected;
     }
     setupServer();
+#ifdef TIMMED
     timer.deleteTimer(ntimer);
+#endif
 }
 
 void Portal::reset()

@@ -43,6 +43,7 @@
 #ifdef SINRIC
 #include "SinricPro.h"
 #include "SinricProMotionsensor.h"
+#include "SinricProTemperaturesensor.h"
 #endif
 
 #ifdef ALEXA
@@ -50,12 +51,16 @@ void alexaTrigger(int pin, int value);
 #endif
 
 #ifdef SINRIC
+bool sinricActive = false;
 void sinricTrigger(int pin, int value);
+void sinricTemperaturesensor();
+
 #endif
 
 StaticJsonDocument<256> docPinValues;
 String resources = "";
 int sinric_count = 0;
+bool inTelnet = false;
 
 void linha()
 {
@@ -154,21 +159,21 @@ String Homeware::restoreConfig()
 #define DHTTYPE DHT11
 DHTesp dht;
 bool dht_inited = false;
+StaticJsonDocument<200> docDHT;
+
 JsonObject readDht(const int pin)
 {
     if (!dht_inited)
     {
-        resources += "dht,";
         dht.setup(pin, DHTesp::AUTO_DETECT);
         dht_inited = true;
     }
-
     delay(dht.getMinimumSamplingPeriod());
+    docDHT["temperature"] = dht.getTemperature();
+    docDHT["humidity"] = dht.getHumidity();
+    docDHT["fahrenheit"] = dht.toFahrenheit(dht.getTemperature());
 
-    JsonObject result;
-    result["temperature"] = dht.getTemperature();
-    result["humidity"] = dht.getHumidity();
-    return result;
+    return docDHT.as<JsonObject>();
 }
 #endif
 
@@ -179,7 +184,7 @@ void Homeware::begin()
 
 #ifdef ALEXA
     resources += "alexa,";
-    setupAlexa();
+    setupSensores();
 #endif
     setupServer();
 #ifdef TELNET
@@ -209,6 +214,9 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
+#ifdef DHT_SENSOR
+    resources += "dht,";
+#endif
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
@@ -261,7 +269,7 @@ void Homeware::loop()
 #endif
 
 #ifdef SINRIC
-            if (sinric_count > 0)
+            if (sinric_count > 0 && sinricActive)
                 SinricPro.handle();
 #endif
         }
@@ -491,7 +499,7 @@ JsonObject Homeware::getValues()
 int Homeware::readPin(const int pin, const String mode)
 {
     String md = mode;
-    if (!md)
+    if (!md || md=="")
         md = getMode()[String(pin)].as<String>();
     int oldValue = docPinValues[String(pin)];
     int newValue = 0;
@@ -541,7 +549,8 @@ int Homeware::readPin(const int pin, const String mode)
 #endif
 
 #ifdef SINRIC
-        sinricTrigger(pin, newValue);
+        if (sinricActive)
+            sinricTrigger(pin, newValue);
 #endif
     }
 
@@ -643,6 +652,10 @@ void Homeware::loopEvent()
                 readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
             }
             loopEventMillis = millis();
+#ifdef SINRIC
+            if (sinric_count > 0 && sinricActive && !inTelnet)
+                sinricTemperaturesensor();
+#endif
         }
     }
     catch (const char *e)
@@ -714,6 +727,18 @@ void Homeware::resetWiFi()
     delay(1000);
 }
 
+String Homeware::getStatus()
+{
+    StaticJsonDocument<256> doc;
+    for (size_t i = 0; i < 16; i++)
+    {
+        doc[String(i)] = readPin(i, "");
+    }
+    String r;
+    serializeJson(doc, r);
+    return r;
+}
+
 String Homeware::doCommand(String command)
 {
     try
@@ -742,6 +767,10 @@ String Homeware::doCommand(String command)
         {
             if (cmd[1] == "resources")
                 return resources;
+            else if (cmd[1] == "status")
+            {
+                return getStatus();
+            }
             else if (cmd[1] == "config")
                 return config.as<String>();
             else if (cmd[1] == "gpio")
@@ -937,6 +966,8 @@ void Homeware::debug(String txt)
         Serial.println(txt);
     else if (txt.indexOf("ERRO") > -1)
         Serial.println(txt);
+    else
+        Serial.println(txt);
 }
 
 int Homeware::getAdcState(int pin)
@@ -972,6 +1003,7 @@ uint32_t Homeware::getChipId()
 #endif
 
 #ifdef SINRIC
+
 void sinricTrigger(int pin, int value)
 {
     if (homeware.getSensors()[String(pin)])
@@ -1067,6 +1099,15 @@ void dimmableChanged(EspalexaDevice *d)
         homeware.writePin(pin, d->getValue());
     }
 }
+int findPinByMode(String mode)
+{
+    for (JsonPair k : homeware.getMode())
+    {
+        if (k.value().as<String>() == mode)
+            return String(k.key().c_str()).toInt();
+    }
+    return -1;
+}
 
 #ifdef SINRIC
 int findSinricPin(String id)
@@ -1078,6 +1119,35 @@ int findSinricPin(String id)
     }
     return -1;
 }
+
+float ultimaTemperatura = 0;
+void sinricTemperaturesensor()
+{
+    int pin = findPinByMode("dht");
+    if (pin < 0)
+        return;
+    JsonObject r = readDht(pin);
+    String id = homeware.getSensors()[String(pin)];
+    if (!id)
+        return;
+    if (ultimaTemperatura != r["temperature"])
+    {
+        ultimaTemperatura = r["temperature"];
+        SinricProTemperaturesensor &mySensor = SinricPro[id];           // get temperaturesensor device
+        mySensor.sendTemperatureEvent(r["temperature"], r["humidity"]); // send event
+        String result;
+        serializeJson(r, result);
+        Serial.println(result);
+    }
+}
+
+bool onSinricPowerState(const String &deviceId, bool &state)
+{
+    Serial.printf("PowerState turned %s  \r\n", state ? "on" : "off");
+    sinricTemperaturesensor();
+    return true; // request handled properly
+}
+
 bool onSinricMotionState(const String &deviceId, bool &state)
 {
     Serial.printf("Device %s turned %s (via SinricPro) \r\n", deviceId.c_str(), state ? "on" : "off");
@@ -1086,17 +1156,18 @@ bool onSinricMotionState(const String &deviceId, bool &state)
         homeware.writePin(pin, state ? HIGH : LOW);
     return true; // req
 }
+
 #endif
 
-void Homeware::setupAlexa()
+void Homeware::setupSensores()
 {
-    Serial.println("preaparando alexa");
+    debug("ativando sensores");
     JsonObject devices = getDevices();
 
     Serial.println("\r\nDevices\r\n============================\r\n");
     for (JsonPair k : devices)
     {
-        Serial.println(stringf("%s is %s\r\n", k.key().c_str(), k.value().as<String>()));
+        debug(stringf("%s is %s\r\n", k.key().c_str(), k.value().as<String>()));
         String sName = config["label"];
         sName += "-";
         sName += k.key().c_str();
@@ -1112,8 +1183,16 @@ void Homeware::setupAlexa()
 #ifdef SINRIC
         else if (sValue.startsWith("motion") && getSensors()[k.key().c_str()])
         {
+            debug("ativando PIR");
             SinricProMotionsensor &myMotionsensor = SinricPro[getSensors()[k.key().c_str()]];
             myMotionsensor.onPowerState(onSinricMotionState);
+            sinric_count += 1;
+        }
+        else if (sValue.startsWith("dht") && getSensors()[k.key().c_str()])
+        {
+            debug("ativando DHT11");
+            SinricProTemperaturesensor &mySensor = SinricPro[getSensors()[k.key().c_str()]];
+            mySensor.onPowerState(onSinricPowerState);
             sinric_count += 1;
         }
 #endif
@@ -1125,11 +1204,14 @@ void Homeware::setupAlexa()
     if (sinric_count > 0)
     {
         SinricPro.onConnected([]()
-                              {                           
+                              {            
+                                sinricActive = true;               
                                 homeware.resetDeepSleep();
- Serial.printf("Connected to SinricPro\r\n"); });
+                                Serial.printf("Connected to SinricPro\r\n"); });
         SinricPro.onDisconnected([]()
-                                 { Serial.printf("Disconnected from SinricPro\r\n"); });
+                                 { 
+                                    sinricActive = false; 
+                                    Serial.printf("Disconnected from SinricPro\r\n"); });
         SinricPro.begin(config["app_key"], config["app_secret"]);
     }
 #endif
@@ -1142,6 +1224,7 @@ void Homeware::setupTelnet()
     Serial.println("carregando TELNET");
     telnet.onConnect([](String ip)
                      {
+        inTelnet = true;
         homeware. resetDeepSleep();
         Serial.print("- Telnet: ");
         Serial.print(ip);
@@ -1150,13 +1233,16 @@ void Homeware::setupTelnet()
         homeware.telnet.println("(Use ^] + q  para desligar.)"); });
     telnet.onInputReceived([](String str)
                            { 
-                            if (str=="exit")
-                               homeware.telnet.disconnectClient();
-                            else {   
-                            homeware.resetDeepSleep();
-                            homeware.print(homeware.doCommand(str));} });
+                            Serial.println("TEL: "+str);
+                            if (str=="exit"){
+                                inTelnet = false;
+                                homeware.telnet.disconnectClient();
+                            }
+                            else {
+                                    homeware.resetDeepSleep();
+                                    homeware.print(homeware.doCommand(str));} });
 
-    Serial.print("- Telnet: ");
+    Serial.print("- Telnet ");
     if (telnet.begin())
     {
         Serial.println("running");

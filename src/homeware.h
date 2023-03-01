@@ -82,6 +82,7 @@ public:
     int readPin(const int pin, const String mode = "");
     int switchPin(const int pin);
     void checkTrigger(int pin, int value);
+    String getStatus();
     String help();
     bool readFile(String filename, char *buffer, size_t maxLen);
     String doCommand(String command);
@@ -104,7 +105,7 @@ private:
     void setupServer();
     void loopEvent();
 #ifdef ALEXA
-    void setupAlexa();
+    void setupSensores();
 #endif
 #ifdef TELNET
     void setupTelnet();
