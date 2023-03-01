@@ -94,6 +94,7 @@ public:
 
     void debug(String txt);
     int getAdcState(int pin);
+
 #ifdef ESP32
     const char *getChipId();
 #else

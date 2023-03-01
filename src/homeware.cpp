@@ -407,7 +407,7 @@ String Homeware::saveConfig()
 
 void Homeware::initPinMode(int pin, const String m)
 {
-    if (m == "in" || m == "ldr" || m == "dht")
+    if (m == "in" || m == "rst" || m == "ldr" || m == "dht")
         pinMode(pin, INPUT);
     else if (m == "out" || m == "led")
         pinMode(pin, OUTPUT);
@@ -1063,12 +1063,10 @@ int Homeware::getAdcState(int pin)
         rt = LOW;
     if (tmpAdc < v_min)
         rt = HIGH;
-    if (rt != currentAdcState)
-    {
-        char buffer[64];
-        sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
-        debug(buffer);
-    }
+    char buffer[64];
+    sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
+    debug(buffer);
+    currentAdcState = rt;
     return rt;
 }
 
