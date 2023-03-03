@@ -19,7 +19,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
    
 <pre>
  *   show config 
- *   gpio [pin] mode [in,out,adc,lc,ldr,led,dht,rst]
+ *   gpio [pin] mode [in,out,pwm,adc,lc,ldr,led,dht,rst]
  *   gpio [pin] default [n](usado no setup inicial)
  *   gpio [pin] mode gus (opcional groove ultrasonic)
  *   gpio [pin] trigger [pin] [monostable,bistable]
@@ -29,6 +29,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   gpio [pin] sensor [deviceId] (SINRIC)
  *   gpio [pin] get
  *   gpio [pin] set [n]
+ *   pwm [pin] set [value] timeout [x] // gera um pulso pwm por um tempo>0 (timeout=0, deixa ligado). Value=0: desliga e maior liga/timeout
  *   set interval 500
  *   set adc_min 511
  *   set adc_max 512

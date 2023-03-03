@@ -289,6 +289,22 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     setupPins();
 }
 
+void lerSerial()
+{
+    if (Serial.available() > 0)
+    {
+        char term = '\n';
+        String cmd = Serial.readStringUntil(term);
+        cmd.replace("\r", "");
+        String rsp = homeware.doCommand(cmd);
+        Serial.println(rsp);
+        #ifdef TELNET
+           homeware.telnet.println("SERIAL "+cmd);
+           homeware.telnet.println("RSP "+rsp);
+        #endif
+    }
+}
+
 bool inLooping = false;
 void Homeware::loop()
 {
@@ -296,6 +312,7 @@ void Homeware::loop()
         return;
     try
     {
+        lerSerial();
         inLooping = true;
         if (!inited)
             begin();
@@ -511,7 +528,7 @@ int Homeware::writePWM(const int pin, const int value, const int timeout)
             digitalWrite(pin, HIGH);
             delay(timeout);
             digitalWrite(pin, LOW);
-            return millis()-entrada;
+            return millis() - entrada;
         }
     }
     return 0;
@@ -844,6 +861,12 @@ String Homeware::getStatus()
 
 String Homeware::doCommand(String command)
 {
+    if (command.startsWith("SERIAL "))
+    {
+        command.replace("SERIAL ", "");
+        Serial.print(command);
+        return "OK";
+    }
     try
     {
         resetDeepSleep();
