@@ -59,50 +59,14 @@ void sinricTemperaturesensor();
 
 #endif
 
-int findPinByMode(String mode);
 
-StaticJsonDocument<256> docPinValues;
 String resources = "";
 unsigned int sinric_count = 0;
 bool inTelnet = false;
-unsigned int ledTimeChanged = 5000;
-bool ledStatus = false;
-int ledPin = 255;
-unsigned int ultimoLedChanged = millis();
 
 unsigned long loopEventMillis = millis();
 
-#define ledTimeout 200
 
-int Homeware::ledLoop(const int pin)
-{
-    ledPin = pin;
-    if (pin == 255 || pin < 0)
-        ledPin = findPinByMode("led");
-    if (ledPin > -1)
-    {
-        if (pin < 0)
-        {
-            ledStatus = false;
-            digitalWrite(ledPin, ledStatus);
-        }
-        else
-        {
-            if (millis() - ultimoLedChanged > ledTimeChanged)
-            {
-                ledStatus = !ledStatus;
-                digitalWrite(ledPin, ledStatus);
-                ultimoLedChanged = millis();
-            }
-            else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
-            {
-                ledStatus = false;
-                digitalWrite(ledPin, ledStatus);
-            }
-        }
-    }
-    return ledStatus;
-}
 
 void linha()
 {
@@ -298,10 +262,10 @@ void lerSerial()
         cmd.replace("\r", "");
         String rsp = homeware.doCommand(cmd);
         Serial.println(rsp);
-        #ifdef TELNET
-           homeware.telnet.println("SERIAL "+cmd);
-           homeware.telnet.println("RSP "+rsp);
-        #endif
+#ifdef TELNET
+        homeware.telnet.println("SERIAL " + cmd);
+        homeware.telnet.println("RSP " + rsp);
+#endif
     }
 }
 
@@ -424,16 +388,6 @@ String Homeware::saveConfig()
     return rsp;
 }
 
-void Homeware::initPinMode(int pin, const String m)
-{
-    if (m == "in" || m == "rst" || m == "ldr" || m == "dht")
-        pinMode(pin, INPUT);
-    else if (m == "out" || m == "led")
-        pinMode(pin, OUTPUT);
-    JsonObject mode = getMode();
-    mode[String(pin)] = m;
-}
-
 void Homeware::setupPins()
 {
     Serial.println("configurando os pinos");
@@ -452,29 +406,6 @@ void Homeware::setupPins()
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
-}
-
-JsonObject Homeware::getTrigger()
-{
-    return config["trigger"].as<JsonObject>();
-}
-JsonObject Homeware::getDevices()
-{
-    return config["device"].as<JsonObject>();
-}
-JsonObject Homeware::getSensors()
-{
-    return config["sensor"].as<JsonObject>();
-}
-
-JsonObject Homeware::getMode()
-{
-    return config["mode"].as<JsonObject>();
-}
-
-JsonObject Homeware::getStable()
-{
-    return config["stable"].as<JsonObject>();
 }
 
 int Homeware::switchPin(const int pin)
@@ -513,161 +444,9 @@ int grooveUltrasonic(int pin)
 }
 #endif
 
-int Homeware::writePWM(const int pin, const int value, const int timeout)
-{
-    if (value == 0)
-    {
-        digitalWrite(pin, LOW);
-    }
-    else
-    {
-        analogWrite(pin, value);
-        if (value > 0 && timeout > 0)
-        {
-            const int entrada = millis();
-            digitalWrite(pin, HIGH);
-            delay(timeout);
-            digitalWrite(pin, LOW);
-            return millis() - entrada;
-        }
-    }
-    return 0;
-}
-int Homeware::writePin(const int pin, const int value)
-{
-    String mode = getMode()[String(pin)];
-    int v = value;
-    if (mode != NULL)
-        if (mode == "pwm")
-        {
-            analogWrite(pin, value);
-            digitalWrite(pin, value > 0);
-        }
-#ifdef DHT_SENSOR
-        else if (mode == "dht")
-        {
-            return value;
-        }
-#endif
-#ifdef GROOVE_ULTRASONIC
-        else if (mode == "gus")
-        {
-            int v = grooveUltrasonic(pin);
-        }
-#endif
-        else if (mode == "adc")
-            analogWrite(pin, value);
-        else if (mode == "lc")
-        {
-            byte relON[] = {0xA0, 0x01, 0x01, 0xA2}; // Hex command to send to serial for open relay
-            byte relOFF[] = {0xA0, 0x01, 0x00, 0xA1};
-            if (value == 0)
-            {
-                Serial.write(relOFF, sizeof(relOFF));
-            }
-            else
-                Serial.write(relON, sizeof(relON));
-        }
-
-        else
-        {
-            digitalWrite(pin, value);
-        }
-    else
-    {
-        // initPinMode(pin, "out");
-        digitalWrite(pin, value);
-    }
-    Serial.println(stringf("writePin: %d value: %d", pin, value));
-    docPinValues[String(pin)] = v;
-    return value;
-}
-
 JsonObject Homeware::getValues()
 {
     return docPinValues.as<JsonObject>();
-}
-
-int Homeware::readPin(const int pin, const String mode)
-{
-    String md = mode;
-    if (!md || md == "")
-        md = getMode()[String(pin)].as<String>();
-    int oldValue = docPinValues[String(pin)];
-    int newValue = 0;
-    if (md == "led")
-    {
-        newValue = ledLoop(pin);
-    }
-    else if (md == "pwm")
-    {
-        newValue = analogRead(pin);
-    }
-#ifdef DHT_SENSOR
-    else if (md == "dht")
-    {
-        newValue = readDht(pin)["temperature"];
-    }
-#endif
-#ifdef GROOVE_ULTRASONIC
-    else if (md == "gus")
-    {
-        // groove ultrasonic
-        newValue = grooveUltrasonic(pin);
-    }
-#endif
-    else if (md == "adc")
-    {
-        newValue = analogRead(pin);
-    }
-    else if (md == "lc")
-    {
-        newValue = docPinValues[String(pin)];
-    }
-    else if (md == "ldr")
-    {
-        newValue = getAdcState(pin);
-    }
-    else
-        newValue = digitalRead(pin);
-
-    debug(stringf("readPin %d from %d to %d \r\n", pin, oldValue, newValue));
-
-    if (oldValue != newValue)
-    {
-        char buffer[32];
-        sprintf(buffer, "pin %d : %d ", pin, newValue);
-        debug(buffer);
-        docPinValues[String(pin)] = newValue;
-#ifdef DHT_SENSOR
-#ifdef SINRIC
-        if (md == "dht")
-        {
-            sinricTemperaturesensor();
-            return newValue;
-        }
-        else if (md == "rst" && newValue == 1)
-        {
-#ifdef ESP32
-            ESP.restart();
-#else
-            ESP.reset();
-#endif
-        }
-#endif
-#endif
-        checkTrigger(pin, newValue);
-#ifdef ALEXA
-        alexaTrigger(pin, newValue);
-#endif
-
-#ifdef SINRIC
-        if (sinricActive)
-            sinricTrigger(pin, newValue);
-#endif
-    }
-
-    return newValue;
 }
 
 void Homeware::checkTrigger(int pin, int value)
@@ -790,15 +569,6 @@ void Homeware::loopEvent()
     */
 }
 
-String Homeware::print(String msg)
-{
-    Serial.print("RSP: ");
-    Serial.println(msg);
-#ifdef TELNET
-    telnet.println(msg);
-#endif
-    return msg;
-}
 
 void Homeware::resetWiFi()
 {
@@ -882,7 +652,7 @@ String Homeware::doCommand(String command)
             //  ADC_MODE(ADC_VCC);
             //'total': %d, 'free': %s
             //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str() , ip);
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip);
             return buffer;
         }
         else if (cmd[0] == "reset")
@@ -1027,11 +797,6 @@ String Homeware::doCommand(String command)
     }
 }
 
-JsonObject Homeware::getDefaults()
-{
-    return config["default"];
-}
-
 const String optionStable[] = {"monostable", "monostableNC", "bistable", "bistableNC"};
 String Homeware::showGpio()
 {
@@ -1076,34 +841,7 @@ void Homeware::printConfig()
     serializeJson(config, Serial);
 }
 
-void Homeware::debug(String txt)
-{
-    const bool erro = txt.indexOf("ERRO") > -1;
-    if (config["debug"] == "on" || erro)
-    {
-        print(txt);
-    }
-    else if (config["debug"] == "term" || erro)
-        Serial.println(txt);
-}
 
-int Homeware::getAdcState(int pin)
-{
-
-    unsigned int tmpAdc = analogRead(pin);
-    int rt = currentAdcState;
-    const unsigned int v_min = config["adc_min"].as<int>();
-    const unsigned int v_max = config["adc_max"].as<int>();
-    if (tmpAdc >= v_max)
-        rt = LOW;
-    if (tmpAdc < v_min)
-        rt = HIGH;
-    char buffer[64];
-    sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
-    debug(buffer);
-    currentAdcState = rt;
-    return rt;
-}
 
 #ifdef ESP32
 const char *Homeware::getChipId()
@@ -1225,15 +963,6 @@ void dimmableChanged(EspalexaDevice *d)
         homeware.writePin(pin, d->getValue());
     }
 }
-int findPinByMode(String mode)
-{
-    for (JsonPair k : homeware.getMode())
-    {
-        if (k.value().as<String>() == mode)
-            return String(k.key().c_str()).toInt();
-    }
-    return -1;
-}
 
 #ifdef SINRIC
 int findSinricPin(String id)
@@ -1249,7 +978,7 @@ int findSinricPin(String id)
 int ultimaTemperaturaAferida = 0;
 void sinricTemperaturesensor()
 {
-    int pin = findPinByMode("dht");
+    int pin = homeware.findPinByMode("dht");
     if (pin < 0)
         return;
     JsonObject r = readDht(pin);
@@ -1398,6 +1127,60 @@ void Homeware::errorMsg(String msg)
 IPAddress Homeware::localIP()
 {
     return WiFi.localIP();
+}
+
+// ============= revisados para ficar aqui mesmo
+void Homeware::afterChanged(const int pin, const int value, const String mode)
+{
+
+#ifdef DHT_SENSOR
+#ifdef SINRIC
+    if (mode == "dht")
+        sinricTemperaturesensor();
+#endif
+#endif
+    checkTrigger(pin, value);
+#ifdef ALEXA
+    alexaTrigger(pin, value);
+#endif
+
+#ifdef SINRIC
+    if (sinricActive)
+        sinricTrigger(pin, value);
+#endif
+}
+
+int Homeware::readPin(const int pin, const String mode)
+{
+    String md = mode;
+    int newValue = 0;
+    if (!md || md == "")
+        md = getMode()[String(pin)].as<String>();
+    if (md == "out")
+    {
+        newValue = Protocol::readPin(pin, md);
+    }
+#ifdef DHT_SENSOR
+    if (md == "dht")
+    {
+      newValue =readDht(pin)["temperature"];
+    }
+#endif
+#ifdef GROOVE_ULTRASONIC
+    else if (md == "gus")
+    {
+      // groove ultrasonic
+      newValue = grooveUltrasonic(pin);
+    }
+#endif
+    else
+    {
+      newValue = Protocol::readPin(pin, md);
+    }
+
+    pinValueChanged(pin, newValue);
+
+    return newValue;
 }
 
 Homeware homeware;
