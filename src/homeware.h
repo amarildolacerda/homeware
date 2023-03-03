@@ -79,7 +79,9 @@ public:
     JsonObject getDefaults();
 
     int writePin(const int pin, const int value);
+    int writePWM(const int pin, const int value, const int timeout = 0);
     int readPin(const int pin, const String mode = "");
+
     int switchPin(const int pin);
     void checkTrigger(int pin, int value);
     String getStatus();

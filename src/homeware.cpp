@@ -496,13 +496,36 @@ int grooveUltrasonic(int pin)
 }
 #endif
 
+int Homeware::writePWM(const int pin, const int value, const int timeout)
+{
+    if (value == 0)
+    {
+        digitalWrite(pin, LOW);
+    }
+    else
+    {
+        analogWrite(pin, value);
+        if (value > 0 && timeout > 0)
+        {
+            const int entrada = millis();
+            digitalWrite(pin, HIGH);
+            delay(timeout);
+            digitalWrite(pin, LOW);
+            return millis()-entrada;
+        }
+    }
+    return 0;
+}
 int Homeware::writePin(const int pin, const int value)
 {
     String mode = getMode()[String(pin)];
     int v = value;
     if (mode != NULL)
         if (mode == "pwm")
+        {
             analogWrite(pin, value);
+            digitalWrite(pin, value > 0);
+        }
 #ifdef DHT_SENSOR
         else if (mode == "dht")
         {
@@ -914,6 +937,24 @@ String Homeware::doCommand(String command)
         {
             return config[cmd[1]];
         }
+        else if (cmd[0] == "pwm")
+        {
+            int pin = cmd[1].toInt();
+            int timeout = 0;
+            if (cmd[4] == "until" || cmd[4] == "timeout")
+                timeout = cmd[5].toInt();
+            if (cmd[2] == "set")
+            {
+                int value = cmd[3].toInt();
+                int rsp = writePWM(pin, value, timeout);
+                return String(rsp);
+            }
+            if (cmd[2] == "get")
+            {
+                int rsp = readPin(pin, "pwm");
+                return String(rsp);
+            }
+        }
         else if (cmd[0] == "gpio")
         {
             int pin = cmd[1].toInt();
@@ -934,7 +975,7 @@ String Homeware::doCommand(String command)
 #endif
             else if (cmd[2] == "get")
             {
-                int v = digitalRead(pin);
+                int v = readPin(pin, "");
                 return String(v);
             }
             else if (cmd[2] == "set")
@@ -1042,15 +1083,12 @@ void Homeware::printConfig()
 
 void Homeware::debug(String txt)
 {
-    if (config["debug"] == "on")
+    const bool erro = txt.indexOf("ERRO") > -1;
+    if (config["debug"] == "on" || erro)
     {
         print(txt);
     }
-    else if (config["debug"] == "term")
-        Serial.println(txt);
-    else if (txt.indexOf("ERRO") > -1)
-        Serial.println(txt);
-    else
+    else if (config["debug"] == "term" || erro)
         Serial.println(txt);
 }
 
