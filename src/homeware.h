@@ -11,7 +11,6 @@
 #include <ESP8266WebServer.h>
 #endif
 
-
 #include "homewareWiFiManager.h"
 #include <options.h>
 
@@ -19,9 +18,6 @@
 
 #ifdef ALEXA
 #include <Espalexa.h>
-#endif
-#ifdef TELNET
-#include "ESPTelnet.h"
 #endif
 
 #include <functions.h>
@@ -32,7 +28,8 @@ const unsigned long timeoutDeepSleep = 10000;
 
 void linha();
 
-class Homeware: public Protocol{
+class Homeware : public Protocol
+{
 public:
 #ifdef ESP32
     void setServer(WebServer *externalServer = nullptr);
@@ -43,10 +40,6 @@ public:
 #ifdef ALEXA
     Espalexa alexa = Espalexa();
 #endif
-#ifdef TELNET
-    ESPTelnet telnet;
-#endif
-    String hostname = "AutoConnect";
     bool inited = false;
     bool connected = false;
 #ifdef ESP32
@@ -54,47 +47,35 @@ public:
 #else
     ESP8266WebServer *server;
 #endif
-    unsigned currentAdcState = 0;
     bool inDebug = false;
 #ifdef ESP32
     void setup(WebServer *externalServer = nullptr);
 #else
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
+    //===================== revisado para ficar aqui mesmo
+    virtual int readPin(const int pin, const String mode = "");
+    virtual void afterChanged(const int pin, const int value, const String mode);
+
+    //============================= potencial para mudar para Protocol
     void begin();
     void loop();
     String restoreConfig();
     void defaultConfig();
     String saveConfig();
-    void initPinMode(int pin, const String m);
     void resetWiFi();
     void resetDeepSleep(const unsigned int t = 60000);
-
-    JsonObject getTrigger();
-    JsonObject getStable();
-    JsonObject getMode();
-    JsonObject getDevices();
-    JsonObject getSensors();
-    JsonObject getDefaults();
-
-    int writePin(const int pin, const int value);
-    int writePWM(const int pin, const int value, const int timeout = 0);
-    int readPin(const int pin, const String mode = "");
 
     int switchPin(const int pin);
     void checkTrigger(int pin, int value);
     String getStatus();
-    int ledLoop(const int pin);
     String help();
     void setLedMode(const int mode);
     bool readFile(String filename, char *buffer, size_t maxLen);
     String doCommand(String command);
-    String print(String msg);
     void printConfig();
     String showGpio();
 
-    void debug(String txt);
-    int getAdcState(int pin);
 #ifdef ESP32
     const char *getChipId();
 #else
@@ -114,6 +95,7 @@ private:
     void setupTelnet();
 #endif
 };
+
 
 extern Homeware homeware;
 #ifdef ESP32
