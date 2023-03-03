@@ -444,8 +444,15 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     file.close();
     return true;
 }
+
+Protocol *protocol;
+
 void Protocol::setup()
 {
+    protocol = this;
+#ifdef ESP8266
+    analogWriteRange(256);
+#endif
 }
 
 String Protocol::restoreConfig()
@@ -558,4 +565,302 @@ void Protocol::defaultConfig()
         String key = k.key().c_str();
         config[key] = doc[key];
     }
+}
+
+#ifdef TELNET
+void telnetOnConnect(String ip)
+{
+    protocol->inTelnet = true;
+    protocol->resetDeepSleep();
+    Serial.print("- Telnet: ");
+    Serial.print(ip);
+    Serial.println(" conectou");
+    protocol->telnet.println("\nhello " + protocol->telnet.getIP());
+    protocol->telnet.println("(Use ^] + q  para desligar.)");
+}
+void telnetOnInputReceive(String str)
+{
+    Serial.println("TEL: " + str);
+    if (str == "exit")
+    {
+        protocol->inTelnet = false;
+        protocol->telnet.disconnectClient();
+    }
+    else
+    {
+        protocol->resetDeepSleep();
+        protocol->print(protocol->doCommand(str));
+    }
+}
+
+void Protocol::setupTelnet()
+{
+
+    Serial.println("carregando TELNET");
+    telnet.onConnect(telnetOnConnect);
+    telnet.onInputReceived(telnetOnInputReceive);
+
+    Serial.print("- Telnet ");
+    if (telnet.begin())
+    {
+        Serial.println("running");
+    }
+    else
+    {
+        Serial.println("error.");
+        errorMsg("Will reboot...");
+    }
+}
+#endif
+
+void Protocol::errorMsg(String msg)
+{
+    Serial.println(msg);
+    telnet.println(msg);
+}
+
+String Protocol::localIP()
+{
+    return "";
+}
+#ifdef DHT_SENSOR
+JsonObject Protocol::readDht(const int pin)
+{
+    JsonObject cmdRoot;
+    return cmdRoot;
+}
+#endif
+
+String Protocol::doCommand(String command)
+{
+    if (command.startsWith("SERIAL "))
+    {
+        command.replace("SERIAL ", "");
+        Serial.print(command);
+        return "OK";
+    }
+    try
+    {
+        resetDeepSleep();
+        String *cmd = split(command, ' ');
+        Serial.print("CMD: ");
+        Serial.println(command);
+#ifdef ESP8266
+        if (cmd[0] == "format")
+        {
+            LittleFS.format();
+            return "formated";
+        }
+        else
+#endif
+            if (cmd[0] == "open")
+        {
+            char json[1024];
+            readFile(cmd[1], json, 1024);
+            return String(json);
+        }
+        else if (cmd[0] == "help")
+            return help();
+        else if (cmd[0] == "show")
+        {
+            if (cmd[1] == "resources")
+                return resources;
+            else if (cmd[1] == "status")
+            {
+                return getStatus();
+            }
+            else if (cmd[1] == "config")
+                return config.as<String>();
+            else if (cmd[1] == "gpio")
+                return showGpio();
+            char buffer[128];
+            String ip = localIP();
+            // FSInfo fs_info;
+            // LittleFS.info(fs_info);
+            //  ADC_MODE(ADC_VCC);
+            //'total': %d, 'free': %s
+            //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+            return buffer;
+        }
+        else if (cmd[0] == "reset")
+        {
+            if (cmd[1] == "wifi")
+            {
+                resetWiFi();
+                return "OK";
+            }
+            else if (cmd[1] == "factory")
+            {
+                defaultConfig();
+                return "OK";
+            }
+            print("reiniciando...");
+            delay(1000);
+            // telnet.stop();
+            reset();
+            return "OK";
+        }
+        else if (cmd[0] == "save")
+        {
+            return saveConfig();
+        }
+        else if (cmd[0] == "restore")
+        {
+            return restoreConfig();
+        }
+        else if (cmd[0] == "set")
+        {
+            if (cmd[2] == "none")
+            {
+                config.remove(cmd[1]);
+            }
+            else
+            {
+                config[cmd[1]] = cmd[2];
+                printConfig();
+            }
+            return "OK";
+        }
+        else if (cmd[0] == "get")
+        {
+            return config[cmd[1]];
+        }
+        else if (cmd[0] == "pwm")
+        {
+            int pin = cmd[1].toInt();
+            int timeout = 0;
+            if (cmd[4] == "until" || cmd[4] == "timeout")
+                timeout = cmd[5].toInt();
+            if (cmd[2] == "set")
+            {
+                int value = cmd[3].toInt();
+                int rsp = writePWM(pin, value, timeout);
+                return String(rsp);
+            }
+            if (cmd[2] == "get")
+            {
+                int rsp = readPin(pin, "pwm");
+                return String(rsp);
+            }
+        }
+        else if (cmd[0] == "gpio")
+        {
+            int pin = cmd[1].toInt();
+            String spin = cmd[1];
+            if (cmd[2] == "none")
+            {
+                config["mode"].remove(cmd[1]);
+                return "OK";
+            }
+#ifdef DHT_SENSOR
+            else if (cmd[2] == "get" && getMode()[cmd[1]] == "dht")
+            {
+                JsonObject j = readDht(String(cmd[1]).toInt());
+                String result;
+                serializeJson(j, result);
+                return result;
+            }
+#endif
+            else if (cmd[2] == "get")
+            {
+                int v = readPin(pin, "");
+                return String(v);
+            }
+            else if (cmd[2] == "set")
+            {
+                int v = cmd[3].toInt();
+                writePin(pin, v);
+                return String(v);
+            }
+            else if (cmd[2] == "mode")
+            {
+                initPinMode(pin, cmd[3]);
+                return "OK";
+            }
+            else if (cmd[2] == "device")
+            {
+                JsonObject devices = getDevices();
+                devices[spin] = cmd[3];
+                if (String("motion,doorbell").indexOf(cmd[3]))
+                    getMode()[spin] = "in";
+                if (String("ldr,dht").indexOf(cmd[3]))
+                    getMode()[spin] = cmd[3];
+                return "OK";
+            }
+            else if (cmd[2] == "sensor")
+            {
+                JsonObject devices = getSensors();
+                devices[spin] = cmd[3];
+                return "OK";
+            }
+            else if (cmd[2] == "default")
+            {
+                JsonObject d = getDefaults();
+                d[spin] = cmd[3];
+                return "OK";
+            }
+            else if (cmd[2] == "trigger")
+            {
+                if (!cmd[4])
+                    return "cmd incompleto";
+                JsonObject trigger = getTrigger();
+                trigger[spin] = cmd[3];
+
+                // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
+                getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
+
+                return "OK";
+            }
+        }
+        return "invalido";
+    }
+    catch (const char *e)
+    {
+        return String(e);
+    }
+}
+
+void Protocol::resetWiFi()
+{
+    // noop
+}
+
+void Protocol::printConfig()
+{
+
+    serializeJson(config, Serial);
+}
+
+void lerSerial()
+{
+    if (Serial.available() > 0)
+    {
+        char term = '\n';
+        String cmd = Serial.readStringUntil(term);
+        cmd.replace("\r", "");
+        String rsp = protocol->doCommand(cmd);
+        Serial.println(rsp);
+#ifdef TELNET
+        protocol->telnet.println("SERIAL " + cmd);
+        protocol->telnet.println("RSP " + rsp);
+#endif
+    }
+}
+
+void Protocol::loop()
+{
+    lerSerial();
+#ifdef TELNET
+    telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
+#endif
+
+    const int sleep = config["sleep"].as<String>().toInt();
+    if (sleep > 0)
+        doSleep(sleep);
+}
+
+JsonObject Protocol::getValues()
+{
+    return docPinValues.as<JsonObject>();
 }

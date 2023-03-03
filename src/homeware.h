@@ -24,7 +24,6 @@
 
 #include "protocol.h"
 
-
 void linha();
 
 class Homeware : public Protocol
@@ -35,7 +34,7 @@ public:
 #else
     void setServer(ESP8266WebServer *externalServer = nullptr);
 #endif
-    IPAddress localIP();
+    virtual String localIP();
 #ifdef ALEXA
     Espalexa alexa = Espalexa();
 #endif
@@ -54,25 +53,20 @@ public:
     //===================== revisado para ficar aqui mesmo
     virtual int readPin(const int pin, const String mode = "");
     virtual void afterChanged(const int pin, const int value, const String mode);
-
+    virtual String doCommand(String command);
+    virtual void resetWiFi();
+    virtual void loop();
+#ifdef DHT_SENSOR
+    virtual JsonObject readDht(const int pin);
+#endif
     //============================= potencial para mudar para Protocol
     void begin();
-    void loop();
-
-
-
-    void resetWiFi();
-
-    String doCommand(String command);
-    void printConfig();
 
 #ifdef ESP32
     const char *getChipId();
 #else
     uint32_t getChipId();
 #endif
-    void errorMsg(String msg);
-    JsonObject getValues();
 
 private:
     void setupServer();
@@ -80,11 +74,7 @@ private:
 #ifdef ALEXA
     void setupSensores();
 #endif
-#ifdef TELNET
-    void setupTelnet();
-#endif
 };
-
 
 extern Homeware homeware;
 #ifdef ESP32

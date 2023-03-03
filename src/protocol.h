@@ -1,7 +1,7 @@
+#pragma once
 
-
-#ifndef protocol_def
-#define protocol_def
+// #ifndef protocol_def
+// #define protocol_def
 
 /*
   Protocol deve ficar isolado para ser utilizado um modelos diferentes de arduino,
@@ -27,6 +27,8 @@ public:
     unsigned int ledTimeChanged = 5000;
     int ledPin = 255;
     bool inDebug = false;
+    bool inTelnet = false;
+    String resources = "";
 
     void setup();
 
@@ -67,8 +69,22 @@ public:
     String restoreConfig();
     void defaultConfig();
     String saveConfig();
+    String doCommand(String command);
+    void errorMsg(String msg);
+    String localIP();
+    void resetWiFi();
+    void printConfig();
+    void setupTelnet();
+    void loop();
+    JsonObject getValues();
 
-    private:
-        DynamicJsonDocument baseConfig();
-};
+#ifdef DHT_SENSOR
+    JsonObject readDht(const int pin);
 #endif
+
+private:
+    DynamicJsonDocument baseConfig();
+#ifdef TELNET
+#endif
+};
+// #endif

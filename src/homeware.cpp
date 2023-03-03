@@ -59,14 +59,9 @@ void sinricTemperaturesensor();
 
 #endif
 
-
-String resources = "";
 unsigned int sinric_count = 0;
-bool inTelnet = false;
 
 unsigned long loopEventMillis = millis();
-
-
 
 void linha()
 {
@@ -81,7 +76,6 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
 {
     server = externalServer;
 }
-
 
 void Homeware::setupServer()
 {
@@ -99,14 +93,12 @@ void Homeware::setupServer()
         } });
 }
 
-
 #ifdef DHT_SENSOR
-#define DHTTYPE DHT11
 DHTesp dht;
 bool dht_inited = false;
 StaticJsonDocument<200> docDHT;
 
-JsonObject readDht(const int pin)
+JsonObject Homeware::readDht(const int pin)
 {
     if (!dht_inited)
     {
@@ -161,11 +153,9 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
+    Protocol::setup();
 #ifdef DHT_SENSOR
     resources += "dht,";
-#endif
-#ifdef ESP8266
-    analogWriteRange(256);
 #endif
     setServer(externalServer);
 
@@ -187,22 +177,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     setupPins();
 }
 
-void lerSerial()
-{
-    if (Serial.available() > 0)
-    {
-        char term = '\n';
-        String cmd = Serial.readStringUntil(term);
-        cmd.replace("\r", "");
-        String rsp = homeware.doCommand(cmd);
-        Serial.println(rsp);
-#ifdef TELNET
-        homeware.telnet.println("SERIAL " + cmd);
-        homeware.telnet.println("RSP " + rsp);
-#endif
-    }
-}
-
 bool inLooping = false;
 void Homeware::loop()
 {
@@ -210,18 +184,13 @@ void Homeware::loop()
         return;
     try
     {
-        lerSerial();
         inLooping = true;
         if (!inited)
             begin();
 
         loopEvent();
 
-#ifdef TELNET
-
-        telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
-#endif
-
+        Protocol::loop();
         //=========================== usado somente quando conectado
         if (connected)
         {
@@ -240,20 +209,14 @@ void Homeware::loop()
 
 #endif
         }
-
-        const int sleep = config["sleep"].as<String>().toInt();
-        if (sleep > 0)
-            doSleep(sleep);
-
-        yield();
     }
     catch (int &e)
     {
     }
+    yield();
+
     inLooping = false;
 }
-
-
 
 #ifdef GROOVE_ULTRASONIC
 unsigned long ultimo_ultrasonic = 0;
@@ -275,13 +238,6 @@ int grooveUltrasonic(int pin)
     }
 }
 #endif
-
-JsonObject Homeware::getValues()
-{
-    return docPinValues.as<JsonObject>();
-}
-
-
 
 
 unsigned int ultimaTemperatura = 0;
@@ -331,7 +287,6 @@ void Homeware::loopEvent()
     */
 }
 
-
 void Homeware::resetWiFi()
 {
     HomewareWiFiManager wifiManager;
@@ -351,211 +306,10 @@ void Homeware::resetWiFi()
     delay(1000);
 }
 
-
 String Homeware::doCommand(String command)
 {
-    if (command.startsWith("SERIAL "))
-    {
-        command.replace("SERIAL ", "");
-        Serial.print(command);
-        return "OK";
-    }
-    try
-    {
-        resetDeepSleep();
-        String *cmd = split(command, ' ');
-        Serial.print("CMD: ");
-        Serial.println(command);
-#ifdef ESP8266
-        if (cmd[0] == "format")
-        {
-            LittleFS.format();
-            return "formated";
-        }
-        else
-#endif
-            if (cmd[0] == "open")
-        {
-            char json[1024];
-            readFile(cmd[1], json, 1024);
-            return String(json);
-        }
-        else if (cmd[0] == "help")
-            return help();
-        else if (cmd[0] == "show")
-        {
-            if (cmd[1] == "resources")
-                return resources;
-            else if (cmd[1] == "status")
-            {
-                return getStatus();
-            }
-            else if (cmd[1] == "config")
-                return config.as<String>();
-            else if (cmd[1] == "gpio")
-                return showGpio();
-            char buffer[128];
-            char ip[20];
-            IPAddress x = localIP();
-            sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
-            // FSInfo fs_info;
-            // LittleFS.info(fs_info);
-            //  ADC_MODE(ADC_VCC);
-            //'total': %d, 'free': %s
-            //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip);
-            return buffer;
-        }
-        else if (cmd[0] == "reset")
-        {
-            if (cmd[1] == "wifi")
-            {
-                homeware.resetWiFi();
-                return "OK";
-            }
-            else if (cmd[1] == "factory")
-            {
-                defaultConfig();
-                return "OK";
-            }
-            print("reiniciando...");
-            delay(1000);
-            // telnet.stop();
-#ifdef ESP8266
-            ESP.reset();
-#else
-            ESP.restart();
-#endif
-            return "OK";
-        }
-        else if (cmd[0] == "save")
-        {
-            return saveConfig();
-        }
-        else if (cmd[0] == "restore")
-        {
-            return restoreConfig();
-        }
-        else if (cmd[0] == "set")
-        {
-            if (cmd[2] == "none")
-            {
-                config.remove(cmd[1]);
-            }
-            else
-            {
-                config[cmd[1]] = cmd[2];
-                printConfig();
-            }
-            return "OK";
-        }
-        else if (cmd[0] == "get")
-        {
-            return config[cmd[1]];
-        }
-        else if (cmd[0] == "pwm")
-        {
-            int pin = cmd[1].toInt();
-            int timeout = 0;
-            if (cmd[4] == "until" || cmd[4] == "timeout")
-                timeout = cmd[5].toInt();
-            if (cmd[2] == "set")
-            {
-                int value = cmd[3].toInt();
-                int rsp = writePWM(pin, value, timeout);
-                return String(rsp);
-            }
-            if (cmd[2] == "get")
-            {
-                int rsp = readPin(pin, "pwm");
-                return String(rsp);
-            }
-        }
-        else if (cmd[0] == "gpio")
-        {
-            int pin = cmd[1].toInt();
-            String spin = cmd[1];
-            if (cmd[2] == "none")
-            {
-                config["mode"].remove(cmd[1]);
-                return "OK";
-            }
-#ifdef DHT_SENSOR
-            else if (cmd[2] == "get" && getMode()[cmd[1]] == "dht")
-            {
-                JsonObject j = readDht(String(cmd[1]).toInt());
-                String result;
-                serializeJson(j, result);
-                return result;
-            }
-#endif
-            else if (cmd[2] == "get")
-            {
-                int v = readPin(pin, "");
-                return String(v);
-            }
-            else if (cmd[2] == "set")
-            {
-                int v = cmd[3].toInt();
-                writePin(pin, v);
-                return String(v);
-            }
-            else if (cmd[2] == "mode")
-            {
-                initPinMode(pin, cmd[3]);
-                return "OK";
-            }
-            else if (cmd[2] == "device")
-            {
-                JsonObject devices = getDevices();
-                devices[spin] = cmd[3];
-                if (String("motion,doorbell").indexOf(cmd[3]))
-                    getMode()[spin] = "in";
-                if (String("ldr,dht").indexOf(cmd[3]))
-                    getMode()[spin] = cmd[3];
-                return "OK";
-            }
-            else if (cmd[2] == "sensor")
-            {
-                JsonObject devices = getSensors();
-                devices[spin] = cmd[3];
-                return "OK";
-            }
-            else if (cmd[2] == "default")
-            {
-                JsonObject d = getDefaults();
-                d[spin] = cmd[3];
-                return "OK";
-            }
-            else if (cmd[2] == "trigger")
-            {
-                if (!cmd[4])
-                    return "cmd incompleto";
-                JsonObject trigger = getTrigger();
-                trigger[spin] = cmd[3];
-
-                // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
-                getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
-
-                return "OK";
-            }
-        }
-        return "invalido";
-    }
-    catch (const char *e)
-    {
-        return String(e);
-    }
+    return Protocol::doCommand(command);
 }
-
-
-void Homeware::printConfig()
-{
-
-    serializeJson(config, Serial);
-}
-
-
 
 #ifdef ESP32
 const char *Homeware::getChipId()
@@ -695,7 +449,7 @@ void sinricTemperaturesensor()
     int pin = homeware.findPinByMode("dht");
     if (pin < 0)
         return;
-    JsonObject r = readDht(pin);
+    JsonObject r = homeware.readDht(pin);
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
@@ -798,49 +552,12 @@ void Homeware::setupSensores()
 }
 #endif
 
-void Homeware::setupTelnet()
+String Homeware::localIP()
 {
-    Serial.println("carregando TELNET");
-    telnet.onConnect([](String ip)
-                     {
-        inTelnet = true;
-        homeware. resetDeepSleep();
-        Serial.print("- Telnet: ");
-        Serial.print(ip);
-        Serial.println(" conectou");
-        homeware.telnet.println("\nhello " + homeware.telnet.getIP());
-        homeware.telnet.println("(Use ^] + q  para desligar.)"); });
-    telnet.onInputReceived([](String str)
-                           { 
-                            Serial.println("TEL: "+str);
-                            if (str=="exit"){
-                                inTelnet = false;
-                                homeware.telnet.disconnectClient();
-                            }
-                            else {
-                                    homeware.resetDeepSleep();
-                                    homeware.print(homeware.doCommand(str));} });
-
-    Serial.print("- Telnet ");
-    if (telnet.begin())
-    {
-        Serial.println("running");
-    }
-    else
-    {
-        Serial.println("error.");
-        errorMsg("Will reboot...");
-    }
-}
-void Homeware::errorMsg(String msg)
-{
-    Serial.println(msg);
-    telnet.println(msg);
-}
-
-IPAddress Homeware::localIP()
-{
-    return WiFi.localIP();
+    char ip[20];
+    IPAddress x = WiFi.localIP();
+    sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
+    return ip;
 }
 
 // ============= revisados para ficar aqui mesmo
@@ -877,19 +594,19 @@ int Homeware::readPin(const int pin, const String mode)
 #ifdef DHT_SENSOR
     if (md == "dht")
     {
-      newValue =readDht(pin)["temperature"];
+        newValue = readDht(pin)["temperature"];
     }
 #endif
 #ifdef GROOVE_ULTRASONIC
     else if (md == "gus")
     {
-      // groove ultrasonic
-      newValue = grooveUltrasonic(pin);
+        // groove ultrasonic
+        newValue = grooveUltrasonic(pin);
     }
 #endif
     else
     {
-      newValue = Protocol::readPin(pin, md);
+        newValue = Protocol::readPin(pin, md);
     }
 
     pinValueChanged(pin, newValue);
