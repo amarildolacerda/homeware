@@ -1,8 +1,5 @@
 #pragma once
 
-// #ifndef protocol_def
-// #define protocol_def
-
 /*
   Protocol deve ficar isolado para ser utilizado um modelos diferentes de arduino,
   não pode conter coisas exclusivas de alguma placa em particular;
@@ -92,4 +89,4 @@ private:
 #ifdef TELNET
 #endif
 };
-// #endif
+

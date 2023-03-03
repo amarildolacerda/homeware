@@ -1,7 +1,4 @@
-
-
-#ifndef homeware_def
-#define homeware_def
+#pragma once
 
 #ifdef ESP32
 #include "WiFi.h"
@@ -72,7 +69,6 @@ public:
 
 private:
     void setupServer();
-    void loopEvent();
 #ifdef ALEXA
     void setupSensores();
 #endif
@@ -83,6 +79,4 @@ extern Homeware homeware;
 extern WebServer server;
 #else
 extern ESP8266WebServer server;
-#endif
-
 #endif
