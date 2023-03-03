@@ -82,10 +82,6 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
     server = externalServer;
 }
 
-void Homeware::setLedMode(const int mode)
-{
-    ledTimeChanged = (5 - (mode <= 5) ? mode : 4) * 1000;
-}
 
 void Homeware::setupServer()
 {
@@ -103,26 +99,6 @@ void Homeware::setupServer()
         } });
 }
 
-unsigned long sleeptmp = millis() + timeoutDeepSleep;
-void Homeware::resetDeepSleep(const unsigned int t)
-{
-    unsigned int v = millis() + t;
-    if (v > sleeptmp)
-    {
-        sleeptmp = v;
-        Serial.println(sleeptmp);
-    }
-}
-const char sleeping[] = "Sleeping: ";
-void doSleep(const int tempo)
-{
-    if (millis() > sleeptmp)
-    {
-        Serial.print(FPSTR(sleeping));
-        Serial.println(tempo);
-        ESP.deepSleep(tempo * 1000 * 1000);
-    }
-}
 
 String Homeware::restoreConfig()
 {
@@ -388,40 +364,7 @@ String Homeware::saveConfig()
     return rsp;
 }
 
-void Homeware::setupPins()
-{
-    Serial.println("configurando os pinos");
-    JsonObject mode = config["mode"];
-    for (JsonPair k : mode)
-    {
-        int pin = String(k.key().c_str()).toInt();
-        initPinMode(pin, k.value().as<String>());
-        int trPin = getTrigger()[String(pin)];
-        if (trPin)
-        {
-            initPinMode(trPin, "out");
-        }
-    }
-    for (JsonPair k : getDefaults())
-    {
-        writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
-    }
-}
 
-int Homeware::switchPin(const int pin)
-{
-    String mode = getMode()[String(pin)];
-    if (mode == "out" || mode == "lc")
-    {
-        int r = readPin(pin, mode);
-        return writePin(pin, 1 - r);
-    }
-    else
-    {
-        int r = readPin(pin, mode);
-        return writePin(pin, (r > 0) ? 0 : r);
-    }
-}
 
 #ifdef GROOVE_ULTRASONIC
 unsigned long ultimo_ultrasonic = 0;
@@ -449,32 +392,6 @@ JsonObject Homeware::getValues()
     return docPinValues.as<JsonObject>();
 }
 
-void Homeware::checkTrigger(int pin, int value)
-{
-    String p = String(pin);
-    JsonObject trig = getTrigger();
-    if (trig.containsKey(p))
-    {
-        String pinTo = trig[p];
-        if (!getStable().containsKey(p))
-            return;
-
-        int bistable = getStable()[p];
-        int v = value;
-
-        if ((bistable == 2 || bistable == 3))
-        {
-            if (v == 0)
-                return; // so aciona quando v for 1
-            switchPin(pinTo.toInt());
-            return;
-        }
-
-        Serial.println(stringf("pin %s trigger %s to %d stable %d \r\n", p, pinTo, v, bistable));
-        if (pinTo.toInt() != pin)
-            writePin(pinTo.toInt(), v);
-    }
-}
 
 const char HELP[] =
     "set board <esp8266>\r\n"
@@ -589,17 +506,6 @@ void Homeware::resetWiFi()
     delay(1000);
 }
 
-String Homeware::getStatus()
-{
-    StaticJsonDocument<256> doc;
-    for (size_t i = 0; i < 18; i++)
-    {
-        doc[String(i)] = readPin(i, "");
-    }
-    String r;
-    serializeJson(doc, r);
-    return r;
-}
 
 String Homeware::doCommand(String command)
 {
@@ -797,44 +703,7 @@ String Homeware::doCommand(String command)
     }
 }
 
-const String optionStable[] = {"monostable", "monostableNC", "bistable", "bistableNC"};
-String Homeware::showGpio()
-{
-    String r = "[";
-    for (JsonPair k : getMode())
-    {
-        String sPin = String(k.key().c_str());
-        String s = "'gpio': ";
-        s += sPin;
-        s += ", 'mode': '";
-        s += k.value().as<String>();
-        s += "'";
 
-        JsonObject trig = getTrigger();
-        if (trig.containsKey(sPin))
-        {
-            s += ", 'trigger': ";
-            s += trig[sPin].as<String>();
-            s += ", 'trigmode':'";
-            JsonObject stab = getStable();
-            String st = stab[sPin].as<String>();
-            s += optionStable[st.toInt()];
-            s += "'";
-            s += " ";
-            s += st;
-        }
-        int value = readPin(sPin.toInt(), k.value().as<String>());
-        s += ", 'value': ";
-        s += String(value);
-
-        s = "{" + s + "}";
-        if (r.length() > 1)
-            r += ",";
-        r += s;
-    }
-    r += "]";
-    return r;
-}
 void Homeware::printConfig()
 {
 

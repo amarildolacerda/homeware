@@ -19,7 +19,7 @@ public:
     unsigned int currentAdcState = 0;
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
     unsigned int ledTimeChanged = 5000;
-    unsigned int ledPin = 255;
+    int ledPin = 255;
 
 #ifdef TELNET
     ESPTelnet telnet;
@@ -45,5 +45,13 @@ public:
     String print(String msg);
     int getAdcState(int pin);
     String getPinMode(const int pin);
+    void checkTrigger(int pin, int value);
+    int switchPin(const int pin);
+    void setLedMode(const int mode);
+    String getStatus();
+    String showGpio();
+    void setupPins();
+    void doSleep(const int tempo);
+    void resetDeepSleep(const unsigned int t = 60000);
 };
 #endif

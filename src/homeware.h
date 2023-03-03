@@ -24,7 +24,6 @@
 
 #include "protocol.h"
 
-const unsigned long timeoutDeepSleep = 10000;
 
 void linha();
 
@@ -64,17 +63,11 @@ public:
     void defaultConfig();
     String saveConfig();
     void resetWiFi();
-    void resetDeepSleep(const unsigned int t = 60000);
 
-    int switchPin(const int pin);
-    void checkTrigger(int pin, int value);
-    String getStatus();
     String help();
-    void setLedMode(const int mode);
     bool readFile(String filename, char *buffer, size_t maxLen);
     String doCommand(String command);
     void printConfig();
-    String showGpio();
 
 #ifdef ESP32
     const char *getChipId();
@@ -85,7 +78,6 @@ public:
     JsonObject getValues();
 
 private:
-    void setupPins();
     void setupServer();
     void loopEvent();
 #ifdef ALEXA
