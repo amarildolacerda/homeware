@@ -18,3 +18,31 @@ char *stringf(const char *format, ...)
 
     return buffer;
 }
+
+String *split(String s, const char delimiter)
+{
+    unsigned int count = 0;
+    for (unsigned int i = 0; i < s.length(); i++)
+    {
+        if (s[i] == delimiter)
+        {
+            count++;
+        }
+    }
+
+    String *words = new String[count + 1];
+    unsigned int wordCount = 0;
+
+    for (unsigned int i = 0; i < s.length(); i++)
+    {
+        if (s[i] == delimiter)
+        {
+            wordCount++;
+            continue;
+        }
+        words[wordCount] += s[i];
+    }
+    // words[count+1] = 0;
+
+    return words;
+}

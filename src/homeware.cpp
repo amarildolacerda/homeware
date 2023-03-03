@@ -790,34 +790,6 @@ void Homeware::loopEvent()
     */
 }
 
-String *split(String s, const char delimiter)
-{
-    unsigned int count = 0;
-    for (unsigned int i = 0; i < s.length(); i++)
-    {
-        if (s[i] == delimiter)
-        {
-            count++;
-        }
-    }
-
-    String *words = new String[count + 1];
-    unsigned int wordCount = 0;
-
-    for (unsigned int i = 0; i < s.length(); i++)
-    {
-        if (s[i] == delimiter)
-        {
-            wordCount++;
-            continue;
-        }
-        words[wordCount] += s[i];
-    }
-    // words[count+1] = 0;
-
-    return words;
-}
-
 String Homeware::print(String msg)
 {
     Serial.print("RSP: ");
@@ -901,7 +873,7 @@ String Homeware::doCommand(String command)
                 return config.as<String>();
             else if (cmd[1] == "gpio")
                 return showGpio();
-            char buffer[32];
+            char buffer[128];
             char ip[20];
             IPAddress x = localIP();
             sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
@@ -910,7 +882,7 @@ String Homeware::doCommand(String command)
             //  ADC_MODE(ADC_VCC);
             //'total': %d, 'free': %s
             //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>(), ip);
+            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str() , ip);
             return buffer;
         }
         else if (cmd[0] == "reset")
@@ -1120,8 +1092,8 @@ int Homeware::getAdcState(int pin)
 
     unsigned int tmpAdc = analogRead(pin);
     int rt = currentAdcState;
-    const int v_min = config["adc_min"].as<int>();
-    const int v_max = config["adc_max"].as<int>();
+    const unsigned int v_min = config["adc_min"].as<int>();
+    const unsigned int v_max = config["adc_max"].as<int>();
     if (tmpAdc >= v_max)
         rt = LOW;
     if (tmpAdc < v_min)

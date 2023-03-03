@@ -11,9 +11,9 @@
 #include <ESP8266WebServer.h>
 #endif
 
-#include <options.h>
 
 #include "homewareWiFiManager.h"
+#include <options.h>
 
 #include <ArduinoJson.h>
 
@@ -26,20 +26,19 @@
 
 #include <functions.h>
 
+#include "protocol.h"
+
 const unsigned long timeoutDeepSleep = 10000;
 
 void linha();
 
-class Homeware
-{
+class Homeware: public Protocol{
 public:
 #ifdef ESP32
     void setServer(WebServer *externalServer = nullptr);
 #else
     void setServer(ESP8266WebServer *externalServer = nullptr);
 #endif
-    static constexpr int SIZE_BUFFER = 1024;
-    DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
     IPAddress localIP();
 #ifdef ALEXA
     Espalexa alexa = Espalexa();

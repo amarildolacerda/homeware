@@ -158,9 +158,9 @@ void Portal::reset()
     homeware.resetWiFi();
 }
 
-String button(const String name, const char *link, const char *style = "")
+String button(const String name, const char *link, const String style = "")
 {
-    return stringf("<br/><form action='%s' method='get'><button %s>%s</button></form>", link, (style == "") ? "" : String(stringf("class='%s'", style)), name);
+    return stringf("<br/><form action='%s' method='get'><button %s>%s</button></form>", link, (style.isEmpty() ) ? "" : String(stringf("class='%s'", style)), name);
 }
 String inputH(const String name, const String value)
 {
