@@ -46,7 +46,6 @@ public:
 #else
     ESP8266WebServer *server;
 #endif
-    bool inDebug = false;
 #ifdef ESP32
     void setup(WebServer *externalServer = nullptr);
 #else
@@ -59,13 +58,11 @@ public:
     //============================= potencial para mudar para Protocol
     void begin();
     void loop();
-    String restoreConfig();
-    void defaultConfig();
-    String saveConfig();
+
+
+
     void resetWiFi();
 
-    String help();
-    bool readFile(String filename, char *buffer, size_t maxLen);
     String doCommand(String command);
     void printConfig();
 

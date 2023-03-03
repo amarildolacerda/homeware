@@ -1,5 +1,6 @@
 #include "protocol.h"
 #include <functions.h>
+#include <LittleFS.h>
 
 #define ledTimeout 200
 bool ledStatus = false;
@@ -396,5 +397,165 @@ void Protocol::doSleep(const int tempo)
         Serial.print(FPSTR(sleeping));
         Serial.println(tempo);
         ESP.deepSleep(tempo * 1000 * 1000);
+    }
+}
+const char HELP[] =
+    "set board <esp8266>\r\n"
+    "show config\r\n"
+    "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
+    "gpio <pin> defult <n>(usado no setup)\r\n"
+    "gpio <pin> mode gus (groove ultrasonic)\r\n"
+    "gpio <pin> trigger <pin> [monostable,bistable]\r\n"
+    "gpio <pin> device <onoff,dimmable> (usado na alexa)\r\n"
+    "set app_key <x> (SINRIC)\r\n"
+    "set app_secret <x> (SINRIC)\r\n"
+    "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
+    "gpio <pin> get\r\n"
+    "gpio <pin> set <n>\r\n"
+    "set interval 50\r\n"
+    "set adc_min 511\r\n"
+    "set adc_max 512\r\n";
+
+String Protocol::help()
+{
+    String s = FPSTR(HELP);
+    return s;
+}
+
+bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
+{
+#ifdef ESP32
+
+    File file = SPIFFS.open(filename, "r");
+#else
+    File file = LittleFS.open(filename, "r");
+#endif
+    if (!file)
+    {
+        return false;
+    }
+    size_t len = file.size();
+    if (len > maxLen)
+    {
+        len = maxLen;
+    }
+    file.readBytes(buffer, len); //(buffer, len);
+    buffer[len] = 0;
+    file.close();
+    return true;
+}
+void Protocol::setup()
+{
+}
+
+String Protocol::restoreConfig()
+{
+    String rt = "nao restaurou config";
+    Serial.println("");
+    // linha();
+    try
+    {
+        String old = config.as<String>();
+#ifdef ESP32
+        File file = SPIFFS.open("/config.json", "r");
+#else
+        File file = LittleFS.open("/config.json", "r");
+#endif
+        if (!file)
+            return "erro ao abrir /config.json";
+        String novo = file.readString();
+        DynamicJsonDocument doc = DynamicJsonDocument(1024);
+        auto error = deserializeJson(doc, novo);
+        if (error)
+        {
+            config.clear();
+            deserializeJson(config, old);
+            return "Error: " + String(novo);
+        }
+        for (JsonPair k : doc.as<JsonObject>())
+        {
+            String key = k.key().c_str();
+            config[key] = doc[key]; // pode ter variaveis gravadas que nao tem no default inicial; ex: ssid
+        }
+        serializeJson(config, Serial);
+        Serial.println("");
+        rt = "OK";
+        // linha();
+    }
+    catch (const char *e)
+    {
+        return String(e);
+    }
+    Serial.println("");
+    return rt;
+}
+
+DynamicJsonDocument Protocol::baseConfig()
+{
+    DynamicJsonDocument config = DynamicJsonDocument(1024);
+    config["label"] = LABEL;
+    config["board"] = "esp8266";
+    config.createNestedObject("mode");
+    config.createNestedObject("trigger");
+    config.createNestedObject("stable");
+    config.createNestedObject("device");
+    config.createNestedObject("sensor");
+    config.createNestedObject("default");
+    config["debug"] = inDebug ? "on" : "off";
+    config["interval"] = "500";
+    config["adc_min"] = "125";
+    config["adc_max"] = "126";
+    config["sleep"] = "0";
+
+#ifdef MQTT
+    config["mqtt_host"] = "none"; //"test.mosquitto.org";
+    config["mqtt_port"] = 1883;
+    config["mqtt_user"] = "homeware";
+    config["mqtt_password"] = "123456780";
+    config["mqtt_interval"] = 1;
+    config["mqtt_prefix"] = "mesh";
+#endif
+    config["ap_ssid"] = "none";
+    config["ap_password"] = "123456780";
+#ifdef SINRIC
+    config["app_key"] = "";
+    config["app_secret"] = "";
+#endif
+    return config;
+}
+
+String Protocol::saveConfig()
+{ // TODO: ajustar para gravar somente os alterado e reduzir uso de espaço.
+    String rsp = "OK";
+    DynamicJsonDocument doc = baseConfig();
+    DynamicJsonDocument base = DynamicJsonDocument(SIZE_BUFFER);
+
+    for (JsonPair k : config.as<JsonObject>())
+    {
+        String key = k.key().c_str();
+        if (doc[key] != config[key])
+            base[key] = config[key];
+    }
+
+    base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
+    serializeJson(base, Serial);
+#ifdef ESP32
+    File file = SPIFFS.open("/config.json", "w");
+#else
+    File file = LittleFS.open("/config.json", "w");
+#endif
+    if (serializeJson(base, file) == 0)
+        rsp = "não gravou /config.json";
+    file.close();
+    return rsp;
+}
+
+void Protocol::defaultConfig()
+{
+    DynamicJsonDocument doc = baseConfig();
+    for (JsonPair k : doc.as<JsonObject>())
+    {
+        String key = k.key().c_str();
+        config[key] = doc[key];
     }
 }

@@ -3,6 +3,12 @@
 #ifndef protocol_def
 #define protocol_def
 
+/*
+  Protocol deve ficar isolado para ser utilizado um modelos diferentes de arduino,
+  não pode conter coisas exclusivas de alguma placa em particular;
+
+*/
+
 #include <ArduinoJson.h>
 #include <options.h>
 #include <ArduinoJson.h>
@@ -20,6 +26,9 @@ public:
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
     unsigned int ledTimeChanged = 5000;
     int ledPin = 255;
+    bool inDebug = false;
+
+    void setup();
 
 #ifdef TELNET
     ESPTelnet telnet;
@@ -53,5 +62,13 @@ public:
     void setupPins();
     void doSleep(const int tempo);
     void resetDeepSleep(const unsigned int t = 60000);
+    String help();
+    bool readFile(String filename, char *buffer, size_t maxLen);
+    String restoreConfig();
+    void defaultConfig();
+    String saveConfig();
+
+    private:
+        DynamicJsonDocument baseConfig();
 };
 #endif
