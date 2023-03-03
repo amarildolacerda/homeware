@@ -61,7 +61,6 @@ void sinricTemperaturesensor();
 
 unsigned int sinric_count = 0;
 
-unsigned long loopEventMillis = millis();
 
 void linha()
 {
@@ -188,7 +187,6 @@ void Homeware::loop()
         if (!inited)
             begin();
 
-        loopEvent();
 
         Protocol::loop();
         //=========================== usado somente quando conectado
@@ -239,52 +237,19 @@ int grooveUltrasonic(int pin)
 }
 #endif
 
-
 unsigned int ultimaTemperatura = 0;
-void Homeware::loopEvent()
+void Homeware::afterLoop()
 {
-    ledLoop(ledPin);
-    try
-    {
-        unsigned long interval;
-        try
-        {
-            interval = config["interval"].as<String>().toInt();
-        }
-        catch (char e)
-        {
-            interval = 500;
-        }
-        if (millis() - loopEventMillis > interval)
-        {
-            JsonObject mode = config["mode"];
-            for (JsonPair k : mode)
-            {
-                readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
-            }
-            loopEventMillis = millis();
 #ifdef SINRIC
-            if (millis() - ultimaTemperatura > 60000)
-            {
-                if (sinric_count > 0 && sinricActive && !inTelnet)
-                {
-                    sinricTemperaturesensor();
-                    ultimaTemperatura = millis();
-                }
-            }
-#endif
+    if (millis() - ultimaTemperatura > 60000)
+    {
+        if (sinric_count > 0 && sinricActive && !inTelnet)
+        {
+            sinricTemperaturesensor();
+            ultimaTemperatura = millis();
         }
     }
-    catch (const char *e)
-    {
-        print(String(e));
-    }
-    /*if (int(config["sleep"]) > 0)
-    {
-        unsigned tempo = int(config["sleep"]) * 1000000;
-        ESP.deepSleep(tempo);
-    }
-    */
+#endif
 }
 
 void Homeware::resetWiFi()

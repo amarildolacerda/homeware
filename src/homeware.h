@@ -56,6 +56,8 @@ public:
     virtual String doCommand(String command);
     virtual void resetWiFi();
     virtual void loop();
+    virtual void afterLoop();
+
 #ifdef DHT_SENSOR
     virtual JsonObject readDht(const int pin);
 #endif

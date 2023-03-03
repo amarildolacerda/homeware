@@ -25,6 +25,8 @@ public:
     unsigned int currentAdcState = 0;
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
     unsigned int ledTimeChanged = 5000;
+    unsigned int loopEventMillis = millis();
+
     int ledPin = 255;
     bool inDebug = false;
     bool inTelnet = false;
@@ -76,6 +78,9 @@ public:
     void printConfig();
     void setupTelnet();
     void loop();
+    void loopEvent();
+    void afterLoop();
+
     JsonObject getValues();
 
 #ifdef DHT_SENSOR

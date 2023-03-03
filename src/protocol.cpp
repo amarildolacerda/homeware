@@ -851,10 +851,12 @@ void lerSerial()
 void Protocol::loop()
 {
     lerSerial();
+
 #ifdef TELNET
     telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
 
+    loopEvent();
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0)
         doSleep(sleep);
@@ -863,4 +865,39 @@ void Protocol::loop()
 JsonObject Protocol::getValues()
 {
     return docPinValues.as<JsonObject>();
+}
+
+void Protocol::afterLoop()
+{
+}
+
+void Protocol::loopEvent()
+{
+    ledLoop(ledPin);
+    try
+    {
+        unsigned long interval;
+        try
+        {
+            interval = config["interval"].as<String>().toInt();
+        }
+        catch (char e)
+        {
+            interval = 500;
+        }
+        if (millis() - loopEventMillis > interval)
+        {
+            JsonObject mode = config["mode"];
+            for (JsonPair k : mode)
+            {
+                readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
+            }
+            loopEventMillis = millis();
+            afterLoop();
+        }
+    }
+    catch (const char *e)
+    {
+        print(String(e));
+    }
 }
