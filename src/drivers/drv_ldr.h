@@ -8,16 +8,19 @@ public:
     int currentAdcState = 0;
     LDRDriver()
     {
-        mode = "ldr";
+        Driver::setMode("ldr");
         getProtocol()->resources += "ldr,";
+        Serial.println("Init LDRDriver");
     }
-    virtual int readPin(const int xpin)
+
+    virtual int readPin(const int pin)
     {
-        pin = xpin;
+        Driver::setPin(pin);
         return getAdcState(pin);
     }
     int getAdcState(int pin)
     {
+        Driver::setPin(pin);
         Protocol *prot = getProtocol();
         unsigned int tmpAdc = analogRead(pin);
         int rt = currentAdcState;

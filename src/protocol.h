@@ -105,25 +105,17 @@ private:
 class Driver
 {
 public:
-    String mode = "out";
-    int pin = -1;
     Protocol *getProtocol();
     virtual void setup(){};
     virtual void loop(){};
-    virtual JsonObject readStatus(const int pin)
-    {
-
-        return DynamicJsonDocument(10).as<JsonObject>();
-    }
     virtual void changed(const int pin, const int value){};
-    virtual int readPin(const int pin)
-    {
-        return -1;
-    };
-    virtual int writePin(const int pin, const int value)
-    {
-        return value;
-    };
+    virtual JsonObject readStatus(const int pin);
+    virtual int readPin(const int pin);
+    virtual int writePin(const int pin, const int value);
+    virtual void setMode(String md);
+    virtual String getMode();
+    virtual void setPin(const int pin);
+    virtual int getPin();
     virtual bool isGet() { return true; };
     virtual bool isSet() { return false; };
     virtual bool isStatus() { return false; };
@@ -131,6 +123,8 @@ public:
     virtual String doCommand(const String command);
 
 private:
+    String _mode;
+    int _pin = -1;
 };
 
 class Drivers

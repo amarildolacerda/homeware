@@ -23,7 +23,7 @@ int Drivers::add(Driver item)
     items[driversCount] = item;
     Serial.print(driversCount);
     Serial.print(": add  ");
-    Serial.println(item.mode);
+    Serial.println(item.getMode());
     ++driversCount;
     return driversCount - 1;
 };
@@ -186,7 +186,7 @@ int Protocol::readPin(const int pin, const String mode)
     if (drv != NULL && drv->isGet())
     {
         Serial.print("Driver: ");
-        Serial.println(drv->mode);
+        Serial.println(drv->getMode());
         newValue = drv->readPin(pin);
         Serial.println(newValue);
     }
@@ -1017,12 +1017,49 @@ void Protocol::loopEvent()
 // DRIVERS
 #ifdef DRIVERS_ENABLED
 
+void Driver::setMode(String md)
+{
+    _mode = md;
+}
+String Driver::getMode()
+{
+    return _mode;
+};
+void Driver::setPin(const int pin)
+{
+    _pin = pin;
+}
+
+JsonObject Driver::readStatus(const int pin)
+{
+
+    return DynamicJsonDocument(10).as<JsonObject>();
+}
+int Driver::readPin(const int pin)
+{
+    return -1;
+};
+int Driver::writePin(const int pin, const int value)
+{
+    return value;
+};
+
+int Driver::getPin()
+{
+    return _pin;
+};
+
 void Drivers::setup()
 {
-    // Serial.println("Drivers.setup()");
+    Serial.print("Drivers.setup() for: ");
+    Serial.println(count());
     for (size_t i = 0; i < count(); i++)
+    {
+        Serial.print("mode: ");
+        Serial.println(items[i].getMode());
         items[i]
             .setup();
+    }
 }
 void Drivers::loop()
 {
@@ -1037,7 +1074,7 @@ String Driver::doCommand(const String command)
 void Drivers::changed(const int pin, const int value)
 {
     for (size_t i = 0; i < count(); i++)
-        if (items[i].pin == pin)
+        if (items[i].getPin() == pin)
             items[i].changed(pin, value);
 }
 Driver *Drivers::findByMode(String mode)
@@ -1046,8 +1083,8 @@ Driver *Drivers::findByMode(String mode)
     for (size_t i = 0; i < count(); i++)
     {
         Driver drv = items[i];
-        Serial.println(drv.mode);
-        if (drv.mode.equals(mode))
+        Serial.println(drv.getMode());
+        if (drv.getMode().equals(mode))
         {
             Serial.println("achou: " + mode);
             return &items[i];

@@ -28,9 +28,11 @@ class DHTDriver : public Driver
 public:
     DHTDriver()
     {
-        mode = "dht";
+        Driver::setMode ( "dht");
         getProtocol()->resources += "dht,";
+        Serial.println("Init DHTDriver");
     }
+
     virtual void setup()
     {
         Serial.println("dht enabled");
@@ -46,11 +48,11 @@ public:
         getProtocol()->debug(result);
         return result;
     }
-    virtual JsonObject readStatus(const int xpin)
+    virtual JsonObject readStatus(const int pin)
     {  
         if (!dht_inited)
         {
-            pin = xpin;
+            Driver::setPin(pin);
             dht.setup(pin, DHTesp::AUTO_DETECT);
             dht_inited = true;
         }
@@ -63,10 +65,10 @@ public:
     }
     virtual bool isGet() { return true; }
     virtual bool isStatus() { return true; }
-    virtual int readPin(const int xpin)
+    virtual int readPin(const int pin)
     {
         Serial.println("DHT->readPin()");
-        pin = xpin;
+        Driver::setPin(pin);
         return readStatus(pin)["temperature"];
     }
 };

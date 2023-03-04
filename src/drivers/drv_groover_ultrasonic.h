@@ -9,12 +9,13 @@ class GrooverUltrasonic : public Driver
 {
     GrooverUltrasonic()
     {
-        mode = "gus";
+        Driver::setMode("gus");
         getProtocol()->resources += "gus,";
     };
-    virtual int readPin(const int xpin)
+
+    virtual int readPin(const int pin)
     {
-        pin = xpin;
+        Driver::setPin(pin);
         try
         {
             Protocol *protocol = getProtocol();
