@@ -134,7 +134,6 @@ void Homeware::afterBegin()
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif
     resetDeepSleep();
-    inited = true;
     Serial.println(resources);
 }
 

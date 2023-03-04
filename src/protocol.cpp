@@ -583,6 +583,7 @@ void Protocol::begin()
     setupTelnet();
 #endif
     afterBegin();
+    inited = true;
 }
 
 void Protocol::afterBegin()
