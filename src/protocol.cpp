@@ -7,6 +7,13 @@ bool ledStatus = false;
 unsigned int ultimoLedChanged = millis();
 unsigned int timeoutDeepSleep = 10000;
 
+Drivers drivers = Drivers();
+
+Drivers getDrivers()
+{
+    return drivers;
+}
+
 void Protocol::reset()
 {
     // noop
@@ -53,8 +60,16 @@ int Protocol::writePin(const int pin, const int value)
 {
     String mode = getMode()[String(pin)];
     int v = value;
+
     if (mode != NULL)
-        if (mode == "pwm")
+    {
+        Driver *drv = getDrivers().findByMode(mode);
+        if (drv)
+        {
+            v = drv->write(pin, value);
+        }
+
+        else if (mode == "pwm")
         {
             analogWrite(pin, value);
             digitalWrite(pin, value > 0);
@@ -63,12 +78,6 @@ int Protocol::writePin(const int pin, const int value)
         else if (mode == "dht")
         {
             return value;
-        }
-#endif
-#ifdef GROOVE_ULTRASONIC
-        else if (mode == "gus")
-        {
-            int v = grooveUltrasonic(pin);
         }
 #endif
         else if (mode == "adc")
@@ -89,10 +98,6 @@ int Protocol::writePin(const int pin, const int value)
         {
             digitalWrite(pin, value);
         }
-    else
-    {
-        // initPinMode(pin, "out");
-        digitalWrite(pin, value);
     }
     Serial.println(stringf("writePin: %d value: %d", pin, value));
     docPinValues[String(pin)] = v;
@@ -143,6 +148,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         debug(buffer);
         docPinValues[String(pin)] = newValue;
         afterChanged(pin, newValue, getPinMode(pin));
+        drivers.changed(pin,newValue);
         return true;
     }
     return false;
@@ -151,7 +157,17 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
 int Protocol::readPin(const int pin, const String mode)
 {
     int newValue = 0;
-    if (mode == "led")
+    Serial.println("readPin()");
+    Driver *drv = getDrivers().findByMode(mode);
+    if (drv != NULL)
+    {
+        Serial.print("Driver: ");
+        Serial.println(drv->mode);
+        newValue = drv->read(pin);
+        Serial.println(newValue);
+    }
+
+    else if (mode == "led")
     {
         newValue = ledLoop(pin);
     }
@@ -445,14 +461,13 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     return true;
 }
 
-Protocol *protocol;
-
 void Protocol::setup()
 {
-    protocol = this;
+    // protocol = this;
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
+    drivers.setup();
     afterSetup();
 }
 
@@ -593,6 +608,7 @@ void Protocol::afterSetup()
 {
 }
 
+Protocol *protocol;
 #ifdef TELNET
 void telnetOnConnect(String ip)
 {
@@ -643,9 +659,9 @@ void Protocol::setupTelnet()
 void Protocol::errorMsg(String msg)
 {
     Serial.println(msg);
-    #ifdef TELNET
+#ifdef TELNET
     telnet.println(msg);
-    #endif
+#endif
 }
 
 String Protocol::localIP()
@@ -898,6 +914,7 @@ void Protocol::loop()
         if (connected)
         {
         }
+        drivers.loop();
     }
     catch (int &e)
     {
@@ -949,4 +966,75 @@ void Protocol::loopEvent()
     {
         print(String(e));
     }
+}
+
+int Drivers::add(Driver item)
+{
+    items[length]=item;
+    length++;
+    return length - 1;
+}
+
+void Driver::setup(){};
+void Driver::loop(){};
+
+void Drivers::setup()
+{
+    Serial.println("Drivers.setup()");
+    for (size_t i = 0; i < length; i++)
+        items[i]
+            .setup();
+}
+void Drivers::loop()
+{
+    for (size_t i = 0; i < length; i++)
+        items[i].loop();
+}
+void Driver::changed(const int pin, const int value)
+{
+    getProtocol()->
+}
+int Driver::read(const int pin) { return -1; }
+int Driver::write(const int pin, const int value)
+{
+    return value;
+}
+
+void Drivers::changed(const int pin, const int value)
+{
+    Serial.println("Drivers.changed(pin,value)");
+
+    for (size_t i = 0; i < length; i++)
+        if (items[i].pin == pin)
+            items[i].changed(pin, value);
+}
+Driver *Drivers::findByMode(String mode)
+{
+    Serial.print("Drivers.findByMode(");
+    Serial.print(mode);
+    Serial.println(")");
+
+    for (int i = 0; i < length ; i++)
+    {
+        Serial.println(i);
+        Driver drv = items[i];
+        Serial.println(drv.mode);
+        if (drv.mode == mode)
+        {
+            Serial.println("achou: " + mode);
+            return &items[i];
+        }
+        Serial.println("nao achou");
+    }
+    Serial.println("Não achou nada");
+    return NULL;
+}
+
+Protocol *Drivers::getProtocol()
+{
+    return protocol;
+}
+Protocol *Driver::getProtocol()
+{
+    return protocol;
 }

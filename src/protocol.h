@@ -9,6 +9,7 @@
 #include <ArduinoJson.h>
 #include <options.h>
 #include <ArduinoJson.h>
+
 #ifdef TELNET
 #include "ESPTelnet.h"
 #endif
@@ -59,6 +60,7 @@ public:
     int switchPin(const int pin);
     String getPinMode(const int pin);
     void loop();
+    bool pinValueChanged(const int pin, const int value);
 
 protected:
     // eventos
@@ -69,7 +71,6 @@ protected:
     void afterConfigChanged();
     // processos
     void initPinMode(int pin, const String m);
-    bool pinValueChanged(const int pin, const int value);
     int pinValue(const int pin);
     int ledLoop(const int pin);
     int getAdcState(int pin);
@@ -88,6 +89,7 @@ protected:
     void reset();
     void setupPins();
     bool readFile(String filename, char *buffer, size_t maxLen);
+    static Protocol *instance;
 
 private:
     DynamicJsonDocument baseConfig();
@@ -99,3 +101,34 @@ private:
     String getStatus();
     String showGpio();
 };
+
+class Driver
+{
+public:
+    String mode = "out";
+    int pin = -1;
+    Protocol *getProtocol();
+    void setup();
+    void loop();
+    void changed(const int pin, const int value);
+    int read(const int pin);
+    int write(const int pin, const int value);
+
+private:
+};
+
+class Drivers
+{
+public:
+    Protocol *getProtocol();
+    Driver items[32] ;
+    void loop();
+    void setup();
+    int add(Driver item);
+    void changed(const int pin, const int value);
+    Driver *findByMode(String mode);
+private:
+    size_t length = 0;
+};
+
+Drivers getDrivers();

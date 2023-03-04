@@ -13,10 +13,9 @@
 #define OTA
 #endif
 
-// #define DHT_SENSOR
-// #define TIMMED
+#define DHT_SENSOR
 
-// #define GROOVE_ULTRASONIC
+#define GROOVE_ULTRASONIC
 // #define MQTT
 
 #if defined(ESP8285)

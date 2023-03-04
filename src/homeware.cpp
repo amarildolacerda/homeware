@@ -37,7 +37,7 @@
 #endif
 
 #ifdef GROOVE_ULTRASONIC
-#include <Ultrasonic.h>
+#include <drivers/groover_ultrasonic.h>
 #endif
 
 #ifdef SINRIC
@@ -147,6 +147,11 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 #ifdef DHT_SENSOR
     resources += "dht,";
 #endif
+#ifdef GROOVE_ULTRASONIC
+    Driver drv = GrooverUltrasonic();
+    getDrivers().add(drv);
+#endif
+
     setServer(externalServer);
 
 #ifdef ESP32
@@ -169,26 +174,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 
 
 
-#ifdef GROOVE_ULTRASONIC
-unsigned long ultimo_ultrasonic = 0;
-int grooveUltrasonic(int pin)
-{
-    if (millis() - ultimo_ultrasonic > (int(homeware.config["interval"]) * 5))
-    {
-        Ultrasonic ultrasonic(pin);
-        long RangeInCentimeters;
-        RangeInCentimeters = ultrasonic.MeasureInCentimeters(); // two measurements should keep an interval
-        Serial.print(RangeInCentimeters);                       // 0~400cm
-        Serial.println(" cm");
-        ultimo_ultrasonic = millis();
-        return roundf(RangeInCentimeters);
-    }
-    else
-    {
-        return int(docPinValues[String(pin)]);
-    }
-}
-#endif
 
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
@@ -528,13 +513,6 @@ int Homeware::readPin(const int pin, const String mode)
     if (md == "dht")
     {
         newValue = readDht(pin)["temperature"];
-    }
-#endif
-#ifdef GROOVE_ULTRASONIC
-    else if (md == "gus")
-    {
-        // groove ultrasonic
-        newValue = grooveUltrasonic(pin);
     }
 #endif
     else
