@@ -23,6 +23,8 @@ public:
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
     unsigned int ledTimeChanged = 5000;
     unsigned int loopEventMillis = millis();
+    bool inited = false;
+    bool connected = false;
 
     int ledPin = 255;
     bool inDebug = false;
@@ -35,58 +37,65 @@ public:
     ESPTelnet telnet;
 #endif
 
-    void reset();
     JsonObject getTrigger();
     JsonObject getStable();
     JsonObject getMode();
     JsonObject getDevices();
     JsonObject getSensors();
     JsonObject getDefaults();
-    void initPinMode(int pin, const String m);
-    int writePin(const int pin, const int value);
-    int writePWM(const int pin, const int value, const int timeout = 0);
-    int readPin(const int pin, const String mode = "");
-    bool pinValueChanged(const int pin, const int value);
-    int pinValue(const int pin);
-    void afterChanged(const int pin, const int value, const String mode);
-    void debug(String txt);
-    int ledLoop(const int pin);
-    int findPinByMode(String mode);
-    String print(String msg);
-    int getAdcState(int pin);
-    String getPinMode(const int pin);
-    void checkTrigger(int pin, int value);
-    int switchPin(const int pin);
-    void setLedMode(const int mode);
-    String getStatus();
-    String showGpio();
-    void setupPins();
-    void doSleep(const int tempo);
-    void resetDeepSleep(const unsigned int t = 60000);
-    String help();
-    bool readFile(String filename, char *buffer, size_t maxLen);
-    String restoreConfig();
-    void defaultConfig();
-    String saveConfig();
-    String doCommand(String command);
-    void errorMsg(String msg);
-    String localIP();
-    void resetWiFi();
-    void printConfig();
-    void setupTelnet();
-    void loop();
-    void loopEvent();
-    void afterLoop();
-
-    JsonObject getValues();
 
 #ifdef DHT_SENSOR
     JsonObject readDht(const int pin);
 #endif
+    void resetDeepSleep(const unsigned int t = 60000);
+    String doCommand(String command);
+    String print(String msg);
+    void setLedMode(const int mode);
+    int writePin(const int pin, const int value);
+    int writePWM(const int pin, const int value, const int timeout = 0);
+    int readPin(const int pin, const String mode = "");
+    int findPinByMode(String mode);
+    void debug(String txt);
+    int switchPin(const int pin);
+    String getPinMode(const int pin);
+    void loop();
+
+protected:
+    // eventos
+    void afterChanged(const int pin, const int value, const String mode);
+    void afterLoop();
+    void afterBegin();
+    void afterSetup();
+    void afterConfigChanged();
+    // processos
+    void initPinMode(int pin, const String m);
+    bool pinValueChanged(const int pin, const int value);
+    int pinValue(const int pin);
+    int ledLoop(const int pin);
+    int getAdcState(int pin);
+    void checkTrigger(int pin, int value);
+    void doSleep(const int tempo);
+    String help();
+    String restoreConfig();
+    void defaultConfig();
+    String saveConfig();
+    void errorMsg(String msg);
+    String localIP();
+    void resetWiFi();
+    void printConfig();
+
+    JsonObject getValues();
+    void reset();
+    void setupPins();
+    bool readFile(String filename, char *buffer, size_t maxLen);
 
 private:
     DynamicJsonDocument baseConfig();
+    void begin();
 #ifdef TELNET
+    void setupTelnet();
 #endif
+    void loopEvent();
+    String getStatus();
+    String showGpio();
 };
-

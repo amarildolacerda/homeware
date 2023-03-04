@@ -61,7 +61,6 @@ void sinricTemperaturesensor();
 
 unsigned int sinric_count = 0;
 
-
 void linha()
 {
     Serial.println("-------------------------------");
@@ -115,20 +114,13 @@ JsonObject Homeware::readDht(const int pin)
 }
 #endif
 
-void Homeware::begin()
+void Homeware::afterBegin()
 {
-    if (inited)
-        return;
-
 #ifdef ALEXA
     resources += "alexa,";
     setupSensores();
 #endif
     setupServer();
-#ifdef TELNET
-    resources += "telnet,";
-    setupTelnet();
-#endif
 
 #ifdef OTA
 
@@ -176,45 +168,7 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     setupPins();
 }
 
-bool inLooping = false;
-void Homeware::loop()
-{
-    if (inLooping)
-        return;
-    try
-    {
-        inLooping = true;
-        if (!inited)
-            begin();
 
-
-        Protocol::loop();
-        //=========================== usado somente quando conectado
-        if (connected)
-        {
-#ifdef MQTT
-            mqtt.loop();
-#endif
-#ifdef ALEXA
-            alexa.loop();
-#endif
-
-#ifdef SINRIC
-            if (sinric_count > 0 && sinricActive)
-                SinricPro.handle();
-            if (sinric_count > 0 && !sinricActive)
-                setLedMode(4);
-
-#endif
-        }
-    }
-    catch (int &e)
-    {
-    }
-    yield();
-
-    inLooping = false;
-}
 
 #ifdef GROOVE_ULTRASONIC
 unsigned long ultimo_ultrasonic = 0;
@@ -240,6 +194,21 @@ int grooveUltrasonic(int pin)
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
 {
+#ifdef MQTT
+    mqtt.loop();
+#endif
+#ifdef ALEXA
+    alexa.loop();
+#endif
+
+#ifdef SINRIC
+    if (sinric_count > 0 && sinricActive)
+        SinricPro.handle();
+    if (sinric_count > 0 && !sinricActive)
+        setLedMode(4);
+
+#endif
+
 #ifdef SINRIC
     if (millis() - ultimaTemperatura > 60000)
     {

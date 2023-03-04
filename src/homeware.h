@@ -35,8 +35,6 @@ public:
 #ifdef ALEXA
     Espalexa alexa = Espalexa();
 #endif
-    bool inited = false;
-    bool connected = false;
 #ifdef ESP32
     WebServer *server;
 #else
@@ -52,14 +50,13 @@ public:
     virtual void afterChanged(const int pin, const int value, const String mode);
     virtual String doCommand(String command);
     virtual void resetWiFi();
-    virtual void loop();
     virtual void afterLoop();
+    virtual void afterBegin();
 
 #ifdef DHT_SENSOR
     virtual JsonObject readDht(const int pin);
 #endif
     //============================= potencial para mudar para Protocol
-    void begin();
 
 #ifdef ESP32
     const char *getChipId();

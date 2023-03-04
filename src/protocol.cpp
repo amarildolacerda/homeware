@@ -453,6 +453,11 @@ void Protocol::setup()
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
+    afterSetup();
+}
+
+void Protocol::afterConfigChanged()
+{
 }
 
 String Protocol::restoreConfig()
@@ -494,6 +499,7 @@ String Protocol::restoreConfig()
         return String(e);
     }
     Serial.println("");
+    afterConfigChanged();
     return rt;
 }
 
@@ -554,6 +560,7 @@ String Protocol::saveConfig()
     if (serializeJson(base, file) == 0)
         rsp = "não gravou /config.json";
     file.close();
+    afterConfigChanged();
     return rsp;
 }
 
@@ -565,6 +572,24 @@ void Protocol::defaultConfig()
         String key = k.key().c_str();
         config[key] = doc[key];
     }
+    afterConfigChanged();
+}
+
+void Protocol::begin()
+{
+
+#ifdef TELNET
+    resources += "telnet,";
+    setupTelnet();
+#endif
+    afterBegin();
+}
+
+void Protocol::afterBegin()
+{
+}
+void Protocol::afterSetup()
+{
 }
 
 #ifdef TELNET
@@ -611,6 +636,7 @@ void Protocol::setupTelnet()
         errorMsg("Will reboot...");
     }
 }
+
 #endif
 
 void Protocol::errorMsg(String msg)
@@ -848,18 +874,38 @@ void lerSerial()
     }
 }
 
+bool inLooping = false;
 void Protocol::loop()
 {
-    lerSerial();
 
+    if (inLooping)
+        return;
+    try
+    {
+        inLooping = true;
+        if (!inited)
+            begin();
+        lerSerial();
 #ifdef TELNET
-    telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
+        telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
+        loopEvent();
 
-    loopEvent();
+        //=========================== usado somente quando conectado
+        if (connected)
+        {
+        }
+    }
+    catch (int &e)
+    {
+    }
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0)
         doSleep(sleep);
+    yield();
+
+    inLooping = false;
+    //===========================
 }
 
 JsonObject Protocol::getValues()
