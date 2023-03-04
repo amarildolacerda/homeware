@@ -32,9 +32,6 @@
 #include <mqtt.h>
 #endif
 
-#ifdef DRIVERS_ENABLED
-#include <drivers/drivers_setup.h>
-#endif
 
 #ifdef SINRIC
 #include "SinricPro.h"
@@ -107,7 +104,6 @@ void Homeware::afterBegin()
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif
     resetDeepSleep();
-    Serial.println(resources);
 }
 
 #ifdef ESP32
@@ -117,9 +113,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
     Protocol::setup();
-#ifdef DRIVERS_ENABLED
-    drivers_register();
-#endif
     setServer(externalServer);
 
 #ifdef ESP32
@@ -181,12 +174,17 @@ void Homeware::resetWiFi()
     config.remove("ssid");
     config.remove("password");
     saveConfig();
+    reset();
+    delay(1000);
+}
+
+void Homeware::reset(){
+    Serial.println("Reset call");
 #ifdef ESP8266
     ESP.reset();
 #else
     ESP.restart();
 #endif
-    delay(1000);
 }
 
 String Homeware::doCommand(String command)
@@ -329,17 +327,17 @@ int findSinricPin(String id)
 int ultimaTemperaturaAferida = 0;
 void sinricTemperaturesensor()
 {
+#if defined(DRIVERS_ENABLED) && defined(DHT_SENSOR)
     int pin = homeware.findPinByMode("dht");
     if (pin < 0)
         return;
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
-#ifdef DRIVERS_ENABLED
-    Driver *drv = getDrivers().findByMode("dht");
+    Driver *drv  = getDrivers().findByMode("dht");
     if (!drv)
         return;
-    JsonObject r = dhtReadStatus(pin);
+    JsonObject r = drv->readStatus(pin);
     float t = r["temperature"];
     float h = r["humidity"];
     if (ultimaTemperaturaAferida != t)

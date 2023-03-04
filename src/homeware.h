@@ -19,7 +19,8 @@
 
 #include <functions.h>
 
-#include "protocol.h"
+#include <protocol.h>
+
 
 void linha();
 
@@ -52,6 +53,7 @@ public:
     virtual void resetWiFi();
     virtual void afterLoop();
     virtual void afterBegin();
+    virtual void reset();
 
     //============================= potencial para mudar para Protocol
 
@@ -67,7 +69,6 @@ private:
     void setupSensores();
 #endif
 };
-
 
 extern Homeware homeware;
 #ifdef ESP32

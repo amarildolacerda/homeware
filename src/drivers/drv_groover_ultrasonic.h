@@ -7,13 +7,12 @@ unsigned long ultimo_ultrasonic = 0;
 
 class GrooverUltrasonic : public Driver
 {
-    virtual void setup()
+    GrooverUltrasonic()
     {
         mode = "gus";
         getProtocol()->resources += "gus,";
     };
-    virtual void loop(){};
-    virtual int read(const int xpin)
+    virtual int readPin(const int xpin)
     {
         pin = xpin;
         try

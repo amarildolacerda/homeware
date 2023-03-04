@@ -1,3 +1,5 @@
+#include "Arduino.h"
+
 #include "protocol.h"
 #include <functions.h>
 #include <LittleFS.h>
@@ -8,15 +10,34 @@ unsigned int ultimoLedChanged = millis();
 unsigned int timeoutDeepSleep = 10000;
 
 #ifdef DRIVERS_ENABLED
-Drivers drivers = Drivers();
+#include <drivers/drivers_setup.h>
 
-Drivers getDrivers()
-{
-    return drivers;
-}
 #endif
 
 Protocol *protocol;
+
+size_t driversCount = 0;
+
+int Drivers::add(Driver item)
+{
+    items[driversCount] = item;
+    Serial.print(driversCount);
+    Serial.print(": add  ");
+    Serial.println(item.mode);
+    ++driversCount;
+    return driversCount - 1;
+};
+size_t Drivers::count()
+{
+    return driversCount;
+}
+
+Drivers edrivers;
+
+Drivers getDrivers()
+{
+    return edrivers;
+}
 
 void Protocol::reset()
 {
@@ -68,10 +89,10 @@ int Protocol::writePin(const int pin, const int value)
     if (mode != NULL)
     {
 #ifdef DRIVERS_ENABLED
-        Driver *drv = getDrivers().findByMode(mode);
-        if (drv)
+        Driver *drv = edrivers.findByMode(mode);
+        if (drv && drv->isSet())
         {
-            v = drv->write(pin, value);
+            v = drv->writePin(pin, value);
         }
 
         else
@@ -82,8 +103,6 @@ int Protocol::writePin(const int pin, const int value)
             digitalWrite(pin, value > 0);
         }
 
-        else if (mode == "adc")
-            analogWrite(pin, value);
         else if (mode == "lc")
         {
             byte relON[] = {0xA0, 0x01, 0x01, 0xA2}; // Hex command to send to serial for open relay
@@ -151,7 +170,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         docPinValues[String(pin)] = newValue;
         afterChanged(pin, newValue, getPinMode(pin));
 #ifdef DRIVERS_ENABLED
-        drivers.changed(pin, newValue);
+        edrivers.changed(pin, newValue);
 #endif
         return true;
     }
@@ -161,21 +180,19 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
 int Protocol::readPin(const int pin, const String mode)
 {
     int newValue = 0;
-    if (false)
-    {
-        // dummy
-    }
+
 #ifdef DRIVERS_ENABLED
-    Driver *drv = getDrivers().findByMode(mode);
-    else if (drv != NULL)
+    Driver *drv = edrivers.findByMode(mode);
+    if (drv != NULL && drv->isGet())
     {
         Serial.print("Driver: ");
         Serial.println(drv->mode);
-        newValue = drv->read(pin);
+        newValue = drv->readPin(pin);
         Serial.println(newValue);
     }
+    else
 #endif
-    else if (mode == "led")
+        if (mode == "led")
     {
         newValue = ledLoop(pin);
     }
@@ -187,19 +204,12 @@ int Protocol::readPin(const int pin, const String mode)
     {
         newValue = analogRead(pin);
     }
-    else if (mode == "adc")
-    {
-        newValue = analogRead(pin);
-    }
     else if (mode == "lc")
     {
         newValue = docPinValues[String(pin)];
     }
-    else if (mode == "ldr")
-    {
-        newValue = getAdcState(pin);
-    }
-    else newValue = digitalRead(pin);
+    else
+        newValue = digitalRead(pin);
 
     pinValueChanged(pin, newValue);
 
@@ -263,24 +273,6 @@ String Protocol::print(String msg)
     telnet.println(msg);
 #endif
     return msg;
-}
-
-int Protocol::getAdcState(int pin)
-{
-
-    unsigned int tmpAdc = analogRead(pin);
-    int rt = currentAdcState;
-    const unsigned int v_min = config["adc_min"].as<int>();
-    const unsigned int v_max = config["adc_max"].as<int>();
-    if (tmpAdc >= v_max)
-        rt = LOW;
-    if (tmpAdc < v_min)
-        rt = HIGH;
-    char buffer[64];
-    sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
-    debug(buffer);
-    currentAdcState = rt;
-    return rt;
 }
 
 void Protocol::checkTrigger(int pin, int value)
@@ -471,11 +463,17 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 void Protocol::setup()
 {
     protocol = this;
+
+#ifdef DRIVERS_ENABLED
+    Serial.println("Registrando os drivers...");
+    drivers_register();
+#endif
+
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
 #ifdef DRIVERS_ENABLED
-    drivers.setup();
+    edrivers.setup();
 #endif
     afterSetup();
 }
@@ -513,8 +511,8 @@ String Protocol::restoreConfig()
             String key = k.key().c_str();
             config[key] = doc[key]; // pode ter variaveis gravadas que nao tem no default inicial; ex: ssid
         }
-        serializeJson(config, Serial);
-        Serial.println("");
+        // serializeJson(config, Serial);
+        // Serial.println("");
         rt = "OK";
         // linha();
     }
@@ -575,7 +573,7 @@ String Protocol::saveConfig()
     }
 
     base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
-    serializeJson(base, Serial);
+    // serializeJson(base, Serial);
 #ifdef ESP32
     File file = SPIFFS.open("/config.json", "w");
 #else
@@ -757,6 +755,11 @@ String Protocol::doCommand(String command)
         {
             return restoreConfig();
         }
+        else if (cmd[0] == "debug")
+        {
+            config["debug"] = cmd[1];
+            return "OK";
+        }
         else if (cmd[0] == "set")
         {
             if (cmd[2] == "none")
@@ -800,12 +803,30 @@ String Protocol::doCommand(String command)
 #ifdef DRIVERS_ENABLED
             if (cmd[2] == "get" || cmd[2] == "set")
             {
-                Driver *drv = getDrivers().findByMode(cmd[1]);
+                Driver *drv = edrivers.findByMode(cmd[1]);
                 if (drv)
                 {
-                    String rst = drv->doCommand(command);
-                    if (rst != "NAK")
-                        return rst;
+                    if (cmd[2] == "get" && drv->isGet())
+                    {
+                        return String(drv->readPin(pin));
+                    }
+                    else if (cmd[2] == "set" && drv->isSet())
+                    {
+                        return String(drv->writePin(pin, cmd[3].toInt()));
+                    }
+                    else if (cmd[2] == "get" && drv->isStatus())
+                    {
+                        JsonObject sts = drv->readStatus(pin);
+                        String rsp;
+                        serializeJson(sts, rsp);
+                        return rsp;
+                    }
+                    else if (drv->isCommand())
+                    {
+                        String rst = drv->doCommand(command);
+                        if (rst != "NAK")
+                            return rst;
+                    }
                 }
             }
 #endif
@@ -834,22 +855,37 @@ String Protocol::doCommand(String command)
             else if (cmd[2] == "device")
             {
                 JsonObject devices = getDevices();
+                if (cmd[3] == "none")
+                {
+                    devices.remove(spin);
+                    return "OK";
+                }
                 devices[spin] = cmd[3];
-                if (String("motion,doorbell").indexOf(cmd[3]))
+                if (String("motion,doorbell").indexOf(cmd[3]) > -1)
                     getMode()[spin] = "in";
-                if (String("ldr,dht").indexOf(cmd[3]))
+                if (String("ldr,dht").indexOf(cmd[3]) > -1)
                     getMode()[spin] = cmd[3];
                 return "OK";
             }
             else if (cmd[2] == "sensor")
             {
-                JsonObject devices = getSensors();
-                devices[spin] = cmd[3];
+                JsonObject sensors = getSensors();
+                if (cmd[3] == "none")
+                {
+                    sensors.remove(spin);
+                    return "OK";
+                }
+                sensors[spin] = cmd[3];
                 return "OK";
             }
             else if (cmd[2] == "default")
             {
                 JsonObject d = getDefaults();
+                if (cmd[3] == "none")
+                {
+                    d.remove(spin);
+                    return "OK";
+                }
                 d[spin] = cmd[3];
                 return "OK";
             }
@@ -923,7 +959,7 @@ void Protocol::loop()
         {
         }
 #ifdef DRIVERS_ENABLED
-        drivers.loop();
+        edrivers.loop();
 #endif
     }
     catch (int &e)
@@ -980,39 +1016,18 @@ void Protocol::loopEvent()
 
 // DRIVERS
 #ifdef DRIVERS_ENABLED
-int Drivers::add(Driver item)
-{
-    items[length] = item;
-    length++;
-    Serial.print(length);
-    Serial.print(": add  ");
-    Serial.println(item.mode);
-
-    return length - 1;
-}
-
-void Driver::setup(){};
-void Driver::loop(){};
 
 void Drivers::setup()
 {
-    Serial.println("Drivers.setup()");
-    for (size_t i = 0; i < length; i++)
+    // Serial.println("Drivers.setup()");
+    for (size_t i = 0; i < count(); i++)
         items[i]
             .setup();
 }
 void Drivers::loop()
 {
-    for (size_t i = 0; i < length; i++)
+    for (size_t i = 0; i < count(); i++)
         items[i].loop();
-}
-void Driver::changed(const int pin, const int value)
-{
-}
-int Driver::read(const int pin) { return -1; }
-int Driver::write(const int pin, const int value)
-{
-    return value;
 }
 String Driver::doCommand(const String command)
 {
@@ -1021,27 +1036,25 @@ String Driver::doCommand(const String command)
 
 void Drivers::changed(const int pin, const int value)
 {
-    Serial.println("Drivers.changed(pin,value)");
-
-    for (size_t i = 0; i < length; i++)
+    for (size_t i = 0; i < count(); i++)
         if (items[i].pin == pin)
             items[i].changed(pin, value);
 }
 Driver *Drivers::findByMode(String mode)
 {
     Serial.println("Drivers.findByMode()");
-    for (size_t i = 0; i < length; i++)
+    for (size_t i = 0; i < count(); i++)
     {
         Driver drv = items[i];
         Serial.println(drv.mode);
-        if (drv.mode == mode)
+        if (drv.mode.equals(mode))
         {
             Serial.println("achou: " + mode);
             return &items[i];
         }
     }
-    Serial.print(mode);
-    Serial.println(" - Não achou nada");
+    // Serial.print(mode);
+    // Serial.println(" - Não achou nada");
     return NULL;
 }
 

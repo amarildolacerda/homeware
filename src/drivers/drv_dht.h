@@ -26,38 +26,47 @@ StaticJsonDocument<200> docDHT;
 class DHTDriver : public Driver
 {
 public:
-    virtual void setup()
+    DHTDriver()
     {
         mode = "dht";
         getProtocol()->resources += "dht,";
     }
-    virtual String doCommand(const String command){
+    virtual void setup()
+    {
+        Serial.println("dht enabled");
+    }
+    virtual String doCommand(const String command)
+    {
+        Serial.print("command dht: ");
+        Serial.println(command);
         String *cmd = split(command, ' ');
-        JsonObject j = readDht(String(cmd[1]).toInt());
+        JsonObject j = readStatus(String(cmd[1]).toInt());
         String result;
         serializeJson(j, result);
+        getProtocol()->debug(result);
         return result;
     }
-    JsonObject readDht(const int pin)
-    {
+    virtual JsonObject readStatus(const int xpin)
+    {  
         if (!dht_inited)
         {
+            pin = xpin;
             dht.setup(pin, DHTesp::AUTO_DETECT);
             dht_inited = true;
         }
         delay(dht.getMinimumSamplingPeriod());
-        //homeware.ledLoop(255); //(-1) desliga
         docDHT["temperature"] = dht.getTemperature();
         docDHT["humidity"] = dht.getHumidity();
         docDHT["fahrenheit"] = dht.toFahrenheit(dht.getTemperature());
-        Serial.print("Temperatura: ");
-        Serial.println(dht.getTemperature());
+        getProtocol()->debug("Temperatura: " + String(dht.getTemperature()));
         return docDHT.as<JsonObject>();
     }
-
+    virtual bool isGet() { return true; }
+    virtual bool isStatus() { return true; }
     virtual int readPin(const int xpin)
     {
+        Serial.println("DHT->readPin()");
         pin = xpin;
-        return readDht(pin)["temperature"];
+        return readStatus(pin)["temperature"];
     }
 };

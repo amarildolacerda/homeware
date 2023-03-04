@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef protocol_h
+#define protocol_h
+
 /*
   Protocol deve ficar isolado para ser utilizado um modelos diferentes de arduino,
   não pode conter coisas exclusivas de alguma placa em particular;
@@ -45,46 +48,45 @@ public:
     JsonObject getSensors();
     JsonObject getDefaults();
 
-    void resetDeepSleep(const unsigned int t = 60000);
-    String doCommand(String command);
-    String print(String msg);
-    void setLedMode(const int mode);
-    int writePin(const int pin, const int value);
-    int writePWM(const int pin, const int value, const int timeout = 0);
-    int readPin(const int pin, const String mode = "");
-    int findPinByMode(String mode);
-    void debug(String txt);
-    int switchPin(const int pin);
-    String getPinMode(const int pin);
-    void loop();
-    bool pinValueChanged(const int pin, const int value);
+    virtual void resetDeepSleep(const unsigned int t = 60000);
+    virtual String doCommand(String command);
+    virtual String print(String msg);
+    virtual void setLedMode(const int mode);
+    virtual int writePin(const int pin, const int value);
+    virtual int writePWM(const int pin, const int value, const int timeout = 0);
+    virtual int readPin(const int pin, const String mode = "");
+    virtual int findPinByMode(String mode);
+    virtual void debug(String txt);
+    virtual int switchPin(const int pin);
+    virtual String getPinMode(const int pin);
+    virtual void loop();
+    virtual bool pinValueChanged(const int pin, const int value);
 
 protected:
     // eventos
-    void afterChanged(const int pin, const int value, const String mode);
-    void afterLoop();
-    void afterBegin();
-    void afterSetup();
-    void afterConfigChanged();
+    virtual void afterChanged(const int pin, const int value, const String mode);
+    virtual void afterLoop();
+    virtual void afterBegin();
+    virtual void afterSetup();
+    virtual void afterConfigChanged();
     // processos
     void initPinMode(int pin, const String m);
     int pinValue(const int pin);
     int ledLoop(const int pin);
-    int getAdcState(int pin);
     void checkTrigger(int pin, int value);
     void doSleep(const int tempo);
-    String help();
+    virtual String help();
     String restoreConfig();
     void defaultConfig();
     String saveConfig();
     void errorMsg(String msg);
-    String localIP();
-    void resetWiFi();
+    virtual String localIP();
+    virtual void resetWiFi();
     void printConfig();
 
     JsonObject getValues();
-    void reset();
-    void setupPins();
+    virtual void reset();
+    virtual void setupPins();
     bool readFile(String filename, char *buffer, size_t maxLen);
     static Protocol *instance;
 
@@ -106,14 +108,27 @@ public:
     String mode = "out";
     int pin = -1;
     Protocol *getProtocol();
-    void setup();
-    void loop();
-    void changed(const int pin, const int value);
-    int read(const int pin);
-    int write(const int pin, const int value);
-    bool isGet() { return true; };
-    bool isSet() { return true; };
-    String doCommand(const String command);
+    virtual void setup(){};
+    virtual void loop(){};
+    virtual JsonObject readStatus(const int pin)
+    {
+
+        return DynamicJsonDocument(10).as<JsonObject>();
+    }
+    virtual void changed(const int pin, const int value){};
+    virtual int readPin(const int pin)
+    {
+        return -1;
+    };
+    virtual int writePin(const int pin, const int value)
+    {
+        return value;
+    };
+    virtual bool isGet() { return true; };
+    virtual bool isSet() { return false; };
+    virtual bool isStatus() { return false; };
+    virtual bool isCommand() { return false; }
+    virtual String doCommand(const String command);
 
 private:
 };
@@ -128,10 +143,13 @@ public:
     int add(Driver item);
     void changed(const int pin, const int value);
     Driver *findByMode(String mode);
+    size_t count();
 
-private:
-    size_t length = 0;
+protected:
 };
 
 Drivers getDrivers();
+#endif
+
+//==================== end
 #endif
