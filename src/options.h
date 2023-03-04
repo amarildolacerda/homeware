@@ -14,9 +14,10 @@
 #define OTA
 #endif
 
+#ifdef DRIVERS_ENABLED
 #define DHT_SENSOR
-
 #define GROOVE_ULTRASONIC
+#endif
 // #define MQTT
 
 #if defined(ESP8285)

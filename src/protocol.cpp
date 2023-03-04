@@ -605,6 +605,8 @@ void Protocol::begin()
     setupTelnet();
 #endif
     afterBegin();
+    Serial.print("Resources: ");
+    Serial.println(resources);
     inited = true;
 }
 
