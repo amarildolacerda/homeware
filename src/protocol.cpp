@@ -643,7 +643,9 @@ void Protocol::setupTelnet()
 void Protocol::errorMsg(String msg)
 {
     Serial.println(msg);
+    #ifdef TELNET
     telnet.println(msg);
+    #endif
 }
 
 String Protocol::localIP()
