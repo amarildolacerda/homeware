@@ -18,16 +18,19 @@
 
 void drivers_register()
 {
-    getDrivers().add(ADCDriver());
-    getDrivers().add(LDRDriver());
+    ADCDriver* adc =  new ADCDriver();
+    getDrivers().add(adc);
+
+    LDRDriver* ldr = new LDRDriver();
+    getDrivers().add(ldr);
 
 #ifdef DRIVERS_ENABLED
 #ifdef GROOVE_ULTRASONIC
-    Driver drv = GrooverUltrasonic();
+    GrooverUltrasonic* drv = new GrooverUltrasonic();
     getDrivers().add(drv);
 #endif
 #ifdef DHT_SENSOR
-    Driver dht = DHTDriver();
+    DHTDriver* dht = new DHTDriver();
     getDrivers().add(dht);
 #endif
 #endif

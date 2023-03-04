@@ -129,12 +129,15 @@ private:
 
 class Drivers
 {
+    #define MAX_SIZE 32
+    Driver *items[MAX_SIZE];
+
 public:
+    Drivers(){};
     Protocol *getProtocol();
-    Driver items[32];
     void loop();
     void setup();
-    int add(Driver item);
+    int add(Driver *item);
     void changed(const int pin, const int value);
     Driver *findByMode(String mode);
     size_t count();

@@ -11,33 +11,13 @@ unsigned int timeoutDeepSleep = 10000;
 
 #ifdef DRIVERS_ENABLED
 #include <drivers/drivers_setup.h>
+Drivers edrivers;
 
 #endif
 
 Protocol *protocol;
 
 size_t driversCount = 0;
-
-int Drivers::add(Driver item)
-{
-    items[driversCount] = item;
-    Serial.print(driversCount);
-    Serial.print(": add  ");
-    Serial.println(item.getMode());
-    ++driversCount;
-    return driversCount - 1;
-};
-size_t Drivers::count()
-{
-    return driversCount;
-}
-
-Drivers edrivers;
-
-Drivers getDrivers()
-{
-    return edrivers;
-}
 
 void Protocol::reset()
 {
@@ -1017,6 +997,25 @@ void Protocol::loopEvent()
 // DRIVERS
 #ifdef DRIVERS_ENABLED
 
+int Drivers::add(Driver *item)
+{
+    items[driversCount] = item;
+    Serial.print(driversCount);
+    Serial.print(": add  ");
+    Serial.println(item->getMode());
+    ++driversCount;
+    return driversCount - 1;
+};
+size_t Drivers::count()
+{
+    return driversCount;
+}
+
+Drivers getDrivers()
+{
+    return edrivers;
+}
+
 void Driver::setMode(String md)
 {
     _mode = md;
@@ -1054,17 +1053,26 @@ void Drivers::setup()
     Serial.print("Drivers.setup() for: ");
     Serial.println(count());
     for (size_t i = 0; i < count(); i++)
-    {
-        Serial.print("mode: ");
-        Serial.println(items[i].getMode());
-        items[i]
-            .setup();
-    }
+        if (items[i])
+        {
+            Serial.print(i);
+            Serial.print(". mode: ");
+            Driver *drv = items[i];
+            if (!drv)
+                Serial.println("objeto esta null");
+            else
+            {
+                // Serial.println(drv->getMode());
+                drv->setup();
+                Serial.println("setup() executed");
+            }
+        }
 }
 void Drivers::loop()
 {
     for (size_t i = 0; i < count(); i++)
-        items[i].loop();
+      if (items[i])
+        items[i]->loop();
 }
 String Driver::doCommand(const String command)
 {
@@ -1074,22 +1082,24 @@ String Driver::doCommand(const String command)
 void Drivers::changed(const int pin, const int value)
 {
     for (size_t i = 0; i < count(); i++)
-        if (items[i].getPin() == pin)
-            items[i].changed(pin, value);
+        if (items[i] && items[i]->getPin() == pin)
+            items[i]->changed(pin, value);
 }
 Driver *Drivers::findByMode(String mode)
 {
     Serial.println("Drivers.findByMode()");
     for (size_t i = 0; i < count(); i++)
-    {
-        Driver drv = items[i];
-        Serial.println(drv.getMode());
-        if (drv.getMode().equals(mode))
+        if (items[i])
         {
-            Serial.println("achou: " + mode);
-            return &items[i];
+
+            Driver *drv = items[i];
+            Serial.println(drv->getMode());
+            if (drv->getMode().equals(mode))
+            {
+                Serial.println("achou: " + mode);
+                return items[i];
+            }
         }
-    }
     // Serial.print(mode);
     // Serial.println(" - Não achou nada");
     return NULL;
