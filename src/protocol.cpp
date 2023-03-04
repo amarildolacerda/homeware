@@ -7,12 +7,14 @@ bool ledStatus = false;
 unsigned int ultimoLedChanged = millis();
 unsigned int timeoutDeepSleep = 10000;
 
+#ifdef DRIVERS_ENABLED
 Drivers drivers = Drivers();
 
 Drivers getDrivers()
 {
     return drivers;
 }
+#endif
 
 void Protocol::reset()
 {
@@ -63,23 +65,21 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
+#ifdef DRIVERS_ENABLED
         Driver *drv = getDrivers().findByMode(mode);
         if (drv)
         {
             v = drv->write(pin, value);
         }
 
-        else if (mode == "pwm")
+        else
+#endif
+            if (mode == "pwm")
         {
             analogWrite(pin, value);
             digitalWrite(pin, value > 0);
         }
-#ifdef DHT_SENSOR
-        else if (mode == "dht")
-        {
-            return value;
-        }
-#endif
+
         else if (mode == "adc")
             analogWrite(pin, value);
         else if (mode == "lc")
@@ -148,7 +148,9 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         debug(buffer);
         docPinValues[String(pin)] = newValue;
         afterChanged(pin, newValue, getPinMode(pin));
-        drivers.changed(pin,newValue);
+#ifdef DRIVERS_ENABLED
+        drivers.changed(pin, newValue);
+#endif
         return true;
     }
     return false;
@@ -157,16 +159,20 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
 int Protocol::readPin(const int pin, const String mode)
 {
     int newValue = 0;
-    Serial.println("readPin()");
+    if (false)
+    {
+        // dummy
+    }
+#ifdef DRIVERS_ENABLED
     Driver *drv = getDrivers().findByMode(mode);
-    if (drv != NULL)
+    else if (drv != NULL)
     {
         Serial.print("Driver: ");
         Serial.println(drv->mode);
         newValue = drv->read(pin);
         Serial.println(newValue);
     }
-
+#endif
     else if (mode == "led")
     {
         newValue = ledLoop(pin);
@@ -191,8 +197,7 @@ int Protocol::readPin(const int pin, const String mode)
     {
         newValue = getAdcState(pin);
     }
-    else
-        newValue = digitalRead(pin);
+    else newValue = digitalRead(pin);
 
     pinValueChanged(pin, newValue);
 
@@ -467,7 +472,9 @@ void Protocol::setup()
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
+#ifdef DRIVERS_ENABLED
     drivers.setup();
+#endif
     afterSetup();
 }
 
@@ -668,13 +675,6 @@ String Protocol::localIP()
 {
     return "";
 }
-#ifdef DHT_SENSOR
-JsonObject Protocol::readDht(const int pin)
-{
-    JsonObject cmdRoot;
-    return cmdRoot;
-}
-#endif
 
 String Protocol::doCommand(String command)
 {
@@ -793,20 +793,25 @@ String Protocol::doCommand(String command)
         {
             int pin = cmd[1].toInt();
             String spin = cmd[1];
+
+#ifdef DRIVERS_ENABLED
+            if (cmd[2] == "get" || cmd[2] == "set")
+            {
+                Driver *drv = getDrivers().findByMode(cmd[1]);
+                if (drv)
+                {
+                    String rst = drv->doCommand(command);
+                    if (rst != "NAK")
+                        return rst;
+                }
+            }
+#endif
+
             if (cmd[2] == "none")
             {
                 config["mode"].remove(cmd[1]);
                 return "OK";
             }
-#ifdef DHT_SENSOR
-            else if (cmd[2] == "get" && getMode()[cmd[1]] == "dht")
-            {
-                JsonObject j = readDht(String(cmd[1]).toInt());
-                String result;
-                serializeJson(j, result);
-                return result;
-            }
-#endif
             else if (cmd[2] == "get")
             {
                 int v = readPin(pin, "");
@@ -914,7 +919,9 @@ void Protocol::loop()
         if (connected)
         {
         }
+#ifdef DRIVERS_ENABLED
         drivers.loop();
+#endif
     }
     catch (int &e)
     {
@@ -968,10 +975,16 @@ void Protocol::loopEvent()
     }
 }
 
+// DRIVERS
+#ifdef DRIVERS_ENABLED
 int Drivers::add(Driver item)
 {
-    items[length]=item;
+    items[length] = item;
     length++;
+    Serial.print(length);
+    Serial.print(": add  ");
+    Serial.println(item.mode);
+
     return length - 1;
 }
 
@@ -992,12 +1005,15 @@ void Drivers::loop()
 }
 void Driver::changed(const int pin, const int value)
 {
-    getProtocol()->
 }
 int Driver::read(const int pin) { return -1; }
 int Driver::write(const int pin, const int value)
 {
     return value;
+}
+String Driver::doCommand(const String command)
+{
+    return "NAK";
 }
 
 void Drivers::changed(const int pin, const int value)
@@ -1010,13 +1026,9 @@ void Drivers::changed(const int pin, const int value)
 }
 Driver *Drivers::findByMode(String mode)
 {
-    Serial.print("Drivers.findByMode(");
-    Serial.print(mode);
-    Serial.println(")");
-
-    for (int i = 0; i < length ; i++)
+    Serial.println("Drivers.findByMode()");
+    for (size_t i = 0; i < length; i++)
     {
-        Serial.println(i);
         Driver drv = items[i];
         Serial.println(drv.mode);
         if (drv.mode == mode)
@@ -1024,9 +1036,9 @@ Driver *Drivers::findByMode(String mode)
             Serial.println("achou: " + mode);
             return &items[i];
         }
-        Serial.println("nao achou");
     }
-    Serial.println("Não achou nada");
+    Serial.print(mode);
+    Serial.println(" - Não achou nada");
     return NULL;
 }
 
@@ -1038,3 +1050,4 @@ Protocol *Driver::getProtocol()
 {
     return protocol;
 }
+#endif

@@ -53,9 +53,6 @@ public:
     virtual void afterLoop();
     virtual void afterBegin();
 
-#ifdef DHT_SENSOR
-    virtual JsonObject readDht(const int pin);
-#endif
     //============================= potencial para mudar para Protocol
 
 #ifdef ESP32

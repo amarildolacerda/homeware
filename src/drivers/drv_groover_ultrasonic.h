@@ -10,6 +10,7 @@ class GrooverUltrasonic : public Driver
     virtual void setup()
     {
         mode = "gus";
+        getProtocol()->resources += "gus,";
     };
     virtual void loop(){};
     virtual int read(const int xpin)

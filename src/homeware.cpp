@@ -28,16 +28,12 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#ifdef DHT_SENSOR
-#include "DHTesp.h"
-#endif
-
 #ifdef MQTT
 #include <mqtt.h>
 #endif
 
-#ifdef GROOVE_ULTRASONIC
-#include <drivers/groover_ultrasonic.h>
+#ifdef DRIVERS_ENABLED
+#include <drivers/drivers_setup.h>
 #endif
 
 #ifdef SINRIC
@@ -91,29 +87,6 @@ void Homeware::setupServer()
         } });
 }
 
-#ifdef DHT_SENSOR
-DHTesp dht;
-bool dht_inited = false;
-StaticJsonDocument<200> docDHT;
-
-JsonObject Homeware::readDht(const int pin)
-{
-    if (!dht_inited)
-    {
-        dht.setup(pin, DHTesp::AUTO_DETECT);
-        dht_inited = true;
-    }
-    delay(dht.getMinimumSamplingPeriod());
-    homeware.ledLoop(255); //(-1) desliga
-    docDHT["temperature"] = dht.getTemperature();
-    docDHT["humidity"] = dht.getHumidity();
-    docDHT["fahrenheit"] = dht.toFahrenheit(dht.getTemperature());
-    Serial.print("Temperatura: ");
-    Serial.println(dht.getTemperature());
-    return docDHT.as<JsonObject>();
-}
-#endif
-
 void Homeware::afterBegin()
 {
 #ifdef ALEXA
@@ -144,14 +117,9 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
     Protocol::setup();
-#ifdef DHT_SENSOR
-    resources += "dht,";
+#ifdef DRIVERS_ENABLED
+    drivers_register();
 #endif
-#ifdef GROOVE_ULTRASONIC
-    Driver drv = GrooverUltrasonic();
-    getDrivers().add(drv);
-#endif
-
     setServer(externalServer);
 
 #ifdef ESP32
@@ -171,9 +139,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     }
     setupPins();
 }
-
-
-
 
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
@@ -367,10 +332,14 @@ void sinricTemperaturesensor()
     int pin = homeware.findPinByMode("dht");
     if (pin < 0)
         return;
-    JsonObject r = homeware.readDht(pin);
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
+#ifdef DRIVERS_ENABLED
+    Driver *drv = getDrivers().findByMode("dht");
+    if (!drv)
+        return;
+    JsonObject r = dhtReadStatus(pin);
     float t = r["temperature"];
     float h = r["humidity"];
     if (ultimaTemperaturaAferida != t)
@@ -382,6 +351,7 @@ void sinricTemperaturesensor()
         serializeJson(r, result);
         Serial.println(result);
     }
+#endif
 }
 
 bool onSinricDHTPowerState(const String &deviceId, bool &state)
@@ -509,12 +479,6 @@ int Homeware::readPin(const int pin, const String mode)
     {
         newValue = Protocol::readPin(pin, md);
     }
-#ifdef DHT_SENSOR
-    if (md == "dht")
-    {
-        newValue = readDht(pin)["temperature"];
-    }
-#endif
     else
     {
         newValue = Protocol::readPin(pin, md);

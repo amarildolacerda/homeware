@@ -4,6 +4,7 @@
 #define LABEL String(getChipId(), HEX)
 #define VERSION "23.03.03.7"
 #define WIFI_ENABLED
+//#define DRIVERS_ENABLED
 
 #ifdef WIFI_ENABLED
 #define PORTAL

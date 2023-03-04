@@ -45,9 +45,6 @@ public:
     JsonObject getSensors();
     JsonObject getDefaults();
 
-#ifdef DHT_SENSOR
-    JsonObject readDht(const int pin);
-#endif
     void resetDeepSleep(const unsigned int t = 60000);
     String doCommand(String command);
     String print(String msg);
@@ -102,6 +99,7 @@ private:
     String showGpio();
 };
 
+#ifdef DRIVERS_ENABLED
 class Driver
 {
 public:
@@ -113,6 +111,9 @@ public:
     void changed(const int pin, const int value);
     int read(const int pin);
     int write(const int pin, const int value);
+    bool isGet() { return true; };
+    bool isSet() { return true; };
+    String doCommand(const String command);
 
 private:
 };
@@ -121,14 +122,16 @@ class Drivers
 {
 public:
     Protocol *getProtocol();
-    Driver items[32] ;
+    Driver items[32];
     void loop();
     void setup();
     int add(Driver item);
     void changed(const int pin, const int value);
     Driver *findByMode(String mode);
+
 private:
     size_t length = 0;
 };
 
 Drivers getDrivers();
+#endif
