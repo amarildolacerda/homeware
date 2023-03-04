@@ -16,6 +16,8 @@ Drivers getDrivers()
 }
 #endif
 
+Protocol *protocol;
+
 void Protocol::reset()
 {
     // noop
@@ -468,7 +470,7 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 
 void Protocol::setup()
 {
-    // protocol = this;
+    protocol = this;
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
@@ -617,7 +619,6 @@ void Protocol::afterSetup()
 {
 }
 
-Protocol *protocol;
 #ifdef TELNET
 void telnetOnConnect(String ip)
 {
