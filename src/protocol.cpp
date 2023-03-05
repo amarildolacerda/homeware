@@ -7,11 +7,8 @@
 
 unsigned int timeoutDeepSleep = 10000;
 
-#ifdef DRIVERS_ENABLED
 #include "drivers.h"
 #include "drivers/drivers_setup.h"
-
-#endif
 
 Protocol *protocol;
 Protocol *getInstanceOfProtocol()
@@ -55,13 +52,11 @@ JsonObject Protocol::getDefaults()
 
 void Protocol::initPinMode(int pin, const String m)
 {
-#ifdef DRIVERS_ENABLED
     Driver *drv = getDrivers()->findByMode(m);
     if (drv)
     {
         drv->setPinMode(pin);
     }
-#endif
     else
         pinMode(pin, OUTPUT);
     JsonObject mode = getMode();
@@ -75,19 +70,10 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
-#ifdef DRIVERS_ENABLED
         Driver *drv = getDrivers()->findByMode(mode);
         if (drv && drv->isSet())
         {
             v = drv->writePin(pin, value);
-        }
-
-        else
-#endif
-            if (mode == "pwm")
-        {
-            analogWrite(pin, value);
-            digitalWrite(pin, value > 0);
         }
 
         else
@@ -102,21 +88,11 @@ int Protocol::writePin(const int pin, const int value)
 
 int Protocol::writePWM(const int pin, const int value, const int timeout)
 {
-    if (value == 0)
+    Driver *drv = getDrivers()->findByMode("pwm");
+    if (drv && drv->active)
     {
-        digitalWrite(pin, LOW);
-    }
-    else
-    {
-        analogWrite(pin, value);
-        if (value > 0 && timeout > 0)
-        {
-            const int entrada = millis();
-            digitalWrite(pin, HIGH);
-            delay(timeout);
-            digitalWrite(pin, LOW);
-            return millis() - entrada;
-        }
+        drv->setV1(timeout);
+        return drv->writePin(pin, value);
     }
     return 0;
 }
@@ -143,10 +119,8 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         sprintf(buffer, "pin %d : %d ", pin, newValue);
         debug(buffer);
         docPinValues[String(pin)] = newValue;
-        afterChanged(pin, newValue, getPinMode(pin));
-#ifdef DRIVERS_ENABLED
         getDrivers()->changed(pin, newValue);
-#endif
+        afterChanged(pin, newValue, getPinMode(pin));
         return true;
     }
     return false;
@@ -156,7 +130,6 @@ int Protocol::readPin(const int pin, const String mode)
 {
     int newValue = 0;
 
-#ifdef DRIVERS_ENABLED
     Driver *drv = getDrivers()->findByMode(mode);
     if (!drv)
         Serial.println("Não tem um drive especifico: " + mode);
@@ -164,12 +137,6 @@ int Protocol::readPin(const int pin, const String mode)
     if (drv && drv->isGet())
     {
         newValue = drv->readPin(pin);
-    }
-    else
-#endif
-        if (mode == "pwm")
-    {
-        newValue = analogRead(pin);
     }
     else
         newValue = digitalRead(pin);
@@ -392,17 +359,13 @@ void Protocol::setup()
 {
     protocol = this;
 
-#ifdef DRIVERS_ENABLED
     Serial.println("Registrando os drivers...");
     drivers_register();
-#endif
 
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
-#ifdef DRIVERS_ENABLED
     getDrivers()->setup();
-#endif
     afterSetup();
 }
 
@@ -728,7 +691,6 @@ String Protocol::doCommand(String command)
             int pin = cmd[1].toInt();
             String spin = cmd[1];
 
-#ifdef DRIVERS_ENABLED
             if (cmd[2] == "get" || cmd[2] == "set")
             {
                 Driver *drv = getDrivers()->findByMode(cmd[1]);
@@ -757,7 +719,6 @@ String Protocol::doCommand(String command)
                     }
                 }
             }
-#endif
 
             if (cmd[2] == "none")
             {
@@ -891,9 +852,7 @@ void Protocol::loop()
         if (connected)
         {
         }
-#ifdef DRIVERS_ENABLED
         getDrivers()->loop();
-#endif
     }
     catch (int &e)
     {
