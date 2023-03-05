@@ -8,6 +8,7 @@
 #include "drivers/drv_led.h"
 #include "drivers/drv_in.h"
 #include "drivers/drv_rst.h"
+#include "drivers/drv_out.h"
 
 #ifdef DRIVERS_ENABLED
 #ifdef GROOVE_ULTRASONIC
@@ -17,6 +18,9 @@
 #include <drivers/drv_dht.h>
 DHTDriver dht_;
 #endif
+
+#include "drivers/drv_lctech.h"
+LCTechRelayDriver lcTech_;
 #endif
 
 // expose
@@ -27,6 +31,7 @@ ADCDriver adc_;
 LDRDriver ldr_;
 LedDriver led_;
 InDriver in_;
+OutDriver out_;
 ResetButtonDriver rst_;
 
 void drivers_register()
@@ -36,19 +41,19 @@ void drivers_register()
     driv->add(&ldr_);
     driv->add(&led_);
     driv->add(&in_);
+    driv->add(&out_);
     driv->add(&rst_);
 
 #ifdef DHT_SENSOR
     driv->add(&dht_);
 #endif
 
-#ifndef NONE
-
 #ifdef DRIVERS_ENABLED
+
+    driv->add(&lcTech_);
 #ifdef GROOVE_ULTRASONIC
     GrooverUltrasonic drv = GrooverUltrasonic();
     getDrivers()->add(&drv);
-#endif
-#endif // NONE
-#endif
+#endif // GROOVER
+#endif // DRIVER_ENABLED
 }

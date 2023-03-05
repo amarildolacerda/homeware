@@ -55,18 +55,15 @@ JsonObject Protocol::getDefaults()
 
 void Protocol::initPinMode(int pin, const String m)
 {
+#ifdef DRIVERS_ENABLED
     Driver *drv = getDrivers()->findByMode(m);
     if (drv)
     {
         drv->setPinMode(pin);
     }
+#endif
     else
-    {
-        if ( m == "rst" )
-            pinMode(pin, INPUT);
-        else if (m == "out" )
-            pinMode(pin, OUTPUT);
-    }
+        pinMode(pin, OUTPUT);
     JsonObject mode = getMode();
     mode[String(pin)] = m;
 }
@@ -78,8 +75,8 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
-#ifdef DRIVERS_ENABLED2
-        Driver *drv = drivers->findByMode(mode);
+#ifdef DRIVERS_ENABLED
+        Driver *drv = getDrivers()->findByMode(mode);
         if (drv && drv->isSet())
         {
             v = drv->writePin(pin, value);
@@ -91,18 +88,6 @@ int Protocol::writePin(const int pin, const int value)
         {
             analogWrite(pin, value);
             digitalWrite(pin, value > 0);
-        }
-
-        else if (mode == "lc")
-        {
-            byte relON[] = {0xA0, 0x01, 0x01, 0xA2}; // Hex command to send to serial for open relay
-            byte relOFF[] = {0xA0, 0x01, 0x00, 0xA1};
-            if (value == 0)
-            {
-                Serial.write(relOFF, sizeof(relOFF));
-            }
-            else
-                Serial.write(relON, sizeof(relON));
         }
 
         else
@@ -182,13 +167,9 @@ int Protocol::readPin(const int pin, const String mode)
     }
     else
 #endif
-     if (mode == "pwm")
+        if (mode == "pwm")
     {
         newValue = analogRead(pin);
-    }
-    else if (mode == "lc")
-    {
-        newValue = docPinValues[String(pin)];
     }
     else
         newValue = digitalRead(pin);
@@ -258,22 +239,14 @@ void Protocol::checkTrigger(int pin, int value)
 int Protocol::switchPin(const int pin)
 {
     String mode = getMode()[String(pin)];
-    if (mode == "out" || mode == "lc")
-    {
-        int r = readPin(pin, mode);
-        return writePin(pin, 1 - r);
-    }
-    else
-    {
-        int r = readPin(pin, mode);
-        return writePin(pin, (r > 0) ? 0 : r);
-    }
+    int r = readPin(pin, mode);
+    return writePin(pin, (r > 0) ? LOW : HIGH);
 }
 
 void Protocol::setLedMode(const int mode)
 {
     Driver *drv = getDrivers()->findByMode("led");
-    if (drv)
+    if (drv && drv->active)
         drv->setV1(5 - ((mode <= 5) ? mode : 4) * 1000);
 }
 
@@ -804,8 +777,13 @@ String Protocol::doCommand(String command)
             }
             else if (cmd[2] == "mode")
             {
-                initPinMode(pin, cmd[3]);
-                return "OK";
+                if (resources.indexOf(cmd[3]) > -1)
+                {
+                    initPinMode(pin, cmd[3] + ",");
+                    return "OK";
+                }
+                else
+                    return "driver indisponivel";
             }
             else if (cmd[2] == "device")
             {
