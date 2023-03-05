@@ -34,7 +34,6 @@
 #include <mqtt.h>
 #endif
 
-
 #ifdef SINRIC
 #include "SinricPro.h"
 #include "SinricProMotionsensor.h"
@@ -138,7 +137,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
 {
-    Serial.println("Homeware.afterLoop()");
 #ifdef MQTT
     mqtt.loop();
 #endif
@@ -181,7 +179,8 @@ void Homeware::resetWiFi()
     delay(1000);
 }
 
-void Homeware::reset(){
+void Homeware::reset()
+{
     Serial.println("Reset call");
 #ifdef ESP8266
     ESP.reset();
@@ -337,7 +336,7 @@ void sinricTemperaturesensor()
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
-    Driver *drv  = getDrivers()->findByMode("dht");
+    Driver *drv = getDrivers()->findByMode("dht");
     if (!drv)
         return;
     JsonObject r = drv->readStatus(pin);

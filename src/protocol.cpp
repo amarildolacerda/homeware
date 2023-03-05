@@ -5,13 +5,11 @@
 #include <LittleFS.h>
 #include <list>
 
-#define ledTimeout 200
-bool ledStatus = false;
-unsigned int ultimoLedChanged = millis();
 unsigned int timeoutDeepSleep = 10000;
 
 #ifdef DRIVERS_ENABLED
-#include <drivers/drivers_setup.h>
+#include "drivers.h"
+#include "drivers/drivers_setup.h"
 
 #endif
 
@@ -167,20 +165,17 @@ int Protocol::readPin(const int pin, const String mode)
 
 #ifdef DRIVERS_ENABLED
     Driver *drv = getDrivers()->findByMode(mode);
-    if (drv != NULL && drv->isGet())
+    if (!drv)
+        Serial.println("Não tem um drive especifico: " + mode);
+
+    if (drv && drv->isGet())
     {
-        Serial.print("Driver: ");
         Serial.println(drv->getMode());
         newValue = drv->readPin(pin);
-        Serial.println(newValue);
     }
     else
 #endif
-        if (mode == "led")
-    {
-        newValue = ledLoop(pin);
-    }
-    else if (mode == "rst" && newValue == 1)
+        if (mode == "rst" && newValue == 1)
     {
         reset();
     }
@@ -209,35 +204,6 @@ void Protocol::debug(String txt)
     }
     else if (config["debug"] == "term" || erro)
         Serial.println(txt);
-}
-int Protocol::ledLoop(const int pin)
-{
-    ledPin = pin;
-    if (pin == 255 || pin < 0)
-        ledPin = findPinByMode("led");
-    if (ledPin > -1)
-    {
-        if (pin < 0)
-        {
-            ledStatus = false;
-            digitalWrite(ledPin, ledStatus);
-        }
-        else
-        {
-            if (millis() - ultimoLedChanged > ledTimeChanged)
-            {
-                ledStatus = !ledStatus;
-                digitalWrite(ledPin, ledStatus);
-                ultimoLedChanged = millis();
-            }
-            else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
-            {
-                ledStatus = false;
-                digitalWrite(ledPin, ledStatus);
-            }
-        }
-    }
-    return ledStatus;
 }
 int Protocol::findPinByMode(String mode)
 {
@@ -303,7 +269,9 @@ int Protocol::switchPin(const int pin)
 
 void Protocol::setLedMode(const int mode)
 {
-    ledTimeChanged = (5 - (mode <= 5) ? mode : 4) * 1000;
+    Driver *drv = getDrivers()->findByMode("led");
+    if (drv)
+        drv->setV1(5 - ((mode <= 5) ? mode : 4) * 1000);
 }
 
 String Protocol::getStatus()
@@ -943,7 +911,7 @@ void Protocol::loop()
         {
         }
 #ifdef DRIVERS_ENABLED
-       getDrivers()->loop();
+        getDrivers()->loop();
 #endif
     }
     catch (int &e)
@@ -969,7 +937,6 @@ void Protocol::afterLoop()
 
 void Protocol::loopEvent()
 {
-    ledLoop(ledPin);
     try
     {
         unsigned long interval;

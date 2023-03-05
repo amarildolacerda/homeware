@@ -6,14 +6,10 @@ class LDRDriver : public Driver
 {
 public:
     int currentAdcState = 0;
-    LDRDriver()
+    void setup() override
     {
         Driver::setMode("ldr");
         getProtocol()->resources += "ldr,";
-        Serial.println("Init LDRDriver");
-    }
-    void setup() override
-    {
         Serial.println("LDR.setup()");
     }
 

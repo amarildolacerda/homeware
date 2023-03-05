@@ -26,15 +26,10 @@ StaticJsonDocument<200> docDHT;
 class DHTDriver : public Driver
 {
 public:
-    DHTDriver()
-    {
-        Driver::setMode ( "dht");
-        getProtocol()->resources += "dht,";
-        Serial.println("Init DHTDriver");
-    }
-
     void setup() override
     {
+        Driver::setMode("dht");
+        getProtocol()->resources += "dht,";
         Serial.println("dht enabled");
     }
     virtual String doCommand(const String command) override

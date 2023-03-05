@@ -72,7 +72,6 @@ protected:
     // processos
     void initPinMode(int pin, const String m);
     int pinValue(const int pin);
-    int ledLoop(const int pin);
     void checkTrigger(int pin, int value);
     void doSleep(const int tempo);
     virtual String help();

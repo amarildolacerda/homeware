@@ -5,16 +5,10 @@
 class ADCDriver : public Driver
 {
 public:
-    ADCDriver()
+    void setup() override
     {
         Driver::setMode("adc");
         getProtocol()->resources += "adc,";
-        Serial.println("Init ADCDriver");
-    }
-    void setup() override
-    {
-        Serial.println("ADC.setup()");
-        Driver::setup();
     }
     int readPin(const int pin) override
     {

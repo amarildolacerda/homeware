@@ -6,7 +6,7 @@
 #include <ArduinoJson.h>
 
 #include "protocol.h"
-
+#include "functions.h"
 class Driver
 {
 private:
@@ -14,6 +14,8 @@ private:
     int _pin;
 
 public:
+    long v1 = 0;
+    void setV1(long x) { v1 = x; }
     virtual void setup()
     {
         Serial.print(getMode());
@@ -84,51 +86,44 @@ private:
     int next = 0;
 
 public:
-    void add(Driver *driver)
+    template <class T>
+    void add(T *driver)
     {
+        Serial.print("Class type adding: ");
+        Serial.println(type_name(driver));
         items[count++] = driver;
     }
 
     void setup()
     {
-        for (int i = 0; i < count; i++)
+        for (auto *drv : items)
         {
-            Driver *drv = items[i];
             if (drv)
                 drv->setup();
         }
     }
     Driver *findByMode(String mode)
     {
-        for (size_t i = 0; i < count; i++)
-            if (items[i])
+        for (auto *drv : items)
+            if (drv)
             {
-
-                Driver *drv = items[i];
                 if (drv->getMode().equals(mode))
                 {
-                    Serial.println("achou: " + mode);
                     return drv;
                 }
             }
-            else
-            {
-                Serial.print(i);
-                Serial.println(". Driver item is NULL");
-            }
-        return NULL;
+        return nullptr;
     }
     void changed(const int pin, const int value)
     {
-        for (size_t i = 0; i < count; i++)
-        {
-            Driver *drv = items[i];
+        /*
+        for (auto *drv : items)
             if (drv)
             {
                 if (drv->getPin() == pin)
                     drv->changed(pin, value);
             }
-        }
+            */
     }
     void loop()
     {
