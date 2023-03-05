@@ -12,8 +12,12 @@ class GrooverUltrasonic : public Driver
         Driver::setMode("gus");
         getProtocol()->resources += "gus,";
     };
+    void setup() override
+    {
+        Serial.println("GUS.setup()");
+    }
 
-    virtual int readPin(const int pin)
+    int readPin(const int pin) override
     {
         Driver::setPin(pin);
         try

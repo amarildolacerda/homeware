@@ -1,7 +1,8 @@
 #pragma once
 
 #include "options.h"
-#include <protocol.h>
+//#include <protocol.h>
+#include "drivers.h"
 
 #ifdef DRIVERS_ENABLED
 #ifdef GROOVE_ULTRASONIC
@@ -16,22 +17,27 @@
 #include <drivers/drv_ldr.h>
 // expose
 
+#define NONE
+
 void drivers_register()
 {
-    ADCDriver* adc =  new ADCDriver();
-    getDrivers().add(adc);
 
-    LDRDriver* ldr = new LDRDriver();
-    getDrivers().add(ldr);
+    ADCDriver adc = ADCDriver();
+    getDrivers()->add(&adc);
+#ifndef NONE
+
+    LDRDriver ldr = LDRDriver();
+    getDrivers()->add(&ldr);
 
 #ifdef DRIVERS_ENABLED
 #ifdef GROOVE_ULTRASONIC
-    GrooverUltrasonic* drv = new GrooverUltrasonic();
-    getDrivers().add(drv);
+    GrooverUltrasonic drv = GrooverUltrasonic();
+    getDrivers()->add(&drv);
 #endif
 #ifdef DHT_SENSOR
-    DHTDriver* dht = new DHTDriver();
-    getDrivers().add(dht);
+    DHTDriver dht = DHTDriver();
+    getDrivers()->add(&dht);
 #endif
+#endif // NONE
 #endif
 }

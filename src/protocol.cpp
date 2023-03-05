@@ -3,6 +3,7 @@
 #include "protocol.h"
 #include <functions.h>
 #include <LittleFS.h>
+#include <list>
 
 #define ledTimeout 200
 bool ledStatus = false;
@@ -11,11 +12,14 @@ unsigned int timeoutDeepSleep = 10000;
 
 #ifdef DRIVERS_ENABLED
 #include <drivers/drivers_setup.h>
-Drivers edrivers;
 
 #endif
 
 Protocol *protocol;
+Protocol *getInstanceOfProtocol()
+{
+    return protocol;
+}
 
 size_t driversCount = 0;
 
@@ -68,8 +72,8 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
-#ifdef DRIVERS_ENABLED
-        Driver *drv = edrivers.findByMode(mode);
+#ifdef DRIVERS_ENABLED2
+        Driver *drv = drivers->findByMode(mode);
         if (drv && drv->isSet())
         {
             v = drv->writePin(pin, value);
@@ -150,7 +154,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         docPinValues[String(pin)] = newValue;
         afterChanged(pin, newValue, getPinMode(pin));
 #ifdef DRIVERS_ENABLED
-        edrivers.changed(pin, newValue);
+        getDrivers()->changed(pin, newValue);
 #endif
         return true;
     }
@@ -162,7 +166,7 @@ int Protocol::readPin(const int pin, const String mode)
     int newValue = 0;
 
 #ifdef DRIVERS_ENABLED
-    Driver *drv = edrivers.findByMode(mode);
+    Driver *drv = getDrivers()->findByMode(mode);
     if (drv != NULL && drv->isGet())
     {
         Serial.print("Driver: ");
@@ -453,7 +457,7 @@ void Protocol::setup()
     analogWriteRange(256);
 #endif
 #ifdef DRIVERS_ENABLED
-    edrivers.setup();
+    getDrivers()->setup();
 #endif
     afterSetup();
 }
@@ -783,7 +787,7 @@ String Protocol::doCommand(String command)
 #ifdef DRIVERS_ENABLED
             if (cmd[2] == "get" || cmd[2] == "set")
             {
-                Driver *drv = edrivers.findByMode(cmd[1]);
+                Driver *drv = getDrivers()->findByMode(cmd[1]);
                 if (drv)
                 {
                     if (cmd[2] == "get" && drv->isGet())
@@ -939,7 +943,7 @@ void Protocol::loop()
         {
         }
 #ifdef DRIVERS_ENABLED
-        edrivers.loop();
+        getDrivers()->loop();
 #endif
     }
     catch (int &e)
@@ -993,124 +997,3 @@ void Protocol::loopEvent()
         print(String(e));
     }
 }
-
-// DRIVERS
-#ifdef DRIVERS_ENABLED
-
-int Drivers::add(Driver *item)
-{
-    items[driversCount] = item;
-    Serial.print(driversCount);
-    Serial.print(": add  ");
-    Serial.println(item->getMode());
-    ++driversCount;
-    return driversCount - 1;
-};
-size_t Drivers::count()
-{
-    return driversCount;
-}
-
-Drivers getDrivers()
-{
-    return edrivers;
-}
-
-void Driver::setMode(String md)
-{
-    _mode = md;
-}
-String Driver::getMode()
-{
-    return _mode;
-};
-void Driver::setPin(const int pin)
-{
-    _pin = pin;
-}
-
-JsonObject Driver::readStatus(const int pin)
-{
-
-    return DynamicJsonDocument(10).as<JsonObject>();
-}
-int Driver::readPin(const int pin)
-{
-    return -1;
-};
-int Driver::writePin(const int pin, const int value)
-{
-    return value;
-};
-
-int Driver::getPin()
-{
-    return _pin;
-};
-
-void Drivers::setup()
-{
-    Serial.print("Drivers.setup() for: ");
-    Serial.println(count());
-    for (size_t i = 0; i < count(); i++)
-        if (items[i])
-        {
-            Serial.print(i);
-            Serial.print(". mode: ");
-            Driver *drv = items[i];
-            if (!drv)
-                Serial.println("objeto esta null");
-            else
-            {
-                // Serial.println(drv->getMode());
-                drv->setup();
-                Serial.println("setup() executed");
-            }
-        }
-}
-void Drivers::loop()
-{
-    for (size_t i = 0; i < count(); i++)
-      if (items[i])
-        items[i]->loop();
-}
-String Driver::doCommand(const String command)
-{
-    return "NAK";
-}
-
-void Drivers::changed(const int pin, const int value)
-{
-    for (size_t i = 0; i < count(); i++)
-        if (items[i] && items[i]->getPin() == pin)
-            items[i]->changed(pin, value);
-}
-Driver *Drivers::findByMode(String mode)
-{
-    Serial.println("Drivers.findByMode()");
-    for (size_t i = 0; i < count(); i++)
-        if (items[i])
-        {
-
-            Driver *drv = items[i];
-            Serial.println(drv->getMode());
-            if (drv->getMode().equals(mode))
-            {
-                Serial.println("achou: " + mode);
-                return items[i];
-            }
-        }
-    // Serial.print(mode);
-    // Serial.println(" - Não achou nada");
-    return NULL;
-}
-
-Protocol *Drivers::getProtocol()
-{
-    return protocol;
-}
-Protocol *Driver::getProtocol()
-{
-    return protocol;
-}
-#endif

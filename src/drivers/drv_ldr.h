@@ -12,8 +12,12 @@ public:
         getProtocol()->resources += "ldr,";
         Serial.println("Init LDRDriver");
     }
+    void setup() override
+    {
+        Serial.println("LDR.setup()");
+    }
 
-    virtual int readPin(const int pin)
+    int readPin(const int pin) override
     {
         Driver::setPin(pin);
         return getAdcState(pin);

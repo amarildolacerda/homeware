@@ -33,11 +33,11 @@ public:
         Serial.println("Init DHTDriver");
     }
 
-    virtual void setup()
+    void setup() override
     {
         Serial.println("dht enabled");
     }
-    virtual String doCommand(const String command)
+    virtual String doCommand(const String command) override
     {
         Serial.print("command dht: ");
         Serial.println(command);
@@ -48,7 +48,7 @@ public:
         getProtocol()->debug(result);
         return result;
     }
-    virtual JsonObject readStatus(const int pin)
+    JsonObject readStatus(const int pin) override
     {  
         if (!dht_inited)
         {
@@ -63,9 +63,9 @@ public:
         getProtocol()->debug("Temperatura: " + String(dht.getTemperature()));
         return docDHT.as<JsonObject>();
     }
-    virtual bool isGet() { return true; }
-    virtual bool isStatus() { return true; }
-    virtual int readPin(const int pin)
+    virtual bool isGet() override { return true; }
+    virtual bool isStatus() override { return true; }
+    virtual int readPin(const int pin) override
     {
         Serial.println("DHT->readPin()");
         Driver::setPin(pin);

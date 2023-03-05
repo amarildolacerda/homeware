@@ -2,6 +2,8 @@
 #include <functions.h>
 #include "options.h"
 
+#include "drivers.h"
+
 #include <ArduinoJson.h>
 
 #ifdef ESP8266
@@ -334,7 +336,7 @@ void sinricTemperaturesensor()
     String id = homeware.getSensors()[String(pin)];
     if (!id)
         return;
-    Driver *drv  = getDrivers().findByMode("dht");
+    Driver *drv  = getDrivers()->findByMode("dht");
     if (!drv)
         return;
     JsonObject r = drv->readStatus(pin);

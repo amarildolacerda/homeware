@@ -19,6 +19,7 @@
 
 class Protocol
 {
+private:
 public:
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
@@ -36,7 +37,6 @@ public:
     String resources = "";
 
     void setup();
-
 #ifdef TELNET
     ESPTelnet telnet;
 #endif
@@ -88,7 +88,6 @@ protected:
     virtual void reset();
     virtual void setupPins();
     bool readFile(String filename, char *buffer, size_t maxLen);
-    static Protocol *instance;
 
 private:
     DynamicJsonDocument baseConfig();
@@ -101,52 +100,7 @@ private:
     String showGpio();
 };
 
-#ifdef DRIVERS_ENABLED
-class Driver
-{
-public:
-    Protocol *getProtocol();
-    virtual void setup(){};
-    virtual void loop(){};
-    virtual void changed(const int pin, const int value){};
-    virtual JsonObject readStatus(const int pin);
-    virtual int readPin(const int pin);
-    virtual int writePin(const int pin, const int value);
-    virtual void setMode(String md);
-    virtual String getMode();
-    virtual void setPin(const int pin);
-    virtual int getPin();
-    virtual bool isGet() { return true; };
-    virtual bool isSet() { return false; };
-    virtual bool isStatus() { return false; };
-    virtual bool isCommand() { return false; }
-    virtual String doCommand(const String command);
-
-private:
-    String _mode;
-    int _pin = -1;
-};
-
-class Drivers
-{
-    #define MAX_SIZE 32
-    Driver *items[MAX_SIZE];
-
-public:
-    Drivers(){};
-    Protocol *getProtocol();
-    void loop();
-    void setup();
-    int add(Driver *item);
-    void changed(const int pin, const int value);
-    Driver *findByMode(String mode);
-    size_t count();
-
-protected:
-};
-
-Drivers getDrivers();
-#endif
+Protocol *getInstanceOfProtocol();
 
 //==================== end
 #endif
