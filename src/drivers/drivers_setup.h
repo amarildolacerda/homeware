@@ -21,7 +21,6 @@
 
 void drivers_register()
 {
-
     ADCDriver adc = ADCDriver();
     getDrivers()->add(&adc);
 #ifndef NONE

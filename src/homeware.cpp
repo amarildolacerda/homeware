@@ -138,6 +138,7 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
 {
+    Serial.println("Homeware.afterLoop()");
 #ifdef MQTT
     mqtt.loop();
 #endif

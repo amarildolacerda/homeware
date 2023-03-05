@@ -16,12 +16,12 @@ private:
 public:
     virtual void setup()
     {
-        Serial.print(_mode);
+        Serial.print(getMode());
         Serial.println(" - abstract Driver setup()");
     };
     virtual void loop()
     {
-        Serial.print(_mode);
+        Serial.print(getMode());
         Serial.println(" - abstract Driver loop()");
     };
 
@@ -79,23 +79,11 @@ class Drivers
 {
 
 private:
-    static Drivers *instance;
     Driver *items[32];
     int count = 0;
+    int next = 0;
 
 public:
-    Drivers()
-    {
-    }
-    /* static Drivers *getInstance()
-     {
-         if (instance == nullptr)
-         {
-             instance = new Drivers();
-         }
-         return instance;
-     }
-     */
     void add(Driver *driver)
     {
         items[count++] = driver;
@@ -105,7 +93,9 @@ public:
     {
         for (int i = 0; i < count; i++)
         {
-            items[i]->setup();
+            Driver *drv = items[i];
+            if (drv)
+                drv->setup();
         }
     }
     Driver *findByMode(String mode)
@@ -115,11 +105,10 @@ public:
             {
 
                 Driver *drv = items[i];
-                Serial.println(drv->getMode());
                 if (drv->getMode().equals(mode))
                 {
                     Serial.println("achou: " + mode);
-                    return items[i];
+                    return drv;
                 }
             }
             else
@@ -143,12 +132,13 @@ public:
     }
     void loop()
     {
-        for (size_t i = 0; i < count; i++)
-            if (items[i])
-            {
-                Driver *drv = items[i];
-                drv->loop();
-            }
+        /* for (size_t i = 0; i < count; i++)
+             if (items[i])
+             {
+                 Driver *drv = items[i];
+                 drv->loop();
+             }
+             */
     }
 };
 
