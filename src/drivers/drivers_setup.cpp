@@ -17,7 +17,7 @@
 
 #ifdef GROOVE_ULTRASONIC
 #include <drivers/drv_groover_ultrasonic.h>
-GrooverUltrasonic drv = GrooverUltrasonic();
+GrooverUltrasonicDriver gus_ = GrooverUltrasonicDriver();
 #endif
 
 #ifdef DHT_SENSOR
@@ -63,7 +63,7 @@ void drivers_register()
 #endif
 
 #ifdef GROOVE_ULTRASONIC
-    driv->add(&drv);
+    driv->add(&gus_);
 #endif // GROOVER
 #endif // DRIVER_ENABLED
 }

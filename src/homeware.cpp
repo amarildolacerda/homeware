@@ -113,7 +113,6 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
-    Protocol::setup();
     setServer(externalServer);
 
 #ifdef ESP32
@@ -131,6 +130,7 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["label"].as<String>() + ".local";
     }
+    Protocol::setup();
     setupPins();
 }
 

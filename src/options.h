@@ -16,7 +16,7 @@
 
 #ifdef DRIVERS_ENABLED
 #define DHT_SENSOR
-//#define GROOVE_ULTRASONIC
+#define GROOVE_ULTRASONIC
 #endif
 // #define MQTT
 

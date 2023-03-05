@@ -13,6 +13,10 @@ private:
     String _mode;
     int _pin;
 
+protected:
+    typedef void (*callbackFunction)(String mode, int pin, int value);
+    callbackFunction triggerCallback;
+
 public:
     bool active = false;
     long v1 = 0;
@@ -67,8 +71,10 @@ public:
     }
     virtual JsonObject readStatus(const int pin)
     {
-
-        return DynamicJsonDocument(10).as<JsonObject>();
+        int rsp = readPin(pin);
+        DynamicJsonDocument json = DynamicJsonDocument(128);
+        json["result"] = rsp;
+        return json.as<JsonObject>();
     }
     virtual bool isStatus() { return false; }
     virtual bool isCommand() { return false; }
@@ -80,17 +86,22 @@ public:
     {
         return _pin;
     };
+
+    void setTriggerEvent(callbackFunction callback)
+    {
+        triggerCallback = callback;
+    }
 };
 
 class Drivers
 {
 
 private:
-    Driver *items[32];
     int count = 0;
     int next = 0;
 
 public:
+    Driver *items[32];
     template <class T>
     void add(T *driver)
     {

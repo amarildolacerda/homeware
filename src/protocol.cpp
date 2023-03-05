@@ -322,6 +322,10 @@ const char HELP[] =
     "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
     "gpio <pin> get\r\n"
     "gpio <pin> set <n>\r\n"
+#ifdef GROOVE_ULTRASONIC
+    "set gus_min 50\r\n"
+    "set gus_max 150\r\n"
+#endif
     "set interval 50\r\n"
     "set adc_min 511\r\n"
     "set adc_max 512\r\n";
@@ -355,6 +359,16 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     return true;
 }
 
+void driverCallbackEventFunc(String mode, int pin, int value)
+{
+    getInstanceOfProtocol()->driverCallbackEvent(mode,pin,value);
+}
+
+void Protocol::driverCallbackEvent(String mode, int pin, int value)
+{
+    Serial.printf("callback: %s(%i,%i)", mode.c_str(), pin, value);
+}
+
 void Protocol::setup()
 {
     protocol = this;
@@ -365,8 +379,10 @@ void Protocol::setup()
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
-    getDrivers()->setup();
     afterSetup();
+    for (Driver *drv : getDrivers()->items)
+        if (drv)
+            drv->setTriggerEvent(driverCallbackEventFunc);
 }
 
 void Protocol::afterConfigChanged()
@@ -506,6 +522,7 @@ void Protocol::afterBegin()
 }
 void Protocol::afterSetup()
 {
+    getDrivers()->setup();
 }
 
 #ifdef TELNET
@@ -696,7 +713,14 @@ String Protocol::doCommand(String command)
                 Driver *drv = getDrivers()->findByMode(cmd[1]);
                 if (drv)
                 {
-                    if (cmd[2] == "get" && drv->isGet())
+                    if (cmd[2] == "status")
+                    {
+                        JsonObject j = drv->readStatus(pin);
+                        String rsp;
+                        serializeJson(j, rsp);
+                        return rsp;
+                    }
+                    else if (cmd[2] == "get" && drv->isGet())
                     {
                         return String(drv->readPin(pin));
                     }
@@ -740,7 +764,7 @@ String Protocol::doCommand(String command)
             {
                 if (resources.indexOf(cmd[3]) > -1)
                 {
-                    initPinMode(pin, cmd[3] + ",");
+                    initPinMode(pin, cmd[3]);
                     return "OK";
                 }
                 else

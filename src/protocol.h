@@ -63,6 +63,19 @@ public:
     virtual bool pinValueChanged(const int pin, const int value);
     virtual void reset();
     virtual void setupPins();
+    virtual void driverCallbackEvent(String mode, int pin, int value);
+    String getKey(String name)
+    {
+        return config[name];
+    }
+    void setKey(String name, String value)
+    {
+        config[name] = value;
+    }
+    bool containsKey(String name)
+    {
+        return config.containsKey(name);
+    }
 
 protected:
     // eventos
@@ -71,6 +84,7 @@ protected:
     virtual void afterBegin();
     virtual void afterSetup();
     virtual void afterConfigChanged();
+
     // processos
     void initPinMode(int pin, const String m);
     int pinValue(const int pin);
