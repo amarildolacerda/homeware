@@ -14,18 +14,26 @@ private:
     int _pin;
 
 public:
+    bool active = false;
     long v1 = 0;
     void setV1(long x) { v1 = x; }
+    virtual void setPinMode(int pin)
+    {
+        _pin = pin;
+        if (_mode == "adc")
+            return;
+        if (_mode == "in")
+            pinMode(pin, INPUT);
+        else
+            pinMode(pin, OUTPUT);
+    }
+
     virtual void setup()
     {
-        Serial.print(getMode());
-        Serial.println(" - abstract Driver setup()");
+        active = true;
+        getProtocol()->resources += _mode + ",";
     };
-    virtual void loop()
-    {
-        Serial.print(getMode());
-        Serial.println(" - abstract Driver loop()");
-    };
+    virtual void loop(){};
 
     virtual int readPin(const int pin)
     {
@@ -64,12 +72,9 @@ public:
     }
     virtual bool isStatus() { return false; }
     virtual bool isCommand() { return false; }
+    virtual bool isLoop() { return false; }
 
-    virtual void changed(const int pin, const int value)
-    {
-        Serial.print(_mode);
-        Serial.println(" - abstract Driver changed()");
-    };
+    virtual void changed(const int pin, const int value){};
 
     int getPin()
     {
@@ -116,24 +121,21 @@ public:
     }
     void changed(const int pin, const int value)
     {
-        /*
+
         for (auto *drv : items)
-            if (drv)
+            if (drv && drv->active)
             {
                 if (drv->getPin() == pin)
                     drv->changed(pin, value);
             }
-            */
     }
     void loop()
     {
-        /* for (size_t i = 0; i < count; i++)
-             if (items[i])
-             {
-                 Driver *drv = items[i];
-                 drv->loop();
-             }
-             */
+        for (auto *drv : items)
+            if (drv && drv->active && drv->isLoop())
+            {
+                drv->loop();
+            }
     }
 };
 

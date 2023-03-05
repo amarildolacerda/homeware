@@ -2,27 +2,32 @@
 
 #include <protocol.h>
 
-class ADCDriver : public Driver
+class ResetButtonDriver : public Driver
 {
 public:
     void setup() override
     {
-        Driver::setMode("adc");
+        Driver::setMode("rst");
         Driver::setup();
     }
     void setPinMode(int pin) override
     {
-        // nao se aplica
+        Driver::setPin(pin);
+        pinMode(pin, INPUT);
     }
 
     int readPin(const int pin) override
     {
-        Driver::setPin(pin);
-        return analogRead(pin);
+        int v = digitalRead(pin);
+        if (v == HIGH)
+        {
+            getProtocol()->reset();
+        }
+        return v;
     }
     int writePin(const int pin, const int value) override
     {
-        analogWrite(pin, value);
+        digitalWrite(pin, value);
         return value;
     }
     bool isGet() override { return true; }

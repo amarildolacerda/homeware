@@ -55,10 +55,18 @@ JsonObject Protocol::getDefaults()
 
 void Protocol::initPinMode(int pin, const String m)
 {
-    if (m == "in" || m == "rst" || m == "ldr" || m == "dht")
-        pinMode(pin, INPUT);
-    else if (m == "out" || m == "led")
-        pinMode(pin, OUTPUT);
+    Driver *drv = getDrivers()->findByMode(m);
+    if (drv)
+    {
+        drv->setPinMode(pin);
+    }
+    else
+    {
+        if ( m == "rst" )
+            pinMode(pin, INPUT);
+        else if (m == "out" )
+            pinMode(pin, OUTPUT);
+    }
     JsonObject mode = getMode();
     mode[String(pin)] = m;
 }
@@ -170,16 +178,11 @@ int Protocol::readPin(const int pin, const String mode)
 
     if (drv && drv->isGet())
     {
-        Serial.println(drv->getMode());
         newValue = drv->readPin(pin);
     }
     else
 #endif
-        if (mode == "rst" && newValue == 1)
-    {
-        reset();
-    }
-    else if (mode == "pwm")
+     if (mode == "pwm")
     {
         newValue = analogRead(pin);
     }

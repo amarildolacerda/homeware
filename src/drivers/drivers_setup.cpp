@@ -6,6 +6,8 @@
 #include "drivers/drv_adc.h"
 #include "drivers/drv_ldr.h"
 #include "drivers/drv_led.h"
+#include "drivers/drv_in.h"
+#include "drivers/drv_rst.h"
 
 #ifdef DRIVERS_ENABLED
 #ifdef GROOVE_ULTRASONIC
@@ -24,6 +26,8 @@ DHTDriver dht_;
 ADCDriver adc_;
 LDRDriver ldr_;
 LedDriver led_;
+InDriver in_;
+ResetButtonDriver rst_;
 
 void drivers_register()
 {
@@ -31,6 +35,8 @@ void drivers_register()
     driv->add(&adc_);
     driv->add(&ldr_);
     driv->add(&led_);
+    driv->add(&in_);
+    driv->add(&rst_);
 
 #ifdef DHT_SENSOR
     driv->add(&dht_);

@@ -9,10 +9,12 @@ public:
     void setup() override
     {
         Driver::setMode("ldr");
-        getProtocol()->resources += "ldr,";
-        Serial.println("LDR.setup()");
+        Driver::setup();
     }
-
+    void setPinMode(int pin) override
+    {
+        pinMode(pin, INPUT);
+    }
     int readPin(const int pin) override
     {
         Driver::setPin(pin);

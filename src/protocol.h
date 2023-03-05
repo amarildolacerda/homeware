@@ -61,6 +61,8 @@ public:
     virtual String getPinMode(const int pin);
     virtual void loop();
     virtual bool pinValueChanged(const int pin, const int value);
+    virtual void reset();
+    virtual void setupPins();
 
 protected:
     // eventos
@@ -84,8 +86,6 @@ protected:
     void printConfig();
 
     JsonObject getValues();
-    virtual void reset();
-    virtual void setupPins();
     bool readFile(String filename, char *buffer, size_t maxLen);
 
 private:

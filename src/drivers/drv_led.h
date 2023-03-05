@@ -9,14 +9,15 @@ class LedDriver : public Driver
 private:
     int ledPin = -1;
     bool ledStatus = false;
-    size_t ultimoLedChanged = 0;
+    unsigned long ultimoLedChanged = 0;
 
 public:
     void
     setup() override
     {
+        Driver::setV1(10000);
         Driver::setMode("led");
-        getProtocol()->resources += "led,";
+        Driver::setup();
     }
     int readPin(const int pin) override
     {
@@ -41,16 +42,19 @@ public:
             }
             else
             {
-                if (millis() - ultimoLedChanged > v1)
+                long dif = millis() - ultimoLedChanged;
+                if (dif > v1)
                 {
                     ledStatus = !ledStatus;
                     digitalWrite(ledPin, ledStatus);
                     ultimoLedChanged = millis();
+                    //Serial.println("led on");
                 }
                 else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
                 {
                     ledStatus = false;
                     digitalWrite(ledPin, ledStatus);
+                    //Serial.println("led off");
                 }
             }
         }

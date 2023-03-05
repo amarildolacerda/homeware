@@ -7,14 +7,10 @@ unsigned long ultimo_ultrasonic = 0;
 
 class GrooverUltrasonic : public Driver
 {
-    GrooverUltrasonic()
-    {
-        Driver::setMode("gus");
-        getProtocol()->resources += "gus,";
-    };
     void setup() override
     {
-        Serial.println("GUS.setup()");
+        Driver::setMode("gus");
+        Driver::setup();
     }
 
     int readPin(const int pin) override

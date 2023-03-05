@@ -25,14 +25,26 @@ StaticJsonDocument<200> docDHT;
 */
 class DHTDriver : public Driver
 {
+private:
+    int ultimoLeitura = 0;
+    JsonObject ultimoStatus;
+
 public:
     void setup() override
     {
         Driver::setMode("dht");
-        getProtocol()->resources += "dht,";
-        Serial.println("dht enabled");
+        Driver::setup();
     }
-    virtual String doCommand(const String command) override
+    void setPinMode(int pin) override
+    {
+        pinMode(pin, INPUT);
+    }
+
+    bool isCommand() override
+    {
+        return true;
+    }
+    String doCommand(const String command) override
     {
         Serial.print("command dht: ");
         Serial.println(command);
@@ -44,7 +56,7 @@ public:
         return result;
     }
     JsonObject readStatus(const int pin) override
-    {  
+    {
         if (!dht_inited)
         {
             Driver::setPin(pin);
@@ -62,8 +74,12 @@ public:
     virtual bool isStatus() override { return true; }
     virtual int readPin(const int pin) override
     {
-        Serial.println("DHT->readPin()");
-        Driver::setPin(pin);
-        return readStatus(pin)["temperature"];
+        if (!ultimoStatus || millis() - ultimoLeitura > 60000*5)
+        {
+            ultimoLeitura = millis();
+            Driver::setPin(pin);
+            ultimoStatus = readStatus(pin);
+        }
+        return ultimoStatus["temperature"];
     }
 };
