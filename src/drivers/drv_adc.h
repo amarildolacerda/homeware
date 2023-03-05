@@ -12,7 +12,7 @@ public:
     }
     void setPinMode(int pin) override
     {
-        // nao se aplica
+        active = true;
     }
 
     int readPin(const int pin) override

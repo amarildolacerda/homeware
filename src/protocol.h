@@ -60,7 +60,7 @@ public:
     virtual int switchPin(const int pin);
     virtual String getPinMode(const int pin);
     virtual void loop();
-    virtual bool pinValueChanged(const int pin, const int value);
+    virtual bool pinValueChanged(const int pin, const int value, bool exectrigger );
     virtual void reset();
     virtual void setupPins();
     virtual void driverCallbackEvent(String mode, int pin, int value);

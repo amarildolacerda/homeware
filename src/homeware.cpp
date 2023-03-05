@@ -105,6 +105,7 @@ void Homeware::afterBegin()
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif
     resetDeepSleep();
+    Protocol::afterBegin();
 }
 
 #ifdef ESP32
@@ -162,6 +163,7 @@ void Homeware::afterLoop()
         }
     }
 #endif
+    Protocol::afterLoop();
 }
 
 void Homeware::resetWiFi()
@@ -467,6 +469,7 @@ void Homeware::afterChanged(const int pin, const int value, const String mode)
     if (sinricActive)
         sinricTrigger(pin, value);
 #endif
+    Protocol::afterChanged(pin, value, mode);
 }
 
 int Homeware::readPin(const int pin, const String mode)
@@ -475,16 +478,8 @@ int Homeware::readPin(const int pin, const String mode)
     int newValue = 0;
     if (!md || md == "")
         md = getMode()[String(pin)].as<String>();
-    if (md == "out")
-    {
-        newValue = Protocol::readPin(pin, md);
-    }
-    else
-    {
-        newValue = Protocol::readPin(pin, md);
-    }
 
-    pinValueChanged(pin, newValue);
+    newValue = Protocol::readPin(pin, md);
 
     return newValue;
 }

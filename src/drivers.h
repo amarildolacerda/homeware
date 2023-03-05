@@ -18,23 +18,17 @@ protected:
     callbackFunction triggerCallback;
 
 public:
+    bool triggerEnabled = false ;
     bool active = false;
     long v1 = 0;
     void setV1(long x) { v1 = x; }
     virtual void setPinMode(int pin)
     {
-        _pin = pin;
-        if (_mode == "adc")
-            return;
-        if (_mode == "in")
-            pinMode(pin, INPUT);
-        else
-            pinMode(pin, OUTPUT);
+        active = true;
     }
 
     virtual void setup()
     {
-        active = true;
         getProtocol()->resources += _mode + ",";
     };
     virtual void loop(){};

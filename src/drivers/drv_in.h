@@ -12,6 +12,8 @@ public:
     }
     int readPin(const int pin) override
     {
+        active = true;
+
         Driver::setPin(pin);
         return digitalRead(pin);
     }

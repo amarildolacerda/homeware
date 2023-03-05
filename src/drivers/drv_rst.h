@@ -14,6 +14,7 @@ public:
     {
         Driver::setPin(pin);
         pinMode(pin, INPUT);
+        active = true;
     }
 
     int readPin(const int pin) override

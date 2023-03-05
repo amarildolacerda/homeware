@@ -2,40 +2,74 @@
 
 #include <protocol.h>
 
+#define sMin "ldr_min"
+#define sMax "ldr_max"
+#define sInterval "ldr_interval"
+
 class LDRDriver : public Driver
 {
+
+private:
+    int eventState = 0;
+    unsigned int min = 300;
+    unsigned int max = 800;
+    unsigned int tmpAdc = 0;
+    unsigned int ultimoLoop = 0;
+    unsigned interval = 60000;
+
 public:
-    int currentAdcState = 0;
     void setup() override
     {
         Driver::setMode("ldr");
         Driver::setup();
+        Protocol *prot = getProtocol();
+        if (prot->containsKey(sMin))
+            min = prot->getKey(sMin).toInt();
+        if (prot->containsKey(sMax))
+            max = prot->getKey(sMax).toInt();
+        if (prot->containsKey(sInterval))
+            interval = prot->getKey(sInterval).toInt();
+        triggerEnabled = true;
     }
     void setPinMode(int pin) override
     {
         pinMode(pin, INPUT);
+        active = true;
     }
     int readPin(const int pin) override
     {
         Driver::setPin(pin);
         return getAdcState(pin);
     }
+    int genStatus()
+    {
+        int rt = eventState;
+        if (tmpAdc >= max)
+            rt = LOW;
+        if (tmpAdc < min)
+            rt = HIGH;
+        return rt;
+    }
     int getAdcState(int pin)
     {
-        Driver::setPin(pin);
-        Protocol *prot = getProtocol();
-        unsigned int tmpAdc = analogRead(pin);
-        int rt = currentAdcState;
-        const unsigned int v_min = prot->config["adc_min"].as<int>();
-        const unsigned int v_max = prot->config["adc_max"].as<int>();
-        if (tmpAdc >= v_max)
-            rt = LOW;
-        if (tmpAdc < v_min)
-            rt = HIGH;
-        char buffer[64];
-        sprintf(buffer, "adc %d,currentAdcState %d, adcState %s  (%i,%i) ", tmpAdc, currentAdcState, (rt > 0) ? "ON" : "OFF", v_min, v_max);
-        prot->debug(buffer);
-        currentAdcState = rt;
-        return rt;
+        if (millis() - ultimoLoop > interval)
+        {
+            Driver::setPin(pin);
+            tmpAdc = analogRead(pin);
+            ultimoLoop = millis();
+        }
+        return genStatus();
+    }
+    bool isLoop() override
+    {
+        return active;
+    }
+    void loop() override
+    {
+        if (eventState != genStatus())
+        {
+            eventState = genStatus();
+            triggerCallback(getMode(), getPin(), eventState);
+        }
     }
 };

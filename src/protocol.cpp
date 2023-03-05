@@ -111,7 +111,7 @@ String Protocol::getPinMode(const int pin)
     return getMode()[String(pin)].as<String>();
 }
 
-bool Protocol::pinValueChanged(const int pin, const int newValue)
+bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigger)
 {
     if (pinValue(pin) != newValue)
     {
@@ -121,6 +121,8 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
         afterChanged(pin, newValue, getPinMode(pin));
+        if (exectrigger)
+            checkTrigger(pin, newValue);
         return true;
     }
     return false;
@@ -129,6 +131,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue)
 int Protocol::readPin(const int pin, const String mode)
 {
     int newValue = 0;
+    bool exectrigger = true;
 
     Driver *drv = getDrivers()->findByMode(mode);
     if (!drv)
@@ -137,11 +140,12 @@ int Protocol::readPin(const int pin, const String mode)
     if (drv && drv->isGet())
     {
         newValue = drv->readPin(pin);
+        exectrigger = !drv->triggerEnabled;  // separa se a trigger é dispara no driver
     }
     else
         newValue = digitalRead(pin);
 
-    pinValueChanged(pin, newValue);
+    pinValueChanged(pin, newValue, exectrigger);
 
     return newValue;
 }
@@ -361,12 +365,13 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 
 void driverCallbackEventFunc(String mode, int pin, int value)
 {
-    getInstanceOfProtocol()->driverCallbackEvent(mode,pin,value);
+    getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
 }
 
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
     Serial.printf("callback: %s(%i,%i)", mode.c_str(), pin, value);
+    checkTrigger(pin, value);
 }
 
 void Protocol::setup()
@@ -897,6 +902,7 @@ JsonObject Protocol::getValues()
 
 void Protocol::afterLoop()
 {
+    // usado na herança
 }
 
 void Protocol::loopEvent()

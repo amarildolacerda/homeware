@@ -17,6 +17,7 @@ public:
     void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
+        active = true;
     }
 
     int readPin(const int pin) override

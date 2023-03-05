@@ -28,16 +28,29 @@ class DHTDriver : public Driver
 private:
     int ultimoLeitura = 0;
     JsonObject ultimoStatus;
+    float temperature;
+    int min = 15;
+    int max = 30;
+    int interval = 60000;
+    bool lastStatus = false;
 
 public:
     void setup() override
     {
         Driver::setMode("dht");
         Driver::setup();
+        if (getProtocol()->containsKey("dht_min"))
+            min = getProtocol()->getKey("dht_min").toInt();
+        if (getProtocol()->containsKey("dht_max"))
+            min = getProtocol()->getKey("dht_max").toInt();
+        if (getProtocol()->containsKey("dht_interval"))
+            interval = getProtocol()->getKey("dht_interval").toInt();
+        triggerEnabled = true;
     }
     void setPinMode(int pin) override
     {
         pinMode(pin, INPUT);
+        active = true;
     }
 
     bool isCommand() override
@@ -64,22 +77,36 @@ public:
             dht_inited = true;
         }
         delay(dht.getMinimumSamplingPeriod());
-        docDHT["temperature"] = dht.getTemperature();
+        temperature = dht.getTemperature();
+        docDHT["temperature"] = temperature;
         docDHT["humidity"] = dht.getHumidity();
-        docDHT["fahrenheit"] = dht.toFahrenheit(dht.getTemperature());
-        getProtocol()->debug("Temperatura: " + String(dht.getTemperature()));
+        docDHT["fahrenheit"] = dht.toFahrenheit(temperature);
+        getProtocol()->debug("Temperatura: " + String(temperature));
         return docDHT.as<JsonObject>();
     }
     virtual bool isGet() override { return true; }
     virtual bool isStatus() override { return true; }
     virtual int readPin(const int pin) override
     {
-        if (!ultimoStatus || millis() - ultimoLeitura > 60000*5)
+        if (!ultimoStatus || millis() - ultimoLeitura > interval)
         {
             ultimoLeitura = millis();
             Driver::setPin(pin);
             ultimoStatus = readStatus(pin);
         }
         return ultimoStatus["temperature"];
+    }
+    bool isLoop() override { return active; }
+    bool getStatus()
+    {
+        return (temperature < min) || (temperature > max);
+    }
+    void loop() override
+    {
+        if (getStatus() != lastStatus)
+        {
+            lastStatus = getStatus();
+            triggerCallback(getMode(), getPin(), lastStatus);
+        }
     }
 };

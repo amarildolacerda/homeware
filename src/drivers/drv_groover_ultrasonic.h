@@ -10,8 +10,7 @@ class GrooverUltrasonicDriver : public Driver
 private:
     int lastValue;
     int param = 100;
-    unsigned ultimoEvento = 0;
-    unsigned interval = 30000;
+    unsigned interval = 1000;
     unsigned ultimoStatus = 0;
 
 public:
@@ -24,11 +23,13 @@ public:
         if (getProtocol()->containsKey("gus_interval"))
             interval = getProtocol()->getKey("gus_interval").toInt();
         Serial.printf("gus param: %i", param);
+        triggerEnabled = true;
     }
     void setPinMode(int pin) override
     {
         Driver::setPinMode(pin);
         pinMode(pin, OUTPUT);
+        active = true;
     }
 
     int readPin(const int pin) override
@@ -68,15 +69,11 @@ public:
     }
     void loop() override
     {
-        if (millis() - ultimoEvento > interval)
+        if (getStatus() != ultimoStatus)
         {
-            if (getStatus() != ultimoStatus)
-            {
-                ultimoStatus = getStatus();
-                triggerCallback(getMode(), getPin(), ultimoStatus);
-                ultimoEvento = millis();
-            }
+            ultimoStatus = getStatus();
+            triggerCallback(getMode(), getPin(), ultimoStatus);
         }
     }
-    bool isLoop() override { return true; }
+    bool isLoop() override { return active; }
 };

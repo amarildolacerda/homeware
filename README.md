@@ -22,7 +22,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   gpio [pin] mode [in,out,pwm,adc,lc,ldr,led,dht,rst]
  *   gpio [pin] default [n](usado no setup inicial)
  *   gpio [pin] mode gus (opcional groove ultrasonic)
- *   gpio [pin] trigger [pin] [monostable,bistable]
+ *   gpio [pin] trigger [pinTrigger] [monostable,bistable] -> indica que [pin] ira acionar [pinTrigger] sempre que houver uma mudança de estado de [pin]
  *   gpio [pin] device [onoff,dimmable,motion, dht, ldr] (usado na alexa)
  *   set app_key [x] (SINRIC)
  *   set app_secret [x] (SINRIC)
@@ -37,6 +37,28 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
 </pre>
 
 
+# Drivers
+## Ultrosonic (gus)
+O driver ultrasonic detect distância de um objeto. O Groover Ultrasonic detecta até 4 metros de distância como informa a documentação.
+* gpio <pin> mode gus - ativa o Goover Ultrosonic para o pin
+* set gus_interval <ms> - indicar o intervalo de tempo de varredura (1000)
+* set gus <n> - indicar o valor de corte para gerar o evento  ( valor < n>)? HIGH : LOW;
+
+## DHT11 - leitura de temperatura (Celsius)
+O DHT11 é um sensor de leitura de temperatura e umidade. É possivel gera gatilhos com base na temperatura.
+* gpio <pin> mode dht -> ativa o sensor
+* set dht_interval <ms> -> indica o intervalo de leitura  (1000)
+* set dht_min <graus>  - indica faixa interior para gerar evento HIGN
+* set dht_max <graus>  - indica faixa superior para gerar evento HIGH
+*    para fora da faixa o gatilho será LOW
+
+## LDR - leitura de luminosidade
+O LDR mede a intensidade de luz do ambiente.
+* gpio <pin> mode ldr -> ativa o LDR para leitura em uma pino ADC;
+* set ldr_interval <ms> -> indica o intervalo de varredura (60000)
+* set ldr_min <n>  -> menor taxa de luminosidade para disparar o gatilho HIGH
+* set ldr_max <n>  -> limite superior para disparar o gatilho HIGH
+*   nas faixa intermediarias o gatilho será em LOW
 
 # Contribuindo
 Se você gostaria de contribuir para o Homeware para Arduino, por favor, crie uma nova issue descrevendo o que você gostaria de adicionar ou consertar. Em seguida, crie um fork do repositório e faça suas alterações em um branch separado. Quando terminar, abra um pull request para revisão.
