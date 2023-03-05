@@ -99,8 +99,6 @@ public:
     template <class T>
     void add(T *driver)
     {
-        Serial.print("Class type adding: ");
-        Serial.println(type_name(driver));
         items[count++] = driver;
     }
 
