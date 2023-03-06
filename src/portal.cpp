@@ -149,14 +149,6 @@ void Portal::autoConnect(const String slabel)
         {
             WiFi.enableAP(false);
             Serial.println(WiFi.localIP());
-#ifdef WEBSOCKET
-            Serial.print("WebSocket: ");
-            homeware.resources += "ws,";
-            homeware.debugCallback = debugCallbackFunc;
-            webSocket.begin();
-            webSocket.onEvent(webSocketEvent);
-            Serial.println("OK");
-#endif
         }
         else
         {
@@ -169,6 +161,14 @@ void Portal::autoConnect(const String slabel)
     }
     else
     {
+#ifdef WEBSOCKET
+        Serial.print("WebSocket: ");
+        homeware.resources += "ws,";
+        homeware.debugCallback = debugCallbackFunc;
+        webSocket.begin();
+        webSocket.onEvent(webSocketEvent);
+        Serial.println("OK");
+#endif
         homeware.connected = connected;
     }
     setupServer();
@@ -262,19 +262,20 @@ const char HTTP_TERM[] PROGMEM =
 
     "function initButton()"
     "{"
-    "document.getElementById('button').addEventListener('click', toggle);"
+    "document.getElementById('button').addEventListener('click', send);"
     "}"
     "function response(txt)"
     "{"
     " document.querySelector('#responseText').innerHTML  += txt + '<br>';"
     "}"
-    "function toggle()"
+    "function send()"
     "{"
-    "var txt = document.getElementById('commandInput').value;"
+    "var elem =document.getElementById('commandInput');"
+    "var txt = elem.value;"
     "response(txt);"
     "websocket.send(txt);"
-    "document.getElementById('commandInput').value = '';"
-    "document.querySelector('#responseText').setFocus();"
+    "elem.value = '';"
+    "elem.focus();"
     "}"
     "</script>";
 #endif
