@@ -376,10 +376,8 @@ bool onSinricPowerState(const String &deviceId, bool &state)
 
 void Homeware::setupSensores()
 {
-    debug("ativando sensores");
+    Serial.print("Ativando sensores: ");
     JsonObject devices = getDevices();
-
-    Serial.println("\r\nDevices\r\n============================\r\n");
     for (JsonPair k : devices)
     {
         debug(stringf("%s is %s\r\n", k.key().c_str(), k.value().as<String>()));
@@ -398,28 +396,27 @@ void Homeware::setupSensores()
 #ifdef SINRIC
         else if (sValue.startsWith("doorbell") && getSensors()[k.key().c_str()])
         {
-            debug("ativando Doorbell");
+            debug("Ativando Doorbell");
             SinricProDoorbell &myDoorbell = SinricPro[getSensors()[k.key().c_str()]];
             myDoorbell.onPowerState(onSinricPowerState);
             sinric_count += 1;
         }
         else if (sValue.startsWith("motion") && getSensors()[k.key().c_str()])
         {
-            debug("ativando PIR");
+            debug("Ativando PIR");
             SinricProMotionsensor &myMotionsensor = SinricPro[getSensors()[k.key().c_str()]];
             myMotionsensor.onPowerState(onSinricPowerState);
             sinric_count += 1;
         }
         else if (sValue.startsWith("dht") && getSensors()[k.key().c_str()])
         {
-            debug("ativando DHT11");
+            debug("Ativando DHT11");
             SinricProTemperaturesensor &mySensor = SinricPro[getSensors()[k.key().c_str()]];
             mySensor.onPowerState(onSinricDHTPowerState);
             sinric_count += 1;
         }
 #endif
     }
-    Serial.println("============================");
 
 #ifdef SINRIC
     resources += "SINRIC,";
@@ -439,6 +436,7 @@ void Homeware::setupSensores()
     }
 #endif
     alexa.begin(server);
+    Serial.println("OK");
 }
 #endif
 

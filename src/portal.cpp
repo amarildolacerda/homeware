@@ -27,53 +27,33 @@ void Portal::setup(ESP8266WebServer *externalServer)
     homeware.setLedMode(3);
 }
 
-bool timeout = millis();
+bool timeout_reconect = millis();
 void Portal::loop()
 {
     if ((WiFi.status() != WL_CONNECTED) || (WiFi.localIP().toString() == "0.0.0.0"))
     {
         homeware.setLedMode(5);
-        if (millis() - timeout > 60000)
-#ifdef ESP8266
-            ESP.reset();
-#else
-            ESP.restart();
-#endif
+        if (millis() - timeout_reconect > 60000)
+            homeware.reset();
         else
         {
             WiFi.setAutoReconnect(true);
             WiFi.reconnect();
-            if (WiFi.status() != WL_CONNECTED){
+            if (WiFi.status() != WL_CONNECTED)
+            {
                 homeware.setLedMode(0);
             }
         }
     }
-    else {
-        timeout = millis();
+    else
+    {
+        timeout_reconect = millis();
     }
 }
 
-/*
-void onStationConnected(const WiFiEventSoftAPModeStationConnected &evt)
-{
-    homeware.connected = true;
-    Serial.print("Station connected: ");
-    // Serial.println(macToString(evt.mac));
-}
-
-void onStationDisconnected(const WiFiEventSoftAPModeStationDisconnected &evt)
-{
-    homeware.connected = false;
-    Serial.print("Station disconnected: ");
-    // Serial.println(macToString(evt.mac));
-}
-*/
-
 void wifiCallback()
 {
-    // Serial.print("looping [...");
     homeware.loop();
-    // Serial.print(".");
 }
 
 #ifdef TIMMED
@@ -85,18 +65,15 @@ void sendUptime()
 
 void Portal::autoConnect(const String slabel)
 {
+    Serial.print("Conectando na rede: ");
     unsigned start = millis();
     unsigned timeLimitMsec = 20000;
 #ifdef TIMMED
     int ntimer = timer.setInterval(1000, sendUptime);
 #endif
     label = slabel;
-    /*#ifdef ESP8266
-        wifiManager.setHostname(homeware.hostname.c_str());
-    #endif*/
     if (homeware.config["password"] && homeware.config["ssid"])
     {
-
         homeware.resetDeepSleep();
         WiFi.enableSTA(true);
         WiFi.setAutoReconnect(true);
@@ -108,9 +85,6 @@ void Portal::autoConnect(const String slabel)
 
             Serial.print(".");
         }
-        Serial.print("\r\nIP: ");
-        Serial.print(WiFi.localIP());
-        Serial.println("");
     }
 
     bool connected = (WiFi.status() == WL_CONNECTED);
@@ -120,9 +94,9 @@ void Portal::autoConnect(const String slabel)
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
-        homeware.resetDeepSleep( 5);
-        wifiManager.setDebugOutput(true);
+        homeware.resetDeepSleep(5);
         wifiManager.setConfigWaitingcallback(wifiCallback);
+        wifiManager.setConnectTimeout(30);
         if (homeware.config["ap_ssid"] != "none")
         {
             wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
@@ -133,15 +107,12 @@ void Portal::autoConnect(const String slabel)
         if (connected)
         {
             WiFi.enableAP(false);
+            Serial.println(WiFi.localIP());
         }
     }
     if (!connected)
     {
-#ifdef ESP8266
-        ESP.reset();
-#else
-        ESP.restart();
-#endif
+        homeware.reset();
     }
     else
     {
@@ -160,7 +131,7 @@ void Portal::reset()
 
 String button(const String name, const char *link, const String style = "")
 {
-    return stringf("<br/><form action='%s' method='get'><button %s>%s</button></form>", link, (style.isEmpty() ) ? "" : String(stringf("class='%s'", style)), name);
+    return stringf("<br/><form action='%s' method='get'><button %s>%s</button></form>", link, (style.isEmpty()) ? "" : String(stringf("class='%s'", style)), name);
 }
 String inputH(const String name, const String value)
 {
@@ -213,7 +184,7 @@ String timereload(String url = "/", int timeout = 1000)
 */
 void Portal::setupServer()
 {
-#ifdef WIFI_NEW
+    Serial.print("Criando ServerPage: ");
 
     server->on("/", []()
                {
@@ -326,7 +297,6 @@ void Portal::setupServer()
         pg+="</tbody></table>";
         pg += button("Menu","/");
         portal.server->send(200, "text/html", wf.pageMake("Homeware",pg)); });
-#endif
 
 #ifdef ALEXA
     server->onNotFound([]()
@@ -336,6 +306,7 @@ void Portal::setupServer()
         homeware.server->send(404, "text/plain", "Not found");
     } });
 #endif
+    Serial.println("OK");
 }
 
 Portal portal;

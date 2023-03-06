@@ -22,7 +22,6 @@ public:
             param = getProtocol()->getKey("gus").toInt();
         if (getProtocol()->containsKey("gus_interval"))
             interval = getProtocol()->getKey("gus_interval").toInt();
-        Serial.printf("gus param: %i", param);
         triggerEnabled = true;
     }
     void setPinMode(int pin) override

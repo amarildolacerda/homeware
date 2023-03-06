@@ -140,7 +140,7 @@ int Protocol::readPin(const int pin, const String mode)
     if (drv && drv->isGet())
     {
         newValue = drv->readPin(pin);
-        exectrigger = !drv->triggerEnabled;  // separa se a trigger é dispara no driver
+        exectrigger = !drv->triggerEnabled; // separa se a trigger é dispara no driver
     }
     else
         newValue = digitalRead(pin);
@@ -274,7 +274,7 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
-    Serial.println("configurando os pinos");
+    Serial.print("Configurando as portas: ");
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
@@ -290,6 +290,7 @@ void Protocol::setupPins()
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
+    Serial.println("OK");
 }
 
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
@@ -299,7 +300,7 @@ void Protocol::resetDeepSleep(const unsigned int t)
     if (v > sleeptmp)
     {
         sleeptmp = v;
-        Serial.println(sleeptmp);
+        // Serial.println(sleeptmp);
     }
 }
 
@@ -378,7 +379,7 @@ void Protocol::setup()
 {
     protocol = this;
 
-    Serial.println("Registrando os drivers...");
+    Serial.print("Registrando os drivers: ");
     drivers_register();
 
 #ifdef ESP8266
@@ -388,6 +389,7 @@ void Protocol::setup()
     for (Driver *drv : getDrivers()->items)
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
+    Serial.println("OK");
 }
 
 void Protocol::afterConfigChanged()
@@ -559,18 +561,16 @@ void telnetOnInputReceive(String str)
 void Protocol::setupTelnet()
 {
 
-    Serial.println("carregando TELNET");
+    Serial.print("Telnet: ");
     telnet.onConnect(telnetOnConnect);
     telnet.onInputReceived(telnetOnInputReceive);
-
-    Serial.print("- Telnet ");
     if (telnet.begin())
     {
-        Serial.println("running");
+        Serial.println("OK");
     }
     else
     {
-        Serial.println("error.");
+        Serial.println("Error");
         errorMsg("Will reboot...");
     }
 }
