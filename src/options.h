@@ -6,12 +6,15 @@
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
 
+
+
 #ifdef WIFI_ENABLED
 #define PORTAL
 #define ALEXA
 #define SINRIC
 #define TELNET
 #define OTA
+#define WEBSOCKET
 #endif
 
 #ifdef DRIVERS_ENABLED

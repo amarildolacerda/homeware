@@ -17,6 +17,11 @@
 SimpleTimer timer;
 #endif
 
+#ifdef WEBSOCKET
+#include <WebSocketsServer.h>
+WebSocketsServer webSocket = WebSocketsServer(81);
+#endif
+
 #ifdef ESP32
 void Portal::setup(WebServer *externalServer)
 #else
@@ -28,6 +33,28 @@ void Portal::setup(ESP8266WebServer *externalServer)
 }
 
 bool timeout_reconect = millis();
+
+#ifdef WEBSOCKET
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
+{
+    switch (type)
+    {
+    case WStype_CONNECTED:
+
+        webSocket.sendTXT(num, "Connected ");
+
+        break;
+    case WStype_TEXT:
+        char buf[128];
+        sprintf(buf, "%s", payload);
+        String rsp = homeware.doCommand(buf);
+        webSocket.sendTXT(num, rsp);
+        break;
+    }
+}
+#endif
+
 void Portal::loop()
 {
     if ((WiFi.status() != WL_CONNECTED) || (WiFi.localIP().toString() == "0.0.0.0"))
@@ -48,6 +75,9 @@ void Portal::loop()
     else
     {
         timeout_reconect = millis();
+#ifdef WEBSOCKET
+        webSocket.loop();
+#endif
     }
 }
 
@@ -95,19 +125,31 @@ void Portal::autoConnect(const String slabel)
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
         homeware.resetDeepSleep(5);
+        wifiManager.setDebugOutput(false);
         wifiManager.setConfigWaitingcallback(wifiCallback);
         wifiManager.setConnectTimeout(30);
         if (homeware.config["ap_ssid"] != "none")
         {
-            wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
+            connected = wifiManager.autoConnect(homeware.config["ap_ssid"], homeware.config["ap_password"]);
         }
         else
-            wifiManager.autoConnect(homeware.hostname.c_str());
-        connected = (WiFi.status() == WL_CONNECTED);
+            connected = wifiManager.autoConnect(homeware.hostname.c_str());
+        // connected = (WiFi.status() == WL_CONNECTED);
         if (connected)
         {
             WiFi.enableAP(false);
             Serial.println(WiFi.localIP());
+#ifdef WEBSOCKET
+            Serial.print("WebSocket: ");
+            homeware.resources += "ws,";
+            webSocket.begin();
+            webSocket.onEvent(webSocketEvent);
+            Serial.println("OK");
+#endif
+        }
+        else
+        {
+            Serial.println(WiFi.softAPIP());
         }
     }
     if (!connected)
@@ -169,19 +211,62 @@ const char BUTTON_SCRIPT[] PROGMEM =
     "\r\nxhr.send();"
     "\r\n}";
 
-/*
-const char HTTP_TIMER_RELOAD[] PROGMEM = "<script>setInterval(function(){"
-                                         "{code}"
-                                         "}, {t});"
-                                         "</ script> ";
-String timereload(String url = "/", int timeout = 1000)
-{
-    String s = FPSTR(HTTP_TIMER_RELOAD);
-    s.replace("{t}", String(timeout));
-    s.replace("{code}", stringf("window.location.href = '%s';", url));
-    return s;
-}
-*/
+#ifdef WEBSOCKET
+const char HTTP_TERM[] PROGMEM =
+    "<input type='text' id='commandInput'/>"
+    "<button id='button'>enviar</button>"
+    "<div class='msg' id='responseText' rows='10'></div> "
+
+    "<script>"
+    "var gateway = `ws://{ip}:81/`;"
+    "var websocket;"
+    "function initWebSocket()"
+    "{"
+    "console.log('Trying to open a WebSocket connection...');"
+    "websocket = new WebSocket(gateway);"
+    "websocket.onopen = onOpen;"
+    "websocket.onclose = onClose;"
+    "websocket.onmessage = onMessage; "
+    "} "
+    "function onOpen(event)"
+    "{"
+    "console.log('Connection opened');"
+    "} "
+
+    "function onClose(event)"
+    "{"
+    "console.log('Connection closed');"
+    "setTimeout(initWebSocket, 2000);"
+    "} "
+    "function onMessage(event)"
+    "{"
+    "response(event.data);"
+    "} "
+    "window.addEventListener('load', onLoad);"
+    "function onLoad(event)"
+    "{"
+    "initWebSocket();"
+    "initButton();"
+    "}"
+
+    "function initButton()"
+    "{"
+    "document.getElementById('button').addEventListener('click', toggle);"
+    "}"
+    "function response(txt)"
+    "{"
+    " document.querySelector('#responseText').textContent  += txt + '\\r\\n';"
+    "}"
+    "function toggle()"
+    "{"
+    "var txt = document.getElementById('commandInput').value;"
+    "response(txt);"
+    "websocket.send(txt);"
+    "document.getElementById('commandInput').value = '';"
+    "document.querySelector('#responseText').setFocus();"
+    "}"
+    "</script>";
+#endif
 void Portal::setupServer()
 {
     Serial.print("Criando ServerPage: ");
@@ -232,6 +317,7 @@ void Portal::setupServer()
 
         pg += button("GPIO", "/gs");
         pg += button("Reiniciar","/reset");
+        pg += button("Terminal", "/term");
         pg += "<div style='height:100'></div><a href=\"/update\" class='D'>firmware</a><div class='msg'> Ver: {ver}</div>";
         pg.replace("{ver}",VERSION);
 
@@ -297,7 +383,18 @@ void Portal::setupServer()
         pg+="</tbody></table>";
         pg += button("Menu","/");
         portal.server->send(200, "text/html", wf.pageMake("Homeware",pg)); });
+#ifdef WEBSOCKET
+    server->on("/term", []()
+               {
+                   HomewareWiFiManager wf;
+                   setManager(&wf);
 
+                   String pg = "Terminal<hr>";
+                   pg += FPSTR(HTTP_TERM);
+
+                   pg.replace("{ip}",homeware.localIP() );
+                   portal.server->send(200, "text/html", wf.pageMake("Homeware", pg)); });
+#endif
 #ifdef ALEXA
     server->onNotFound([]()
                        {
