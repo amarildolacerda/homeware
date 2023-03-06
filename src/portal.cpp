@@ -36,8 +36,15 @@ bool timeout_reconect = millis();
 
 #ifdef WEBSOCKET
 
+uint8_t ws_num;
+void debugCallbackFunc(String texto)
+{
+    webSocket.sendTXT(ws_num, texto);
+}
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 {
+    ws_num = num;
     switch (type)
     {
     case WStype_CONNECTED:
@@ -46,10 +53,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 
         break;
     case WStype_TEXT:
-        char buf[128];
-        sprintf(buf, "%s", payload);
-        String rsp = homeware.doCommand(buf);
-        webSocket.sendTXT(num, rsp);
+        if (length > 0)
+        {
+            char buf[128];
+            sprintf(buf, "%s", payload);
+            String rsp = homeware.doCommand(buf);
+            webSocket.sendTXT(num, rsp);
+        }
         break;
     }
 }
@@ -142,6 +152,7 @@ void Portal::autoConnect(const String slabel)
 #ifdef WEBSOCKET
             Serial.print("WebSocket: ");
             homeware.resources += "ws,";
+            homeware.debugCallback = debugCallbackFunc;
             webSocket.begin();
             webSocket.onEvent(webSocketEvent);
             Serial.println("OK");
@@ -255,7 +266,7 @@ const char HTTP_TERM[] PROGMEM =
     "}"
     "function response(txt)"
     "{"
-    " document.querySelector('#responseText').textContent  += txt + '\\r\\n';"
+    " document.querySelector('#responseText').innerHTML  += txt + '<br>';"
     "}"
     "function toggle()"
     "{"

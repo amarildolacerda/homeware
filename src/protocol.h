@@ -17,10 +17,13 @@
 #include "ESPTelnet.h"
 #endif
 
+typedef void (*callbackDebugFunction)(String texto);
+
 class Protocol
 {
 private:
 public:
+    callbackDebugFunction debugCallback;
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
     String hostname = "AutoConnect";

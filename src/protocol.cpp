@@ -177,6 +177,10 @@ String Protocol::print(String msg)
 #ifdef TELNET
     telnet.println(msg);
 #endif
+#ifdef WEBSOCKET
+   if (debugCallback)
+      debugCallback(msg);
+#endif
     return msg;
 }
 
