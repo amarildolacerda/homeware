@@ -224,9 +224,9 @@ const char BUTTON_SCRIPT[] PROGMEM =
 
 #ifdef WEBSOCKET
 const char HTTP_TERM[] PROGMEM =
-    "<input type='text' id='commandInput'/>"
-    "<button id='button'>enviar</button>"
-    "<div class='msg' id='responseText' rows='10'></div> "
+    "<table ><tr style='height:80%;'><td class='msg'><div id='responseText' style='overflow: auto;'></div></td></tr> "
+    "<tr style='height:20%;'><td><input type='text' id='commandInput'/>"
+    "<button id='button'>enviar</button></td></tr></table>"
 
     "<script>"
     "var gateway = `ws://{ip}:81/`;"
@@ -263,10 +263,20 @@ const char HTTP_TERM[] PROGMEM =
     "function initButton()"
     "{"
     "document.getElementById('button').addEventListener('click', send);"
+
+    "const input = document.getElementById('commandInput');"
+    "input.addEventListener("
+    "'keydown', function(event) {"
+    "if (event.key === 'Enter')"
+    "{"
+    "   document.getElementById('button').click();"
+    "}"
+    "});"
+
     "}"
     "function response(txt)"
     "{"
-    " document.querySelector('#responseText').innerHTML  += txt + '<br>';"
+    " var r =document.getElementById('responseText'); r.innerHTML  += txt + '<br>';r.scrollTop = r.scrollHeight;"
     "}"
     "function send()"
     "{"
