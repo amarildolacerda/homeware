@@ -81,7 +81,7 @@ int Protocol::writePin(const int pin, const int value)
             digitalWrite(pin, value);
         }
     }
-    Serial.println(stringf("writePin: %d value: %d", pin, value));
+    debug(stringf("{ 'writePin': %d, 'value': %d }", pin, value));
     docPinValues[String(pin)] = v;
     return value;
 }
@@ -116,7 +116,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     if (pinValue(pin) != newValue)
     {
         char buffer[32];
-        sprintf(buffer, "pin %d : %d ", pin, newValue);
+        sprintf(buffer, "{ 'pin': %d, 'value': %d, 'old': %d }", pin, newValue, pinValue(pin));
         print(buffer);
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
@@ -135,7 +135,7 @@ int Protocol::readPin(const int pin, const String mode)
 
     Driver *drv = getDrivers()->findByMode(mode);
     if (!drv)
-        Serial.println("Não tem um drive especifico: " + mode);
+        print("Não tem um drive especifico: " + mode);
 
     if (drv && drv->isGet())
     {
@@ -160,7 +160,7 @@ void Protocol::debug(String txt)
     else if (config["debug"] == "term" || erro)
     {
         if (debugCallback)
-            debugCallback(txt);
+            debugCallback("INF: "+txt);
         Serial.println(txt);
     }
 }
@@ -176,14 +176,10 @@ int Protocol::findPinByMode(String mode)
 
 String Protocol::print(String msg)
 {
-    Serial.print("RSP: ");
+    Serial.print("INF: ");
     Serial.println(msg);
 #ifdef TELNET
-    telnet.println("RST: " + msg);
-#endif
-#ifdef WEBSOCKET
-    if (debugCallback)
-        debugCallback("RST: "+msg);
+    telnet.println("INF: " + msg);
 #endif
     return msg;
 }
@@ -209,7 +205,6 @@ void Protocol::checkTrigger(int pin, int value)
             return;
         }
 
-        Serial.println(stringf("pin %s trigger %s to %d stable %d \r\n", p, pinTo, v, bistable));
         if (pinTo.toInt() != pin)
             writePin(pinTo.toInt(), v);
     }
@@ -861,6 +856,10 @@ void lerSerial()
         cmd.replace("\r", "");
         String rsp = protocol->doCommand(cmd);
         Serial.println(rsp);
+#ifdef WEBSOCKET
+        if (protocol->debugCallback)
+            protocol->debugCallback("SER: " + cmd);
+#endif
 #ifdef TELNET
         protocol->telnet.println("SERIAL " + cmd);
         protocol->telnet.println("RSP " + rsp);

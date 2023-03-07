@@ -39,7 +39,7 @@ bool timeout_reconect = millis();
 uint8_t ws_num;
 void debugCallbackFunc(String texto)
 {
-    webSocket.sendTXT(ws_num, texto);
+    webSocket.sendTXT(ws_num,  texto);
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
@@ -298,7 +298,7 @@ const char HTTP_TERM[] PROGMEM =
 char HTTP_CUSTOM_HEAD[] PROGMEM =
     "<style>"
     ".chatbox-messages{max-width:50%;height:calc(100%-80px);overflow:auto;}"
-    ".message-ask{padding:5px;position:relative;right:0;background-color:#d2d2d2}"
+    ".message-ask{padding:2px;position:relative;right:0;background-color:#572CF0}"
     ".message{padding:1px;}"
     ".message:nth-child(even){background-color:#f2f2f2}"
     ".chatbox-input {position:absolute;bottom:0;width:100%;}"
