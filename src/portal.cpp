@@ -44,7 +44,7 @@ bool timeout_reconect = millis();
 uint8_t ws_num;
 void debugCallbackFunc(String texto)
 {
-    webSocket.sendTXT(ws_num, texto);
+    webSocket.sendTXT(ws_num,  texto);
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)

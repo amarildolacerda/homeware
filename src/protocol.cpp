@@ -81,7 +81,7 @@ int Protocol::writePin(const int pin, const int value)
             digitalWrite(pin, value);
         }
     }
-    Serial.println(stringf("writePin: %d value: %d", pin, value));
+    debug(stringf("{ 'writePin': %d, 'value': %d }", pin, value));
     docPinValues[String(pin)] = v;
     return value;
 }
@@ -116,7 +116,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     if (pinValue(pin) != newValue)
     {
         char buffer[32];
-        sprintf(buffer, "pin %d : %d ", pin, newValue);
+        sprintf(buffer, "{ 'pin': %d, 'value': %d, 'old': %d }", pin, newValue, pinValue(pin));
         print(buffer);
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
@@ -165,7 +165,7 @@ void Protocol::debug(String txt)
     else if (config["debug"] == "term" || erro)
     {
         if (debugCallback)
-            debugCallback(txt);
+            debugCallback("INF: "+txt);
         Serial.println(txt);
     }
 }
@@ -181,7 +181,7 @@ int Protocol::findPinByMode(String mode)
 
 String Protocol::print(String msg)
 {
-    Serial.print("RSP: ");
+    Serial.print("INF: ");
     Serial.println(msg);
 #ifdef TELNET
     telnet.println("RSP: " + msg);
@@ -214,7 +214,6 @@ void Protocol::checkTrigger(int pin, int value)
             return;
         }
 
-        Serial.println(stringf("pin %s trigger %s to %d stable %d \r\n", p, pinTo, v, bistable));
         if (pinTo.toInt() != pin)
             writePin(pinTo.toInt(), v);
     }
