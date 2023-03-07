@@ -50,8 +50,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     case WStype_CONNECTED:
 
         webSocket.sendTXT(num, "Connected ");
+        homeware.config["debug"] = "term";
 
         break;
+    case WStype_DISCONNECTED:
+        homeware.config["debug"] = "off";
+        break;
+
     case WStype_TEXT:
         if (length > 0)
         {
@@ -224,10 +229,8 @@ const char BUTTON_SCRIPT[] PROGMEM =
 
 #ifdef WEBSOCKET
 const char HTTP_TERM[] PROGMEM =
-    "<table ><tr style='height:80%;'><td class='msg'><div id='responseText' style='overflow: auto;'></div></td></tr> "
-    "<tr style='height:20%;'><td><input type='text' id='commandInput'/>"
-    "<button id='button'>enviar</button></td></tr></table>"
-
+    "<div class='chatbox'><input type='text' id='commandInput'/></div><button id='button'>enviar</button>"
+    "<div class='chatbox-messages' id='responseText'></div></div>"
     "<script>"
     "var gateway = `ws://{ip}:81/`;"
     "var websocket;"
@@ -274,20 +277,33 @@ const char HTTP_TERM[] PROGMEM =
     "});"
 
     "}"
+    "function ask(txt)"
+    "{"
+    " var r =document.getElementById('responseText'); r.innerHTML  = '<div class=\"message-ask\">'+txt + '</div><br>';"
+    "}"
     "function response(txt)"
     "{"
-    " var r =document.getElementById('responseText'); r.innerHTML  += txt + '<br>';r.scrollTop = r.scrollHeight;"
+    " var r =document.getElementById('responseText'); r.innerHTML  += '<div class=\"message\">'+txt + '</div><br>';"
     "}"
     "function send()"
     "{"
     "var elem =document.getElementById('commandInput');"
     "var txt = elem.value;"
-    "response(txt);"
+    "ask(txt);"
     "websocket.send(txt);"
     "elem.value = '';"
     "elem.focus();"
     "}"
     "</script>";
+char HTTP_CUSTOM_HEAD[] PROGMEM =
+    "<style>"
+    ".chatbox-messages{max-width:50%;height:calc(100%-80px);overflow:auto;}"
+    ".message-ask{padding:5px;position:relative;right:0;background-color:#d2d2d2}"
+    ".message{padding:1px;}"
+    ".message:nth-child(even){background-color:#f2f2f2}"
+    ".chatbox-input {position:absolute;bottom:0;width:100%;}"
+    "</style>";
+
 #endif
 void Portal::setupServer()
 {
@@ -409,11 +425,12 @@ void Portal::setupServer()
     server->on("/term", []()
                {
                    HomewareWiFiManager wf;
+                   String hd = FPSTR(HTTP_CUSTOM_HEAD);
+                   
+                    wf.setCustomHeadElement(hd.c_str());
                    setManager(&wf);
-
                    String pg = "Terminal<hr>";
                    pg += FPSTR(HTTP_TERM);
-
                    pg.replace("{ip}",homeware.localIP() );
                    portal.server->send(200, "text/html", wf.pageMake("Homeware", pg)); });
 #endif

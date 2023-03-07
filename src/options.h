@@ -12,7 +12,7 @@
 #define PORTAL
 #define ALEXA
 #define SINRIC
-#define TELNET
+//#define TELNET
 #define OTA
 #define WEBSOCKET
 #endif

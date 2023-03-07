@@ -117,7 +117,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         char buffer[32];
         sprintf(buffer, "pin %d : %d ", pin, newValue);
-        debug(buffer);
+        print(buffer);
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
         afterChanged(pin, newValue, getPinMode(pin));
@@ -158,7 +158,11 @@ void Protocol::debug(String txt)
         print(txt);
     }
     else if (config["debug"] == "term" || erro)
+    {
+        if (debugCallback)
+            debugCallback(txt);
         Serial.println(txt);
+    }
 }
 int Protocol::findPinByMode(String mode)
 {
@@ -175,11 +179,11 @@ String Protocol::print(String msg)
     Serial.print("RSP: ");
     Serial.println(msg);
 #ifdef TELNET
-    telnet.println(msg);
+    telnet.println("RST: " + msg);
 #endif
 #ifdef WEBSOCKET
-   if (debugCallback)
-      debugCallback(msg);
+    if (debugCallback)
+        debugCallback("RST: "+msg);
 #endif
     return msg;
 }
