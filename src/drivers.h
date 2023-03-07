@@ -18,6 +18,8 @@ protected:
     callbackFunction triggerCallback;
 
 public:
+    /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
+
     bool triggerEnabled = false ;
     bool active = false;
     long v1 = 0;

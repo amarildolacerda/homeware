@@ -22,8 +22,13 @@ SimpleTimer timer;
 WebSocketsServer webSocket = WebSocketsServer(81);
 #endif
 
+#ifndef WM_MDNS
+ativar o WM_MDNS do WiFiManager.
+#endif
+
 #ifdef ESP32
-void Portal::setup(WebServer *externalServer)
+    void
+    Portal::setup(WebServer *externalServer)
 #else
 void Portal::setup(ESP8266WebServer *externalServer)
 #endif
@@ -110,7 +115,7 @@ void sendUptime()
 
 void Portal::autoConnect(const String slabel)
 {
-    Serial.print("Conectando na rede: ");
+    protocol->debug("Conectando na rede: ");
     unsigned start = millis();
     unsigned timeLimitMsec = 20000;
 #ifdef TIMMED
@@ -153,11 +158,19 @@ void Portal::autoConnect(const String slabel)
         if (connected)
         {
             WiFi.enableAP(false);
-            Serial.println(WiFi.localIP());
+#ifdef WEBSOCKET
+            homeware->debug("WebSocket: ");
+            homeware.resources += "ws,";
+            homeware.debugCallback = debugCallbackFunc;
+            webSocket.begin();
+            webSocket.onEvent(webSocketEvent);
+            homeware->debug("OK");
+#endif
+            homeware->debug(WiFi.localIP());
         }
         else
         {
-            Serial.println(WiFi.softAPIP());
+            protocol->debug(WiFi.softAPIP());
         }
     }
     if (!connected)
@@ -166,14 +179,6 @@ void Portal::autoConnect(const String slabel)
     }
     else
     {
-#ifdef WEBSOCKET
-        Serial.print("WebSocket: ");
-        homeware.resources += "ws,";
-        homeware.debugCallback = debugCallbackFunc;
-        webSocket.begin();
-        webSocket.onEvent(webSocketEvent);
-        Serial.println("OK");
-#endif
         homeware.connected = connected;
     }
     setupServer();
@@ -298,7 +303,7 @@ const char HTTP_TERM[] PROGMEM =
 char HTTP_CUSTOM_HEAD[] PROGMEM =
     "<style>"
     ".chatbox-messages{max-width:50%;height:calc(100%-80px);overflow:auto;}"
-    ".message-ask{padding:5px;position:relative;right:0;background-color:#d2d2d2}"
+    ".message-ask{text-align: right;padding:1px;position:relative;right:0;background-color:#d2d2d2}"
     ".message{padding:1px;}"
     ".message:nth-child(even){background-color:#f2f2f2}"
     ".chatbox-input {position:absolute;bottom:0;width:100%;}"
@@ -307,7 +312,7 @@ char HTTP_CUSTOM_HEAD[] PROGMEM =
 #endif
 void Portal::setupServer()
 {
-    Serial.print("Criando ServerPage: ");
+    homeware->debug("Criando ServerPage: ");
 
     server->on("/", []()
                {
@@ -393,10 +398,9 @@ void Portal::setupServer()
                portal.server->send(200, "text/plain", String(v)); });
     homeware.server->on("/reset", []()
                         {
-                            //String pg = "reiniciando...{c}";
-                            //pg.replace("{c}", timereload("/", 1000));
                             HomewareWiFiManager wf;
                             portal.server->send(200, "text/html", wf.pageMake("Homeware", "<a href='/'>reiniciando...</>"));
+                            delay(100)
                             homeware.doCommand("reset"); });
 
     server->on("/gs", []()

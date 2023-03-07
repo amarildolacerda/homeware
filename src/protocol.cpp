@@ -135,12 +135,17 @@ int Protocol::readPin(const int pin, const String mode)
 
     Driver *drv = getDrivers()->findByMode(mode);
     if (!drv)
-        Serial.println("Não tem um drive especifico: " + mode);
+        debug("Não tem um drive especifico: " + mode);
 
     if (drv && drv->isGet())
     {
         newValue = drv->readPin(pin);
-        exectrigger = !drv->triggerEnabled; // separa se a trigger é dispara no driver
+        // checa quem dispara trigger de alteração do estado
+        // quando o driver esta  triggerEnabled=true significa que o driver dispara os eventos 
+        // por conta de regras especificas do driver;
+        // se o driver for triggerEnabled=false, então quem dispara trigger é local, ja que o driver 
+        // nao tem esta funcionalidade
+        exectrigger = !drv->triggerEnabled;  
     }
     else
         newValue = digitalRead(pin);
@@ -179,11 +184,11 @@ String Protocol::print(String msg)
     Serial.print("RSP: ");
     Serial.println(msg);
 #ifdef TELNET
-    telnet.println("RST: " + msg);
+    telnet.println("RSP: " + msg);
 #endif
 #ifdef WEBSOCKET
     if (debugCallback)
-        debugCallback("RST: "+msg);
+        debugCallback("RSP: " + msg);
 #endif
     return msg;
 }
@@ -282,7 +287,7 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
-    Serial.print("Configurando as portas: ");
+    homeware->debug("Configurando as portas: ");
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
@@ -387,7 +392,7 @@ void Protocol::setup()
 {
     protocol = this;
 
-    Serial.print("Registrando os drivers: ");
+    homeware->debug("Registrando os drivers: ");
     drivers_register();
 
 #ifdef ESP8266
@@ -397,6 +402,7 @@ void Protocol::setup()
     for (Driver *drv : getDrivers()->items)
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
+
     Serial.println("OK");
 }
 
@@ -527,7 +533,7 @@ void Protocol::begin()
     setupTelnet();
 #endif
     afterBegin();
-    Serial.print("Resources: ");
+    homeware->debug("Resources: ");
     Serial.println(resources);
     inited = true;
 }
@@ -569,7 +575,7 @@ void telnetOnInputReceive(String str)
 void Protocol::setupTelnet()
 {
 
-    Serial.print("Telnet: ");
+    homeware->debug("Telnet: ");
     telnet.onConnect(telnetOnConnect);
     telnet.onInputReceived(telnetOnInputReceive);
     if (telnet.begin())
@@ -859,8 +865,20 @@ void lerSerial()
         char term = '\n';
         String cmd = Serial.readStringUntil(term);
         cmd.replace("\r", "");
-        String rsp = protocol->doCommand(cmd);
-        Serial.println(rsp);
+        cmd.replace("\n", "");
+        if (cmd.length == 0)
+            return;
+        String validos = "gpio,get,show,switch";
+        String *r = split(cmd, " ");
+        if (validos.indexOf(r[0]) > -1)
+        {
+            String rsp = protocol->doCommand(cmd);
+            if (!rsp.startsWith("invalid"))
+                debug("SER: " + rsp);
+        }
+        else if (debugCallback)
+            debugCallback(cmd);
+
 #ifdef TELNET
         protocol->telnet.println("SERIAL " + cmd);
         protocol->telnet.println("RSP " + rsp);
