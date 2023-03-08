@@ -5,7 +5,7 @@
 #include <Arduino.h>
 
 char *stringf(const char *format, ...);
-uint32_t getChipId() ;
+uint32_t getChipId();
 String *split(String s, const char delimiter);
 
 template <class T>
@@ -16,5 +16,7 @@ String type_name(const T &)
     int stop = s.lastIndexOf(']');
     return s.substring(start, stop);
 }
+
+int getPinByName(String dig);
 
 #endif

@@ -61,6 +61,8 @@ public:
     virtual int readPin(const int pin, const String mode = "");
     virtual int findPinByMode(String mode);
     virtual void debug(String txt);
+    void debugf(const char *format, ...);
+
     void debugln(String txt);
 
     virtual int switchPin(const int pin);

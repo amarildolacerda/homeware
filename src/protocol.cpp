@@ -12,7 +12,7 @@ unsigned int timeoutDeepSleep = 10000;
 
 Protocol *protocol;
 
-void debugf(const char *format, ...)
+void Protocol::debugf(const char *format, ...)
 {
     static char buffer[512];
 
@@ -150,7 +150,7 @@ int Protocol::readPin(const int pin, const String mode)
     {
         drv = getDrivers()->findByPin(pin);
         if (drv)
-          m = drv->getMode();
+            m = drv->getMode();
     }
     else
         drv = getDrivers()->findByMode(m);
@@ -219,7 +219,6 @@ String Protocol::print(String msg)
 #endif
     return msg;
 }
-
 void Protocol::checkTrigger(int pin, int value)
 {
     String p = String(pin);
@@ -230,7 +229,7 @@ void Protocol::checkTrigger(int pin, int value)
         if (!getStable().containsKey(p))
             return;
 
-        debugf("{'trigger': %i, 'set': %i, 'to': %s}", pin, value, pinTo);
+        debugf("{'pin':%i,'trigger': %s, 'set': %i }", pin, pinTo, value);
 
         int bistable = getStable()[p];
         int v = value;
@@ -662,6 +661,8 @@ String Protocol::doCommand(String command)
             return help();
         else if (cmd[0] == "show")
         {
+            Serial.println("show: " + command);
+
             if (cmd[1] == "resources")
                 return resources;
             else if (cmd[1] == "status")
@@ -674,11 +675,6 @@ String Protocol::doCommand(String command)
                 return showGpio();
             char buffer[128];
             String ip = localIP();
-            // FSInfo fs_info;
-            // LittleFS.info(fs_info);
-            //  ADC_MODE(ADC_VCC);
-            //'total': %d, 'free': %s
-            //, fs_info.totalBytes, String(fs_info.totalBytes - fs_info.usedBytes)
             sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
             return buffer;
         }
@@ -696,7 +692,6 @@ String Protocol::doCommand(String command)
             }
             print("reiniciando...");
             delay(1000);
-            // telnet.stop();
             reset();
             return "OK";
         }
@@ -715,6 +710,8 @@ String Protocol::doCommand(String command)
         }
         else if (cmd[0] == "set")
         {
+            Serial.println("set: " + command);
+
             if (cmd[2] == "none")
             {
                 config.remove(cmd[1]);
@@ -728,11 +725,15 @@ String Protocol::doCommand(String command)
         }
         else if (cmd[0] == "get")
         {
+            Serial.println("get: " + command);
+
             return config[cmd[1]];
         }
         else if (cmd[0] == "pwm")
         {
-            int pin = cmd[1].toInt();
+            Serial.println("pwm: " + command);
+
+            int pin = getPinByName(cmd[1]);
             int timeout = 0;
             if (cmd[4] == "until" || cmd[4] == "timeout")
                 timeout = cmd[5].toInt();
@@ -748,21 +749,25 @@ String Protocol::doCommand(String command)
                 return String(rsp);
             }
         }
-        else if (cmd[0] = "switch")
+        else if (cmd[0] == "switch")
         {
-            int pin = cmd[1].toInt();
+            Serial.println("switch: " + command);
+            int pin = getPinByName(cmd[1]);
             return String(switchPin(pin));
         }
         else if (cmd[0] == "gpio")
         {
-            int pin = cmd[1].toInt();
-            String spin = cmd[1];
+            Serial.println("gpio: " + command);
+            int pin = getPinByName(cmd[1]);
+            String spin = String(pin);
 
             if (cmd[2] == "get" || cmd[2] == "set")
             {
-                Driver *drv = getDrivers()->findByMode(cmd[1]);
+                Serial.println("Busca de Drivers");
+                Driver *drv = getDrivers()->findByPin(pin);
                 if (drv)
                 {
+                    Serial.println("Executa Driver: " + command);
                     if (cmd[2] == "status")
                     {
                         JsonObject j = drv->readStatus(pin);
@@ -796,7 +801,7 @@ String Protocol::doCommand(String command)
 
             if (cmd[2] == "none")
             {
-                config["mode"].remove(cmd[1]);
+                config["mode"].remove(spin);
                 return "OK";
             }
             else if (cmd[2] == "get")
@@ -822,6 +827,7 @@ String Protocol::doCommand(String command)
             }
             else if (cmd[2] == "device")
             {
+
                 JsonObject devices = getDevices();
                 if (cmd[3] == "none")
                 {
@@ -862,7 +868,7 @@ String Protocol::doCommand(String command)
                 if (!cmd[4])
                     return "cmd incompleto";
                 JsonObject trigger = getTrigger();
-                trigger[spin] = cmd[3];
+                trigger[spin] = getPinByName(cmd[3]);
 
                 // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
                 getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);

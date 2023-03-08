@@ -2,7 +2,7 @@
 
 #include <protocol.h>
 
-#define ledTimeout 400
+#define ledTimeout 1000
 
 class LedDriver : public Driver
 {
@@ -42,19 +42,17 @@ public:
             }
             else
             {
-                long dif = millis() - ultimoLedChanged;
-                if (dif > v1)
+                if (millis() - ultimoLedChanged > v1)
                 {
                     ledStatus = true;
                     digitalWrite(ledPin, ledStatus);
                     ultimoLedChanged = millis();
-                    //Serial.println("led on");
                 }
                 else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
                 {
                     ledStatus = false;
                     digitalWrite(ledPin, ledStatus);
-                    //Serial.println("led off");
+                    ultimoLedChanged = millis();
                 }
             }
         }

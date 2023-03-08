@@ -1,7 +1,7 @@
 
 #include "LittleFS.h"
 #ifdef ESP32
-const char* getChipId() { return ESP.getChipModel(); }
+const char *getChipId() { return ESP.getChipModel(); }
 
 #else
 uint32_t getChipId() { return ESP.getChipId(); }
@@ -45,4 +45,35 @@ String *split(String s, const char delimiter)
     // words[count+1] = 0;
 
     return words;
+}
+
+int getPinByName(String dig)
+{
+    uint8_t v[16] = {D0,
+                     D1,
+                     D2,
+                     D3,
+                     D4,
+                     D5,
+                     D6,
+                     D7,
+                     D8,
+                     D9,
+                     D10,
+                     D11,
+                     D12,
+                     D13,
+                     D14,
+                     D15};
+
+    dig.toUpperCase();
+    Serial.println(dig.substring(0, 1));
+    if (dig.substring(0, 1) == "A")
+        return PIN_A0;
+    else if (dig.substring(0, 1) == "D")
+    {
+        String p = dig.substring(1);
+        return v[p.toInt()];
+    }
+    return dig.toInt();
 }

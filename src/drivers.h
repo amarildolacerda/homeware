@@ -11,7 +11,7 @@ class Driver
 {
 private:
     String _mode;
-    int _pin;
+    int _pin = -1;
 
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
@@ -115,14 +115,15 @@ public:
     }
     Driver *findByMode(String mode)
     {
-        Serial.println("findByMode");
+       // Serial.println("findByMode");
         for (auto *drv : items)
             if (drv)
             {
-                Serial.print(drv->getPin());
-                Serial.println(drv->getMode());
+         //       Serial.print(drv->getPin());
+         //       Serial.println(drv->getMode());
                 if (drv->getMode().equals(mode))
                 {
+          //          Serial.printf("findByMode:  %s pin %i  \r\n", drv->getMode(), drv->getPin());
                     return drv;
                 }
             }
@@ -130,14 +131,15 @@ public:
     }
     Driver *findByPin(const int pin)
     {
-        Serial.println("findByPin");
+        //Serial.println("findByPin");
         for (auto *drv : items)
             if (drv)
             {
-                Serial.print(drv->getPin());
-                Serial.println(drv->getMode());
+           //     Serial.print(drv->getPin());
+           //     Serial.println(drv->getMode());
                 if (drv->getPin() == pin)
                 {
+                    //Serial.printf("findByPin:  %s pin %i \r\n",drv->getMode(),drv->getPin());
                     return drv;
                 }
             }
