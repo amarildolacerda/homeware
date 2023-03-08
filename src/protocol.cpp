@@ -127,9 +127,6 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 {
     if (pinValue(pin) != newValue)
     {
-        char buffer[32];
-        sprintf(buffer, "{ 'pin': %d, 'value': %d, 'old': %d }", pin, newValue, pinValue(pin));
-        print(buffer);
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
         afterChanged(pin, newValue, getPinMode(pin));
@@ -211,8 +208,7 @@ String Protocol::print(String msg)
     Serial.print("INF: ");
     Serial.println(msg);
 #ifdef TELNET
-    if (config["debug"] == "term" || config["debug"] == "on")
-        telnet.println("INF: " + msg);
+    telnet.println("INF: " + msg);
 #endif
 #ifdef WEBSOCKET
     if (debugCallback)
@@ -339,17 +335,14 @@ void Protocol::resetDeepSleep(const unsigned int t)
     if (v > sleeptmp)
     {
         sleeptmp = v;
-        // Serial.println(sleeptmp);
     }
 }
 
-const char sleeping[] = "Sleeping: ";
 void Protocol::doSleep(const int tempo)
 {
     if (millis() > sleeptmp)
     {
-        Serial.print(FPSTR(sleeping));
-        Serial.println(tempo);
+        print("sleeping");
         ESP.deepSleep(tempo * 1000 * 1000);
     }
 }
@@ -366,6 +359,9 @@ const char HELP[] =
     "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
     "gpio <pin> get\r\n"
     "gpio <pin> set <n>\r\n"
+    "version\r\n" 
+    "switch <pin>\r\n"
+    "show gpio\r\n"
 #ifdef GROOVE_ULTRASONIC
     "set gus_min 50\r\n"
     "set gus_max 150\r\n"
@@ -410,7 +406,7 @@ void driverCallbackEventFunc(String mode, int pin, int value)
 
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
-    Serial.printf("callback: %s(%i,%i)", mode.c_str(), pin, value);
+    debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
     checkTrigger(pin, value);
 }
 
@@ -560,7 +556,7 @@ void Protocol::begin()
 #endif
     afterBegin();
     debug("Resources: ");
-    Serial.println(resources);
+    debugln(resources);
     inited = true;
 }
 
@@ -657,6 +653,9 @@ String Protocol::doCommand(String command)
             char json[1024];
             readFile(cmd[1], json, 1024);
             return String(json);
+        }
+        else if (cmd[0]=="version"){
+            return VERSION;
         }
         else if (cmd[0] == "help")
             return help();

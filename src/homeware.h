@@ -48,13 +48,13 @@ public:
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
     //===================== revisado para ficar aqui mesmo
-    virtual int readPin(const int pin, const String mode = "") override;
-    virtual void afterChanged(const int pin, const int value, const String mode) override;
-    virtual String doCommand(String command) override ;
-    virtual void resetWiFi() override;
-    virtual void afterLoop() override;
-    virtual void afterBegin() override;
-    virtual void reset() override;
+    int readPin(const int pin, const String mode = "") override;
+    void afterChanged(const int pin, const int value, const String mode) override;
+    String doCommand(String command) override ;
+    void resetWiFi() override;
+    void afterLoop() override;
+    void afterBegin() override;
+    void reset() override;
 
     //============================= potencial para mudar para Protocol
 
