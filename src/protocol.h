@@ -24,6 +24,7 @@ class Protocol
 private:
 public:
     callbackDebugFunction debugCallback;
+
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
     String hostname = "AutoConnect";
@@ -60,10 +61,12 @@ public:
     virtual int readPin(const int pin, const String mode = "");
     virtual int findPinByMode(String mode);
     virtual void debug(String txt);
+    void debugln(String txt);
+
     virtual int switchPin(const int pin);
     virtual String getPinMode(const int pin);
     virtual void loop();
-    virtual bool pinValueChanged(const int pin, const int value, bool exectrigger );
+    virtual bool pinValueChanged(const int pin, const int value, bool exectrigger);
     virtual void reset();
     virtual void setupPins();
     virtual void driverCallbackEvent(String mode, int pin, int value);

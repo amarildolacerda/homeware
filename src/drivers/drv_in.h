@@ -9,6 +9,7 @@ public:
     {
         Driver::setMode("in");
         Driver::setup();
+        triggerEnabled = false;
     }
     int readPin(const int pin) override
     {

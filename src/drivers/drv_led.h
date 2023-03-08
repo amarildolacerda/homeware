@@ -2,7 +2,7 @@
 
 #include <protocol.h>
 
-#define ledTimeout 200
+#define ledTimeout 400
 
 class LedDriver : public Driver
 {
@@ -15,7 +15,7 @@ public:
     void
     setup() override
     {
-        Driver::setV1(10000);
+        Driver::setV1(5000);
         Driver::setMode("led");
         Driver::setup();
     }
@@ -45,7 +45,7 @@ public:
                 long dif = millis() - ultimoLedChanged;
                 if (dif > v1)
                 {
-                    ledStatus = !ledStatus;
+                    ledStatus = true;
                     digitalWrite(ledPin, ledStatus);
                     ultimoLedChanged = millis();
                     //Serial.println("led on");

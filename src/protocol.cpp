@@ -11,6 +11,18 @@ unsigned int timeoutDeepSleep = 10000;
 #include "drivers/drivers_setup.h"
 
 Protocol *protocol;
+
+void debugf(const char *format, ...)
+{
+    static char buffer[512];
+
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    protocol->debug(buffer);
+}
+
 Protocol *getInstanceOfProtocol()
 {
     return protocol;
@@ -130,22 +142,30 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 
 int Protocol::readPin(const int pin, const String mode)
 {
+    Driver *drv;
     int newValue = 0;
     bool exectrigger = true;
-
-    Driver *drv = getDrivers()->findByMode(mode);
+    String m = mode;
+    if (!m)
+    {
+        drv = getDrivers()->findByPin(pin);
+        if (drv)
+          m = drv->getMode();
+    }
+    else
+        drv = getDrivers()->findByMode(m);
     if (!drv)
-        debug("Não tem um drive especifico: " + mode);
+        debug("Não tem um drive especifico: " + m);
 
     if (drv && drv->isGet())
     {
         newValue = drv->readPin(pin);
         // checa quem dispara trigger de alteração do estado
-        // quando o driver esta  triggerEnabled=true significa que o driver dispara os eventos 
+        // quando o driver esta  triggerEnabled=true significa que o driver dispara os eventos
         // por conta de regras especificas do driver;
-        // se o driver for triggerEnabled=false, então quem dispara trigger é local, ja que o driver 
+        // se o driver for triggerEnabled=false, então quem dispara trigger é local, ja que o driver
         // nao tem esta funcionalidade
-        exectrigger = !drv->triggerEnabled;  
+        exectrigger = !drv->triggerEnabled;
     }
     else
         newValue = digitalRead(pin);
@@ -155,6 +175,11 @@ int Protocol::readPin(const int pin, const String mode)
     return newValue;
 }
 
+void Protocol::debugln(String txt)
+{
+    debug(txt);
+    Serial.println("");
+}
 void Protocol::debug(String txt)
 {
     const bool erro = txt.indexOf("ERRO") > -1;
@@ -165,9 +190,11 @@ void Protocol::debug(String txt)
     else if (config["debug"] == "term" || erro)
     {
         if (debugCallback)
-            debugCallback("INF: "+txt);
-        Serial.println(txt);
+            debugCallback("INF: " + txt);
+        Serial.print(txt);
     }
+    else
+        Serial.print(txt);
 }
 int Protocol::findPinByMode(String mode)
 {
@@ -203,14 +230,15 @@ void Protocol::checkTrigger(int pin, int value)
         if (!getStable().containsKey(p))
             return;
 
+        debugf("{'trigger': %i, 'set': %i, 'to': %s}", pin, value, pinTo);
+
         int bistable = getStable()[p];
         int v = value;
 
         if ((bistable == 2 || bistable == 3))
         {
-            if (v == 0)
-                return; // so aciona quando v for 1
-            switchPin(pinTo.toInt());
+            if (v == 1)
+                switchPin(pinTo.toInt());
             return;
         }
 
@@ -223,6 +251,7 @@ int Protocol::switchPin(const int pin)
 {
     String mode = getMode()[String(pin)];
     int r = readPin(pin, mode);
+    debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, mode, r, (r > 0) ? LOW : HIGH);
     return writePin(pin, (r > 0) ? LOW : HIGH);
 }
 
@@ -268,8 +297,6 @@ String Protocol::showGpio()
             String st = stab[sPin].as<String>();
             s += optionStable[st.toInt()];
             s += "'";
-            s += " ";
-            s += st;
         }
         int value = readPin(sPin.toInt(), k.value().as<String>());
         s += ", 'value': ";
@@ -286,7 +313,7 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
-    homeware->debug("Configurando as portas: ");
+    debug("Configurando as portas: ");
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
@@ -302,7 +329,7 @@ void Protocol::setupPins()
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
-    Serial.println("OK");
+    debugln("OK");
 }
 
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
@@ -391,7 +418,7 @@ void Protocol::setup()
 {
     protocol = this;
 
-    homeware->debug("Registrando os drivers: ");
+    debug("Registrando os drivers: ");
     drivers_register();
 
 #ifdef ESP8266
@@ -402,7 +429,7 @@ void Protocol::setup()
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
 
-    Serial.println("OK");
+    debugln("OK");
 }
 
 void Protocol::afterConfigChanged()
@@ -532,7 +559,7 @@ void Protocol::begin()
     setupTelnet();
 #endif
     afterBegin();
-    homeware->debug("Resources: ");
+    debug("Resources: ");
     Serial.println(resources);
     inited = true;
 }
@@ -574,12 +601,12 @@ void telnetOnInputReceive(String str)
 void Protocol::setupTelnet()
 {
 
-    homeware->debug("Telnet: ");
+    debug("Telnet: ");
     telnet.onConnect(telnetOnConnect);
     telnet.onInputReceived(telnetOnInputReceive);
     if (telnet.begin())
     {
-        Serial.println("OK");
+        debugln("OK");
     }
     else
     {
@@ -720,6 +747,11 @@ String Protocol::doCommand(String command)
                 int rsp = readPin(pin, "pwm");
                 return String(rsp);
             }
+        }
+        else if (cmd[0] = "switch")
+        {
+            int pin = cmd[1].toInt();
+            return String(switchPin(pin));
         }
         else if (cmd[0] == "gpio")
         {
@@ -865,23 +897,18 @@ void lerSerial()
         String cmd = Serial.readStringUntil(term);
         cmd.replace("\r", "");
         cmd.replace("\n", "");
-        if (cmd.length == 0)
+        if (cmd.length() == 0)
             return;
         String validos = "gpio,get,show,switch";
-        String *r = split(cmd, " ");
+        String *r = split(cmd, ' ');
         if (validos.indexOf(r[0]) > -1)
         {
             String rsp = protocol->doCommand(cmd);
             if (!rsp.startsWith("invalid"))
-                debug("SER: " + rsp);
+                protocol->debug("SER: " + rsp);
         }
-        else if (debugCallback)
-            debugCallback(cmd);
-
-#ifdef TELNET
-        protocol->telnet.println("SERIAL " + cmd);
-        protocol->telnet.println("RSP " + rsp);
-#endif
+        else if (protocol->debugCallback)
+            protocol->debugCallback(cmd);
     }
 }
 

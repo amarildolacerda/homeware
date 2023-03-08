@@ -94,8 +94,8 @@ void Homeware::afterBegin()
     setupServer();
 
 #ifdef OTA
-
     resources += "OTA,";
+    ElegantOTA.setID(hostname.c_str());
     ElegantOTA.begin(server);
 #endif
     server->begin();
@@ -440,12 +440,16 @@ void Homeware::setupSensores()
 }
 #endif
 
-String Homeware::localIP()
+String IPAddressToString(const IPAddress x)
 {
     char ip[20];
-    IPAddress x = WiFi.localIP();
     sprintf(ip, "%d.%d.%d.%d", x[0], x[1], x[2], x[3]);
     return ip;
+}
+
+String Homeware::localIP()
+{
+    return IPAddressToString(WiFi.localIP());
 }
 
 // ============= revisados para ficar aqui mesmo

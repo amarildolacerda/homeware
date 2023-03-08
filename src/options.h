@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #define LABEL String(getChipId(), HEX)
-#define VERSION "23.03.08.8"
+#define VERSION "23.03.08.9"
 #define WIFI_ENABLED
 
 //********************************** boards
@@ -24,6 +24,8 @@
 #undef BOARD_ESP12S
 #undef ESP8285
 #endif
+
+
 #ifdef BOARD_ESP12S
 #undef WEMO_D1
 #undef ESP8285
@@ -38,7 +40,7 @@
 #define SINRIC
 #define OTA
 #define WEBSOCKET
-// #define TELNET
+#define TELNET
 #endif
 
 #ifdef DRIVERS_ENABLED

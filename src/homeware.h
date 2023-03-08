@@ -23,8 +23,9 @@
 
 
 void linha();
+String IPAddressToString(const IPAddress x);
 
-class Homeware : public Protocol
+    class Homeware : public Protocol
 {
 public:
 #ifdef ESP32

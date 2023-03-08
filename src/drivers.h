@@ -20,12 +20,13 @@ protected:
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
 
-    bool triggerEnabled = false ;
+    bool triggerEnabled = false;
     bool active = false;
     long v1 = 0;
     void setV1(long x) { v1 = x; }
     virtual void setPinMode(int pin)
     {
+        setPin(pin);
         active = true;
     }
 
@@ -114,10 +115,28 @@ public:
     }
     Driver *findByMode(String mode)
     {
+        Serial.println("findByMode");
         for (auto *drv : items)
             if (drv)
             {
+                Serial.print(drv->getPin());
+                Serial.println(drv->getMode());
                 if (drv->getMode().equals(mode))
+                {
+                    return drv;
+                }
+            }
+        return nullptr;
+    }
+    Driver *findByPin(const int pin)
+    {
+        Serial.println("findByPin");
+        for (auto *drv : items)
+            if (drv)
+            {
+                Serial.print(drv->getPin());
+                Serial.println(drv->getMode());
+                if (drv->getPin() == pin)
                 {
                     return drv;
                 }
