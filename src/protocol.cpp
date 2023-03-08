@@ -211,11 +211,12 @@ String Protocol::print(String msg)
     Serial.print("INF: ");
     Serial.println(msg);
 #ifdef TELNET
-    telnet.println("RSP: " + msg);
+    if (config["debug"] == "term" || config["debug"] == "on")
+        telnet.println("INF: " + msg);
 #endif
 #ifdef WEBSOCKET
     if (debugCallback)
-        debugCallback("RSP: " + msg);
+        debugCallback("INF: " + msg);
 #endif
     return msg;
 }
