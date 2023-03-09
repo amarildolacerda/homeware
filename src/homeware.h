@@ -48,9 +48,7 @@ public:
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
     //===================== revisado para ficar aqui mesmo
-    int readPin(const int pin, const String mode = "") override;
     void afterChanged(const int pin, const int value, const String mode) override;
-    String doCommand(String command) override ;
     void resetWiFi() override;
     void afterLoop() override;
     void afterBegin() override;

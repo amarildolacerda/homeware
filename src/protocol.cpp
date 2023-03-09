@@ -94,7 +94,7 @@ int Protocol::writePin(const int pin, const int value)
         }
     }
     debug(stringf("{ 'writePin': %d, 'value': %d }", pin, value));
-    docPinValues[String(pin)] = v;
+    // docPinValues[String(pin)] = v;
     return value;
 }
 
@@ -216,39 +216,53 @@ String Protocol::print(String msg)
 #endif
     return msg;
 }
+
+bool inCheckTrigger = false;
 void Protocol::checkTrigger(int pin, int value)
 {
-    String p = String(pin);
-    JsonObject trig = getTrigger();
-    if (trig.containsKey(p))
+    if (inCheckTrigger)
+        return;
+    try
     {
-        String pinTo = trig[p];
-        if (!getStable().containsKey(p))
-            return;
-
-        debugf("{'pin':%i,'trigger': %s, 'set': %i }", pin, pinTo, value);
-
-        int bistable = getStable()[p];
-        int v = value;
-
-        if ((bistable == 2 || bistable == 3))
+        inCheckTrigger = true;
+        String p = String(pin);
+        JsonObject trig = getTrigger();
+        if (trig.containsKey(p))
         {
-            if (v == 1)
-                switchPin(pinTo.toInt());
-            return;
-        }
+            String pinTo = trig[p];
+            if (!getStable().containsKey(p))
+                return;
 
-        if (pinTo.toInt() != pin)
-            writePin(pinTo.toInt(), v);
+            debugf("{'pin':%i,'trigger': %s, 'set': %i }", pin, pinTo, value);
+
+            int bistable = getStable()[p];
+            int v = value;
+
+            if ((bistable == 2 || bistable == 3))
+            {
+                if (v == 1)
+                    switchPin(pinTo.toInt());
+            }
+            else if (pinTo.toInt() != pin)
+                writePin(pinTo.toInt(), v);
+        }
     }
+    catch (char &e)
+    {
+    }
+    inCheckTrigger = false;
 }
 
 int Protocol::switchPin(const int pin)
 {
-    String mode = getMode()[String(pin)];
-    int r = readPin(pin, mode);
-    debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, mode, r, (r > 0) ? LOW : HIGH);
-    return writePin(pin, (r > 0) ? LOW : HIGH);
+    Driver *drv = getDrivers()->findByPin(pin);
+    if (drv)
+    {
+        int r = drv->readPin(pin);
+        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+        return drv->writePin(pin, (r > 0) ? LOW : HIGH);
+    }
+    return -1;
 }
 
 void Protocol::setLedMode(const int mode)
@@ -359,7 +373,7 @@ const char HELP[] =
     "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
     "gpio <pin> get\r\n"
     "gpio <pin> set <n>\r\n"
-    "version\r\n" 
+    "version\r\n"
     "switch <pin>\r\n"
     "show gpio\r\n"
 #ifdef GROOVE_ULTRASONIC
@@ -654,7 +668,8 @@ String Protocol::doCommand(String command)
             readFile(cmd[1], json, 1024);
             return String(json);
         }
-        else if (cmd[0]=="version"){
+        else if (cmd[0] == "version")
+        {
             return VERSION;
         }
         else if (cmd[0] == "help")
@@ -965,17 +980,16 @@ void Protocol::afterLoop()
 
 void Protocol::loopEvent()
 {
+
+    unsigned long interval = 500;
     try
     {
-        unsigned long interval;
-        try
+        if (containsKey("interval"))
         {
-            interval = config["interval"].as<String>().toInt();
+            interval = getKey("interval").toInt();
         }
-        catch (char e)
-        {
-            interval = 500;
-        }
+        if (interval < 50)
+            interval = 50;
         if (millis() - loopEventMillis > interval)
         {
             JsonObject mode = config["mode"];

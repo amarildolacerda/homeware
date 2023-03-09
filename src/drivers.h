@@ -139,12 +139,9 @@ public:
     }
     void changed(const int pin, const int value)
     {
-        for (auto *drv : items)
-            if (drv && drv->active)
-            {
-                if (drv->getPin() == pin)
-                    drv->changed(pin, value);
-            }
+        auto *drv = findByPin(pin);
+        if (drv && drv->active)
+            drv->changed(pin, value);
     }
     void loop()
     {

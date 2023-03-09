@@ -191,10 +191,6 @@ void Homeware::reset()
 #endif
 }
 
-String Homeware::doCommand(String command)
-{
-    return Protocol::doCommand(command);
-}
 
 #ifdef ESP32
 const char *Homeware::getChipId()
@@ -462,7 +458,6 @@ void Homeware::afterChanged(const int pin, const int value, const String mode)
         sinricTemperaturesensor();
 #endif
 #endif
-    checkTrigger(pin, value);
 #ifdef ALEXA
     alexaTrigger(pin, value);
 #endif
@@ -474,17 +469,6 @@ void Homeware::afterChanged(const int pin, const int value, const String mode)
     Protocol::afterChanged(pin, value, mode);
 }
 
-int Homeware::readPin(const int pin, const String mode)
-{
-    String md = mode;
-    int newValue = 0;
-    if (!md || md == "")
-        md = getMode()[String(pin)].as<String>();
-
-    newValue = Protocol::readPin(pin, md);
-
-    return newValue;
-}
 
 Homeware homeware;
 #ifdef ESP32
