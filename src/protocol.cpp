@@ -640,6 +640,20 @@ String Protocol::localIP()
     return "";
 }
 
+int convertOnOff(String pin)
+{
+    pin.toLowerCase();
+    if (pin == "on" || pin == "high" || pin == "1")
+    {
+        return 1;
+    }
+    else if (pin == "off" || pin == "low" || pin == "0")
+    {
+        return 0;
+    }
+    return pin.toInt();
+}
+
 String Protocol::doCommand(String command)
 {
     if (command.startsWith("SERIAL "))
@@ -754,7 +768,7 @@ String Protocol::doCommand(String command)
                 timeout = cmd[5].toInt();
             if (cmd[2] == "set")
             {
-                int value = cmd[3].toInt();
+                int value = convertOnOff(cmd[3]);
                 int rsp = writePWM(pin, value, timeout);
                 return String(rsp);
             }
@@ -796,7 +810,7 @@ String Protocol::doCommand(String command)
                     }
                     else if (cmd[2] == "set" && drv->isSet())
                     {
-                        return String(drv->writePin(pin, cmd[3].toInt()));
+                        return String(drv->writePin(pin, convertOnOff(cmd[3])));
                     }
                     else if (cmd[2] == "get" && drv->isStatus())
                     {

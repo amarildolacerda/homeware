@@ -34,7 +34,6 @@ public:
     }
     void setPinMode(int pin) override
     {
-        Serial.print("InDriver.setPinMode()");
         InOutDriver::setPinMode(pin);
         pinMode(pin, INPUT);
     }
