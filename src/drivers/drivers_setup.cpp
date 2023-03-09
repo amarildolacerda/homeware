@@ -5,8 +5,7 @@
 
 //=================drivers
 #include "drivers/drv_adc.h"
-#include "drivers/drv_in.h"
-#include "drivers/drv_out.h"
+#include "drivers/drv_in_out.h"
 #include "drivers/drv_led.h"
 
 #ifdef LCTECHRELAY
@@ -40,16 +39,20 @@ ADCDriver adc_;
 InDriver in_;
 OutDriver out_;
 LedDriver led_;
+DownDriver down_;
+UpDriver up_;
 
 void drivers_register()
 {
 
     Drivers *driv = getDrivers();
-// defaults
+    // defaults
     driv->add(&adc_);
     driv->add(&in_);
     driv->add(&out_);
     driv->add(&led_);
+    driv->add(&down_);
+    driv->add(&up_);
 
 #ifdef LCTECHRELAY
     driv->add(&lcTech_);
