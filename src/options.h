@@ -4,8 +4,13 @@
 #define LABEL String(getChipId(), HEX)
 #define VERSION "23.03.08.9"
 #define WIFI_ENABLED
+#define BOARD_MIN
+//#define DRIVERS_ENABLED
+#define SINRIC
+#define TELNET
 
 //********************************** boards
+
 #if defined(ARDUINO_ESP8266_NODEMCU)
 #define BOARD_MIN
 #elif defined(ESP8266)
@@ -32,22 +37,23 @@
 #endif
 
 //*****************************************
-#define DRIVERS_ENABLED
 
 #ifdef WIFI_ENABLED
 #define PORTAL
 #define ALEXA
-#define SINRIC
 #define OTA
 #define WEBSOCKET
-#define TELNET
+#endif
+
+#ifdef BOARD_MIN
+#undef SINRIC
+#undef TELNET
 #endif
 
 #ifdef DRIVERS_ENABLED
 #define DHT_SENSOR
 #define GROOVE_ULTRASONIC
 #endif
-// #define MQTT
 
 #if defined(ESP8285) || defined(BOARD_MIN)
 #undef SINRIC
