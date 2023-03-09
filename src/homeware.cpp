@@ -374,6 +374,7 @@ void Homeware::setupSensores()
 {
     Serial.print("Ativando sensores: ");
     JsonObject devices = getDevices();
+    alexa.setFriendlyName(config["label"]);
     for (JsonPair k : devices)
     {
         debug(stringf("%s is %s\r\n", k.key().c_str(), k.value().as<String>()));
