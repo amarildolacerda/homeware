@@ -8,6 +8,8 @@
 #endif
 
 #define VERSION "23.03.09.10"
+
+#if defined(ESP8266) || defined(ESP32)
 #define WIFI_ENABLED
 #define BOARD_MIN // usar no SONOFF
 #define DRIVERS_ENABLED
@@ -16,11 +18,9 @@
 #define LCTECHRELAY
 #define USE_PIN_NAMES
 #define LITTLEFS
-
-#if defined(ARDUINO_AVR_PRO)
-#define ARDUINO_AVR
-
+#else
 #endif
+#define ARDUINO_AVR
 
 //********************************** boards
 

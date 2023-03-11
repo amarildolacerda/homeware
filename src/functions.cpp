@@ -5,6 +5,8 @@
 #include "LittleFS.h"
 #endif
 
+
+
 #ifdef ESP32
 const char *getChipId() { return ESP.getChipModel(); }
 
@@ -26,6 +28,9 @@ char *stringf(const char *format, ...)
 
     return buffer;
 }
+
+
+
 
 String *split(String s, const char delimiter)
 {

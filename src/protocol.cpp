@@ -185,7 +185,7 @@ void Protocol::debug(String txt)
     {
         print(txt);
     }
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     else
 
         if (config["debug"] == "term" || erro)
@@ -228,7 +228,7 @@ void Protocol::checkTrigger(int pin, int value)
 {
     if (inCheckTrigger)
         return;
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     try
     {
 #endif
@@ -254,7 +254,7 @@ void Protocol::checkTrigger(int pin, int value)
             else if (pinTo.toInt() != pin)
                 writePin(pinTo.toInt(), v);
         }
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     }
     catch (char &e)
     {
@@ -431,7 +431,7 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     return true;
 }
 
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
 void driverCallbackEventFunc(String mode, int pin, int value)
 {
     getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
@@ -450,7 +450,7 @@ void Protocol::setup()
     debug("Registrando os drivers: ");
     drivers_register();
 
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     analogWriteRange(256);
 
     for (Driver *drv : getDrivers()->items)
@@ -691,7 +691,7 @@ String Protocol::doCommand(String command)
         Serial.print(command);
         return "OK";
     }
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     try
     {
 #endif
@@ -707,20 +707,27 @@ String Protocol::doCommand(String command)
         }
         else
 #endif
+#ifndef ARDUINO_AVR
             if (cmd[0] == "open")
         {
             char json[1024];
             readFile(cmd[1], json, 1024);
             return String(json);
         }
-        else if (cmd[0] == "version")
+        else
+
+            if (cmd[0] == "version")
         {
             return VERSION;
         }
-        else if (cmd[0] == "help")
+        else
+#endif
+            if (cmd[0] == "help")
             return help();
         else if (cmd[0] == "show")
         {
+#ifndef ARDUINO_AVR
+
             Serial.println("show: " + command);
 
             if (cmd[1] == "resources")
@@ -729,7 +736,9 @@ String Protocol::doCommand(String command)
             {
                 return getStatus();
             }
-            else if (cmd[1] == "config")
+            else
+#endif
+                if (cmd[1] == "config")
                 return config.as<String>();
             else if (cmd[1] == "gpio")
                 return showGpio();
@@ -738,8 +747,13 @@ String Protocol::doCommand(String command)
             sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
             return buffer;
         }
-        else if (cmd[0] == "reset")
+#ifndef ARDUINO_AVR
+
+        else
+#endif
+            if (cmd[0] == "reset")
         {
+#ifndef ARDUINO_AVR
             if (cmd[1] == "wifi")
             {
                 resetWiFi();
@@ -750,11 +764,14 @@ String Protocol::doCommand(String command)
                 defaultConfig();
                 return "OK";
             }
+#endif
             print("reiniciando...");
             delay(1000);
             reset();
             return "OK";
         }
+#ifndef ARDUINO_AVR
+
         else if (cmd[0] == "save")
         {
             return saveConfig();
@@ -768,6 +785,7 @@ String Protocol::doCommand(String command)
             config["debug"] = cmd[1];
             return "OK";
         }
+#endif
         else if (cmd[0] == "set")
         {
             Serial.println("set: " + command);
@@ -885,6 +903,7 @@ String Protocol::doCommand(String command)
                 else
                     return "driver indisponivel";
             }
+#ifndef ARDUINO_AVR
             else if (cmd[2] == "device")
             {
 
@@ -912,6 +931,7 @@ String Protocol::doCommand(String command)
                 sensors[spin] = cmd[3];
                 return "OK";
             }
+#endif
             else if (cmd[2] == "default")
             {
                 JsonObject d = getDefaults();
@@ -937,7 +957,7 @@ String Protocol::doCommand(String command)
             }
         }
         return "invalido";
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     }
     catch (const char *e)
     {
@@ -946,16 +966,17 @@ String Protocol::doCommand(String command)
 #endif
 }
 
+#ifndef ARDUINO_AVR
 void Protocol::resetWiFi()
 {
     // noop
 }
-
 void Protocol::printConfig()
 {
 
     serializeJson(config, Serial);
 }
+#endif
 
 void lerSerial()
 {
@@ -975,7 +996,7 @@ void lerSerial()
             if (!rsp.startsWith("invalid"))
                 protocol->debug("SER: " + rsp);
         }
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
 
         else if (protocol->debugCallback)
             protocol->debugCallback(cmd);
@@ -1026,7 +1047,7 @@ void Protocol::eventLoop()
 {
 
     unsigned long interval = 500;
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     try
     {
 #endif
@@ -1048,7 +1069,7 @@ void Protocol::eventLoop()
             afterLoop();
         }
 
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     }
     catch (const char *e)
     {

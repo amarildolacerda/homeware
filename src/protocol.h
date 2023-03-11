@@ -69,7 +69,7 @@ public:
     virtual bool pinValueChanged(const int pin, const int value, bool exectrigger = true);
     virtual void reset();
     virtual void setupPins();
-#if defined(ESP8266) || defined(ESP32)
+#ifndef ARDUINO_AVR
     callbackDebugFunction debugCallback;
     virtual void driverCallbackEvent(String mode, int pin, int value);
 #endif
@@ -105,9 +105,10 @@ protected:
     String saveConfig();
     void errorMsg(String msg);
     virtual String localIP();
+#ifndef ARDUINO_AVR
     virtual void resetWiFi();
     void printConfig();
-
+#endif
     JsonObject getValues();
     bool readFile(String filename, char *buffer, size_t maxLen);
 
