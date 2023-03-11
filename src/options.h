@@ -4,11 +4,17 @@
 #define LABEL String(getChipId(), HEX)
 #define VERSION "23.03.09.10"
 #define WIFI_ENABLED
-//#define BOARD_MIN
+#define BOARD_MIN   // usar no SONOFF
 #define DRIVERS_ENABLED
 #define SINRIC
 #define TELNET
 #define LCTECHRELAY
+#define USE_PIN_NAMES
+
+#if defined(ARDUINO_AVR_PRO)
+#define ARDUINO_AVR
+
+#endif
 
 //********************************** boards
 
@@ -31,6 +37,11 @@
 #undef ESP8285
 #endif
 
+#if defined(ARDUINO_AVR)
+#undef WIFI_ENABLED
+#undef DRIVERS_ENABLED
+#undef BOARD_MIN
+#endif
 
 #ifdef BOARD_ESP12S
 #undef WEMO_D1
@@ -48,6 +59,7 @@
 
 #ifdef BOARD_MIN
 #undef SINRIC
+#undef USE_PIN_NAMES
 //#undef WEBSOCKET
 #endif
 
