@@ -11,7 +11,6 @@
 
 #include <ArduinoJson.h>
 #include <options.h>
-#include <ArduinoJson.h>
 
 #ifdef TELNET
 #include "ESPTelnet.h"
@@ -22,7 +21,7 @@ typedef void (*callbackDebugFunction)(String texto);
 class Protocol
 {
 private:
-    public : callbackDebugFunction debugCallback;
+public:
 
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
@@ -70,7 +69,10 @@ private:
     virtual bool pinValueChanged(const int pin, const int value, bool exectrigger = true);
     virtual void reset();
     virtual void setupPins();
+#if defined(ESP8266) || defined(ESP32)
+    callbackDebugFunction debugCallback;
     virtual void driverCallbackEvent(String mode, int pin, int value);
+#endif
     String getKey(String name)
     {
         return config[name];

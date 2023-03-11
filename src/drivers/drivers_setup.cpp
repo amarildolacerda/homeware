@@ -6,9 +6,10 @@
 //=================drivers
 #include "drivers/drv_adc.h"
 #include "drivers/drv_in_out.h"
+
+#if defined(ESP8266) || defined(ESP32)
 #include "drivers/drv_led.h"
 #include "drivers/drv_srn.h"
-
 #ifdef LCTECHRELAY
 #include "drivers/drv_lctech.h"
 LCTechRelayDriver lcTech_;
@@ -20,6 +21,7 @@ DHTDriver dht_;
 #ifdef GROOVE_ULTRASONIC
 #include <drivers/drv_groover_ultrasonic.h>
 GrooverUltrasonicDriver gus_ = GrooverUltrasonicDriver();
+#endif
 #endif
 
 #ifdef DRIVERS_ENABLED
@@ -39,11 +41,13 @@ PWMDriver pwm_;
 ADCDriver adc_;
 InDriver in_;
 OutDriver out_;
+#if defined(ESP8266) || defined(ESP32)
 LedDriver led_;
 DownDriver down_;
 UpDriver up_;
 SireneDriver srn_;
 PulseDriver pls_;
+#endif
 
 void drivers_register()
 {
@@ -53,12 +57,12 @@ void drivers_register()
     driv->add(&adc_);
     driv->add(&in_);
     driv->add(&out_);
+#if defined(ESP8266) || defined(ESP32)
     driv->add(&led_);
     driv->add(&down_);
     driv->add(&up_);
     driv->add(&srn_);
     driv->add(&pls_);
-
 #ifdef LCTECHRELAY
     driv->add(&lcTech_);
 #endif
@@ -76,4 +80,5 @@ void drivers_register()
     driv->add(&pwm_);
     driv->add(&rst_);
 #endif // DRIVER_ENABLED
+#endif
 }

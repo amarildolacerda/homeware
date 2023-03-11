@@ -1,7 +1,14 @@
+#include "options.h"
+
+#ifdef ARDUINO_AVR
+
+
+#else
+
+
 #include <Arduino.h>
 #include <portal.h>
 #include <functions.h>
-#include "options.h"
 // #include <wm_strings_pt_BR.h>
 #include <homeware.h>
 
@@ -449,3 +456,4 @@ void Portal::setupServer()
 }
 
 Portal portal;
+#endif

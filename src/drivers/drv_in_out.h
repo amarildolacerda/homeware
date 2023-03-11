@@ -49,7 +49,11 @@ public:
     void setPinMode(int pin) override
     {
         InOutDriver::setPinMode(pin);
+#ifdef ARDUINO_AVR
+        pinMode(pin, INPUT);
+#else
         pinMode(pin, INPUT_PULLDOWN_16);
+#endif
     }
 };
 class UpDriver : public InOutDriver

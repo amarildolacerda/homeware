@@ -2,8 +2,10 @@
 
 #include "protocol.h"
 #include <functions.h>
+
+#ifdef LITTLEFS
 #include <LittleFS.h>
-#include <list>
+#endif
 
 unsigned int timeoutDeepSleep = 10000;
 
@@ -183,12 +185,17 @@ void Protocol::debug(String txt)
     {
         print(txt);
     }
-    else if (config["debug"] == "term" || erro)
+#if defined(ESP8266) || defined(ESP32)
+    else
+
+        if (config["debug"] == "term" || erro)
     {
+
         if (debugCallback)
             debugCallback("INF: " + txt);
         Serial.print(txt);
     }
+#endif
     else
         Serial.print(txt);
 }
@@ -221,8 +228,10 @@ void Protocol::checkTrigger(int pin, int value)
 {
     if (inCheckTrigger)
         return;
+#if defined(ESP8266) || defined(ESP32)
     try
     {
+#endif
         inCheckTrigger = true;
         String p = String(pin);
         JsonObject trig = getTrigger();
@@ -245,10 +254,12 @@ void Protocol::checkTrigger(int pin, int value)
             else if (pinTo.toInt() != pin)
                 writePin(pinTo.toInt(), v);
         }
+#if defined(ESP8266) || defined(ESP32)
     }
     catch (char &e)
     {
     }
+#endif
     inCheckTrigger = false;
 }
 
@@ -348,23 +359,32 @@ void Protocol::resetDeepSleep(const unsigned int t)
 
 void Protocol::doSleep(const int tempo)
 {
+#ifdef ARDUINO_AVR
+#else
     if (millis() > sleeptmp)
     {
         print("sleeping");
         ESP.deepSleep(tempo * 1000 * 1000);
     }
+#endif
 }
 const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
     "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
     "gpio <pin> defult <n>(usado no setup)\r\n"
+#ifdef GOOVER_ULTRASONIC
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
+#endif
     "gpio <pin> trigger <pin> [monostable,bistable]\r\n"
+#ifdef ALEXA
     "gpio <pin> device <onoff,dimmable> (usado na alexa)\r\n"
+#endif
+#ifdef SINRIC
     "set app_key <x> (SINRIC)\r\n"
     "set app_secret <x> (SINRIC)\r\n"
     "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
+#endif
     "gpio <pin> get\r\n"
     "gpio <pin> set <n>\r\n"
     "version\r\n"
@@ -380,12 +400,15 @@ const char HELP[] =
 
 String Protocol::help()
 {
-    String s = FPSTR(HELP);
+    String s = HELP;
     return s;
 }
 
 bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 {
+#ifdef ARDUINO_AVR
+
+#else
 #ifdef ESP32
 
     File file = SPIFFS.open(filename, "r");
@@ -404,19 +427,21 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     file.readBytes(buffer, len); //(buffer, len);
     buffer[len] = 0;
     file.close();
+#endif
     return true;
 }
 
+#if defined(ESP8266) || defined(ESP32)
 void driverCallbackEventFunc(String mode, int pin, int value)
 {
     getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
 }
-
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
     debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
     checkTrigger(pin, value);
 }
+#endif
 
 void Protocol::setup()
 {
@@ -425,14 +450,14 @@ void Protocol::setup()
     debug("Registrando os drivers: ");
     drivers_register();
 
-#ifdef ESP8266
+#if defined(ESP8266) || defined(ESP32)
     analogWriteRange(256);
-#endif
-    afterSetup();
+
     for (Driver *drv : getDrivers()->items)
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
-
+#endif
+    afterSetup();
     debugln("OK");
 }
 
@@ -443,6 +468,9 @@ void Protocol::afterConfigChanged()
 
 String Protocol::restoreConfig()
 {
+#ifdef ARDUINO_AVR
+
+#else
     String rt = "nao restaurou config";
     Serial.println("");
     // linha();
@@ -482,6 +510,8 @@ String Protocol::restoreConfig()
     Serial.println("");
     afterConfigChanged();
     return rt;
+#endif
+    return "";
 }
 
 DynamicJsonDocument Protocol::baseConfig()
@@ -520,6 +550,8 @@ DynamicJsonDocument Protocol::baseConfig()
 
 String Protocol::saveConfig()
 { // TODO: ajustar para gravar somente os alterado e reduzir uso de espaço.
+#ifdef ARDUINO_AVR
+#else
     String rsp = "OK";
     DynamicJsonDocument doc = baseConfig();
     DynamicJsonDocument base = DynamicJsonDocument(SIZE_BUFFER);
@@ -543,6 +575,8 @@ String Protocol::saveConfig()
     file.close();
     afterConfigChanged();
     return rsp;
+#endif
+    return "";
 }
 
 void Protocol::defaultConfig()
@@ -657,8 +691,10 @@ String Protocol::doCommand(String command)
         Serial.print(command);
         return "OK";
     }
+#if defined(ESP8266) || defined(ESP32)
     try
     {
+#endif
         resetDeepSleep();
         String *cmd = split(command, ' ');
         Serial.print("CMD: ");
@@ -901,11 +937,13 @@ String Protocol::doCommand(String command)
             }
         }
         return "invalido";
+#if defined(ESP8266) || defined(ESP32)
     }
     catch (const char *e)
     {
         return String(e);
     }
+#endif
 }
 
 void Protocol::resetWiFi()
@@ -937,8 +975,11 @@ void lerSerial()
             if (!rsp.startsWith("invalid"))
                 protocol->debug("SER: " + rsp);
         }
+#if defined(ESP8266) || defined(ESP32)
+
         else if (protocol->debugCallback)
             protocol->debugCallback(cmd);
+#endif
     }
 }
 
@@ -948,26 +989,20 @@ void Protocol::loop()
 
     if (inLooping)
         return;
-    try
-    {
-        inLooping = true;
-        if (!inited)
-            begin();
-        lerSerial();
+    inLooping = true;
+    if (!inited)
+        begin();
+    lerSerial();
 #ifdef TELNET
-        telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
+    telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
-        eventLoop();
+    eventLoop();
 
-        //=========================== usado somente quando conectado
-        if (connected)
-        {
-        }
-        getDrivers()->loop();
-    }
-    catch (int &e)
+    //=========================== usado somente quando conectado
+    if (connected)
     {
     }
+    getDrivers()->loop();
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0)
         doSleep(sleep);
@@ -991,8 +1026,10 @@ void Protocol::eventLoop()
 {
 
     unsigned long interval = 500;
+#if defined(ESP8266) || defined(ESP32)
     try
     {
+#endif
         if (containsKey("interval"))
         {
             interval = getKey("interval").toInt();
@@ -1010,9 +1047,12 @@ void Protocol::eventLoop()
             eventLoopMillis = millis();
             afterLoop();
         }
+
+#if defined(ESP8266) || defined(ESP32)
     }
     catch (const char *e)
     {
         print(String(e));
     }
+#endif
 }

@@ -1,4 +1,8 @@
 #pragma once
+#include <options.h>
+#ifdef ARDUINO_AVR
+// nada aqui para AVR
+#else
 
 #ifdef ESP32
 #include "WiFi.h"
@@ -9,7 +13,6 @@
 #endif
 
 #include "homewareWiFiManager.h"
-#include <options.h>
 
 #include <ArduinoJson.h>
 
@@ -21,11 +24,10 @@
 
 #include <protocol.h>
 
-
 void linha();
 String IPAddressToString(const IPAddress x);
 
-    class Homeware : public Protocol
+class Homeware : public Protocol
 {
 public:
 #ifdef ESP32
@@ -74,4 +76,5 @@ extern Homeware homeware;
 extern WebServer server;
 #else
 extern ESP8266WebServer server;
+#endif
 #endif

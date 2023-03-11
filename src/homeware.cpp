@@ -1,6 +1,10 @@
+#include "options.h"
+#ifdef ARDUINO_AVR
+
+#else
+
 #include <homeware.h>
 #include <functions.h>
-#include "options.h"
 
 #include "drivers.h"
 
@@ -476,4 +480,5 @@ Homeware homeware;
 WebServer server;
 #else
 ESP8266WebServer server;
+#endif
 #endif
