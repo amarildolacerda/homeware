@@ -78,14 +78,13 @@ void Protocol::initPinMode(int pin, const String m)
 int Protocol::writePin(const int pin, const int value)
 {
     String mode = getMode()[String(pin)];
-    int v = value;
 
     if (mode != NULL)
     {
         Driver *drv = getDrivers()->findByMode(mode);
         if (drv && drv->isSet())
         {
-            v = drv->writePin(pin, value);
+            drv->writePin(pin, value);
         }
 
         else
@@ -958,7 +957,7 @@ void Protocol::loop()
 #ifdef TELNET
         telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
-        loopEvent();
+        eventLoop();
 
         //=========================== usado somente quando conectado
         if (connected)
@@ -988,7 +987,7 @@ void Protocol::afterLoop()
     // usado na herança
 }
 
-void Protocol::loopEvent()
+void Protocol::eventLoop()
 {
 
     unsigned long interval = 500;
@@ -1000,7 +999,7 @@ void Protocol::loopEvent()
         }
         if (interval < 50)
             interval = 50;
-        if (millis() - loopEventMillis > interval)
+        if (millis() - eventLoopMillis > interval)
         {
             JsonObject mode = config["mode"];
             for (JsonPair k : mode)
@@ -1008,7 +1007,7 @@ void Protocol::loopEvent()
                 // Serial.printf("readPin(%s, %s)\r\n", k.key().c_str(), k.value().as<String>());
                 readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
             }
-            loopEventMillis = millis();
+            eventLoopMillis = millis();
             afterLoop();
         }
     }

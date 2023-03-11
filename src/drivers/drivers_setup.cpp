@@ -43,7 +43,7 @@ LedDriver led_;
 DownDriver down_;
 UpDriver up_;
 SireneDriver srn_;
-
+PulseDriver pls_;
 
 void drivers_register()
 {
@@ -57,6 +57,7 @@ void drivers_register()
     driv->add(&down_);
     driv->add(&up_);
     driv->add(&srn_);
+    driv->add(&pls_);
 
 #ifdef LCTECHRELAY
     driv->add(&lcTech_);

@@ -39,12 +39,11 @@ public:
     }
     int readPin(const int pin) override
     {
-        setPin(pin);
         return onOffStatus;
     }
     int writePin(const int pin, const int value) override
     {
-        Serial.printf("mudou %i para %i", pin, value);
+        // Serial.printf("mudou %i para %i", pin, value);
         onOffStatus = (value > 0); // ativa o loop modo sirene
         if (onOffStatus)
             iniciadoEm = millis();
@@ -52,5 +51,24 @@ public:
         ultimoChanged = millis();
         curStatus = onOffStatus;
         return onOffStatus;
+    }
+};
+
+class PulseDriver : public SireneDriver
+{
+public:
+    PulseDriver()
+    {
+        setMode("pulse");
+        interval = 10000;
+    }
+    void setup() override
+    {
+        AlternateDriver::setup();
+        Protocol *prot = getProtocol();
+        if (prot->containsKey("pulse_duration"))
+            interval = prot->getKey("pulse_duration").toInt();
+        desligarDepoisDe = interval;
+        setV1(interval);
     }
 };

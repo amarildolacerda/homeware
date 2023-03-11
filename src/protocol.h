@@ -22,8 +22,7 @@ typedef void (*callbackDebugFunction)(String texto);
 class Protocol
 {
 private:
-public:
-    callbackDebugFunction debugCallback;
+    public : callbackDebugFunction debugCallback;
 
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
@@ -31,7 +30,7 @@ public:
     unsigned int currentAdcState = 0;
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
     unsigned int ledTimeChanged = 5000;
-    unsigned int loopEventMillis = millis();
+    unsigned int eventLoopMillis = millis();
     bool inited = false;
     bool connected = false;
 
@@ -68,7 +67,7 @@ public:
     virtual int switchPin(const int pin);
     virtual String getPinMode(const int pin);
     virtual void loop();
-    virtual bool pinValueChanged(const int pin, const int value, bool exectrigger);
+    virtual bool pinValueChanged(const int pin, const int value, bool exectrigger = true);
     virtual void reset();
     virtual void setupPins();
     virtual void driverCallbackEvent(String mode, int pin, int value);
@@ -116,7 +115,7 @@ private:
 #ifdef TELNET
     void setupTelnet();
 #endif
-    void loopEvent();
+    void eventLoop();
     String getStatus();
     String showGpio();
 };
