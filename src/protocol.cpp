@@ -439,6 +439,7 @@ void Protocol::setup()
 
 void Protocol::afterConfigChanged()
 {
+    getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
 }
 
 String Protocol::restoreConfig()
@@ -743,7 +744,7 @@ String Protocol::doCommand(String command)
             else
             {
                 config[cmd[1]] = cmd[2];
-                printConfig();
+                getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
             }
             return "OK";
         }

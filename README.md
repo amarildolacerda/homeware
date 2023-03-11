@@ -19,7 +19,7 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
    
 <pre>
  *   show config 
- *   gpio [pin] mode [in,out,pwm,adc,lc,ldr,led,dht,rst]
+ *   gpio [pin] mode [in,out,pwm,adc,lc,ldr,led,dht,rst,srn]
  *   gpio [pin] default [n](usado no setup inicial)
  *   gpio [pin] mode gus (opcional groove ultrasonic)
  *   gpio [pin] trigger [pinTrigger] [monostable,bistable] -> indica que [pin] ira acionar [pinTrigger] sempre que houver uma mudança de estado de [pin]
@@ -35,6 +35,8 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   set adc_max 512
  *   set sleep 60 (estabele 60s para deepsleep - depende de conectar RST ao D0)
 </pre>
+
+Uma trigger "bistable" indica que é para funcionar como um switch (troca o estado quando seu acionador estiver ligado-HIGH ). Uma trigger monostable aciona com o mesmo valor do seu acionador, se ligado - liga, se desligado - deliga;
 
 
 # Drivers
@@ -60,6 +62,13 @@ O LDR mede a intensidade de luz do ambiente.
 * set ldr_max <n>  -> limite superior para disparar o gatilho HIGH
 *   nas faixa intermediarias o gatilho será em LOW
 
+## SRN - Sirene
+O SRN é um driver de acionamento de sirene com liga e desliga intermitente
+* gpio <pin> mode srn -> ativa modo sirene
+* set srn_interval <ms> -> indica o intervalo entre liga e desliga (1000)
+* set srn_duration <ms> -> indica o tempo que ira desligar automatico, "0" indica desligamento manual (60000)
+
+Uma sirene pode ser combinado com outro evento que dispara ou desliga a sirene ex: detecta o nivel de agua e dispara a sirene   [gpio 2 trigger 4 bistable]
 # Contribuindo
 Se você gostaria de contribuir para o Homeware para Arduino, por favor, crie uma nova issue descrevendo o que você gostaria de adicionar ou consertar. Em seguida, crie um fork do repositório e faça suas alterações em um branch separado. Quando terminar, abra um pull request para revisão.
 

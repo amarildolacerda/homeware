@@ -45,6 +45,7 @@ public:
         {
             curStatus = false;
             digitalWrite(curPin, curStatus);
+            ultimoChanged = 0;
         }
         else
         {
