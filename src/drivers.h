@@ -16,14 +16,14 @@ private:
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
     callbackFunction triggerCallback;
+    long v1 = 0;
 
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
 
     bool triggerEnabled = false;
     bool active = false;
-    long v1 = 0;
-    void setV1(long x) { v1 = x; }
+    virtual void setV1(long x) { v1 = x; }
     virtual void setPinMode(int pin)
     {
         setPin(pin);

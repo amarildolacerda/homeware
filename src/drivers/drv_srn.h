@@ -10,14 +10,19 @@ public:
 public:
     SireneDriver()
     {
-        Driver::setV1(1000);
-        Driver::setMode("srn");
+        setV1(1000);
+        setMode("srn");
     }
     void loop() override
     {
         if (!onOffStatus)
             return; // Sirene não esta ligada
-        AlternateDriver::loop();
+        internalLoop(curPin);
+    }
+    int readPin(const int pin) override
+    {
+        setPin(pin);
+        return onOffStatus;
     }
     int writePin(const int pin, const int value) override
     {

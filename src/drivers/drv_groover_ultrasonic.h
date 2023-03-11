@@ -36,7 +36,7 @@ public:
         Driver::setPin(pin);
         try
         {
-            Protocol *protocol = getProtocol();
+           // Protocol *protocol = getProtocol();
             if (millis() - ultimo_ultrasonic > interval)
             {
                 Ultrasonic ultrasonic(pin);

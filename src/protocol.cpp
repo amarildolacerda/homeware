@@ -329,11 +329,6 @@ void Protocol::setupPins()
     {
         int pin = String(k.key().c_str()).toInt();
         initPinMode(pin, k.value().as<String>());
-        int trPin = getTrigger()[String(pin)];
-        if (trPin)
-        {
-            initPinMode(trPin, "out");
-        }
     }
     for (JsonPair k : getDefaults())
     {
@@ -1009,6 +1004,7 @@ void Protocol::loopEvent()
             JsonObject mode = config["mode"];
             for (JsonPair k : mode)
             {
+                // Serial.printf("readPin(%s, %s)\r\n", k.key().c_str(), k.value().as<String>());
                 readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
             }
             loopEventMillis = millis();

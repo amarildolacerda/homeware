@@ -8,9 +8,25 @@ protected:
     int curPin = -1;
     bool curStatus = false;
     unsigned long ultimoChanged = 0;
-    int interval = 1000;
+    unsigned long interval = 1000;
 
 public:
+    AlternateDriver()
+    {
+        v1 = 5000;
+    }
+    void setV1(long v) override
+    {
+        if (v < 1000)
+            return;
+        v1 = v;
+    }
+    virtual void setPinMode(int pin) override
+    {
+        pinMode(pin, OUTPUT);
+        Driver::setPinMode(pin);
+    }
+
     virtual int readPin(const int pin) override
     {
         Driver::setPin(pin);
@@ -25,33 +41,25 @@ public:
         curPin = pin;
         if (pin == 255 || pin < 0)
             curPin = getProtocol()->findPinByMode(getMode());
-        if (curPin > -1)
+        if (pin < 0)
         {
-            if (pin < 0)
+            curStatus = false;
+            digitalWrite(curPin, curStatus);
+        }
+        else
+        {
+            if ((millis() - ultimoChanged > v1) || (curStatus && millis() - ultimoChanged > interval))
             {
-                curStatus = false;
+                curStatus = !curStatus;
                 digitalWrite(curPin, curStatus);
-            }
-            else
-            {
-                if (millis() - ultimoChanged > v1)
-                {
-                    curStatus = true;
-                    digitalWrite(curPin, curStatus);
-                    ultimoChanged = millis();
-                }
-                else if (curStatus && millis() - ultimoChanged > interval)
-                {
-                    curStatus = false;
-                    digitalWrite(curPin, curStatus);
-                    ultimoChanged = millis();
-                }
+                ultimoChanged = millis();
             }
         }
         return curStatus;
     }
     bool isGet() override { return true; }
-    bool isSet() override { return false; }
+    bool isSet() override { return true; }
+    bool isLoop() override { return true; }
 };
 
 class LedDriver : public AlternateDriver
