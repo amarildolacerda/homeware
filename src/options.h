@@ -2,12 +2,13 @@
 
 #include <Arduino.h>
 #define LABEL String(getChipId(), HEX)
-#define VERSION "23.03.08.9"
+#define VERSION "23.03.09.10"
 #define WIFI_ENABLED
-#define BOARD_MIN
-//#define DRIVERS_ENABLED
+//#define BOARD_MIN
+#define DRIVERS_ENABLED
 #define SINRIC
 #define TELNET
+#define LCTECHRELAY
 
 //********************************** boards
 
@@ -47,7 +48,7 @@
 
 #ifdef BOARD_MIN
 #undef SINRIC
-#undef TELNET
+//#undef WEBSOCKET
 #endif
 
 #ifdef DRIVERS_ENABLED

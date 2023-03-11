@@ -7,6 +7,7 @@
 #include "drivers/drv_adc.h"
 #include "drivers/drv_in_out.h"
 #include "drivers/drv_led.h"
+#include "drivers/drv_srn.h"
 
 #ifdef LCTECHRELAY
 #include "drivers/drv_lctech.h"
@@ -41,6 +42,8 @@ OutDriver out_;
 LedDriver led_;
 DownDriver down_;
 UpDriver up_;
+SireneDriver srn_;
+
 
 void drivers_register()
 {
@@ -53,6 +56,7 @@ void drivers_register()
     driv->add(&led_);
     driv->add(&down_);
     driv->add(&up_);
+    driv->add(&srn_);
 
 #ifdef LCTECHRELAY
     driv->add(&lcTech_);

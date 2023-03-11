@@ -2,62 +2,64 @@
 
 #include <protocol.h>
 
-#define ledTimeout 1000
-
-class LedDriver : public Driver
+class AlternateDriver : public Driver
 {
-private:
-    int ledPin = -1;
-    bool ledStatus = false;
-    unsigned long ultimoLedChanged = 0;
+protected:
+    int curPin = -1;
+    bool curStatus = false;
+    unsigned long ultimoChanged = 0;
+    int interval = 1000;
 
 public:
-    void
-    setup() override
-    {
-        Driver::setV1(5000);
-        Driver::setMode("led");
-        Driver::setup();
-    }
-    int readPin(const int pin) override
+    virtual int readPin(const int pin) override
     {
         Driver::setPin(pin);
-        return ledLoop(pin);
+        return internalLoop(pin);
     }
-    void loop() override
+    virtual void loop() override
     {
-        ledLoop(ledPin);
+        internalLoop(curPin);
     }
-    int ledLoop(const int pin = 255)
+    virtual int internalLoop(const int pin = 255)
     {
-        ledPin = pin;
+        curPin = pin;
         if (pin == 255 || pin < 0)
-            ledPin = getProtocol()->findPinByMode("led");
-        if (ledPin > -1)
+            curPin = getProtocol()->findPinByMode(getMode());
+        if (curPin > -1)
         {
             if (pin < 0)
             {
-                ledStatus = false;
-                digitalWrite(ledPin, ledStatus);
+                curStatus = false;
+                digitalWrite(curPin, curStatus);
             }
             else
             {
-                if (millis() - ultimoLedChanged > v1)
+                if (millis() - ultimoChanged > v1)
                 {
-                    ledStatus = true;
-                    digitalWrite(ledPin, ledStatus);
-                    ultimoLedChanged = millis();
+                    curStatus = true;
+                    digitalWrite(curPin, curStatus);
+                    ultimoChanged = millis();
                 }
-                else if (ledStatus && millis() - ultimoLedChanged > ledTimeout)
+                else if (curStatus && millis() - ultimoChanged > interval)
                 {
-                    ledStatus = false;
-                    digitalWrite(ledPin, ledStatus);
-                    ultimoLedChanged = millis();
+                    curStatus = false;
+                    digitalWrite(curPin, curStatus);
+                    ultimoChanged = millis();
                 }
             }
         }
-        return ledStatus;
+        return curStatus;
     }
     bool isGet() override { return true; }
     bool isSet() override { return false; }
+};
+
+class LedDriver : public AlternateDriver
+{
+public:
+    LedDriver()
+    {
+        Driver::setV1(5000);
+        Driver::setMode("led");
+    }
 };
