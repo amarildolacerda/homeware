@@ -1,26 +1,28 @@
 
 
 #include <Arduino.h>
+
+#define VERSION "23.03.11.11"
+
 #if defined(ESP8266) || defined(ESP32)
+#define WIFI_ENABLED
+#define BOARD_MIN
+#define SONOFF_BASIC
+#define DRIVERS_ENABLED
+#define SINRIC
+#define TELNET
+#define USE_PIN_NAMES
+#define LITTLEFS
+#define DRIVERS_EX
+#else
+#define ARDUINO_AVR
+#endif
+
+#ifndef ARDUINO_AVR
 #define LABEL String(getChipId(), HEX)
 #else
 #define LABEL "ARDUINO_AVR"
 #endif
-
-#define VERSION "23.03.09.10"
-
-#if defined(ESP8266) || defined(ESP32)
-#define WIFI_ENABLED
-#define BOARD_MIN // usar no SONOFF
-#define DRIVERS_ENABLED
-#define SINRIC
-#define TELNET
-#define LCTECHRELAY
-#define USE_PIN_NAMES
-#define LITTLEFS
-#else
-#endif
-#define ARDUINO_AVR
 
 //********************************** boards
 
@@ -77,19 +79,22 @@
 #define GROOVE_ULTRASONIC
 #endif
 
-#if defined(ESP8285) || defined(BOARD_MIN)
+#if defined(SONOFF_BASIC)
+#undef USE_PIN_NAMES
+#undef DRIVERS_EX
+#endif
+
+#if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC)
+#undef SINRIC
+#undef TELNET
+#undef DHT_SENSOR
+#undef GROOVE_ULTRASONIC
+#undef LCTECHRELAY
 #undef SINRIC
 #undef GROOVE_ULTRASONIC
 #undef MQTT
 #endif
 
-#if defined(BOARD_ESP12S) || defined(ESP8285)
-#undef SINRIC
-#undef TELNET
-#undef DHT_SENSOR
-#undef GROOVE_ULTRASONIC
-#endif
-
-#ifdef BOARD_ESP12S
+#if defined(BOARD_ESP12S)
 #define LCTECHRELAY
 #endif
