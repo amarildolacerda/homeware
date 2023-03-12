@@ -121,10 +121,13 @@ int Protocol::pinValue(const int pin)
 {
     return docPinValues[String(pin)];
 }
+
+#ifndef ARDUINO_AVR
 void Protocol::afterChanged(const int pin, const int value, const String mode)
 {
     // evento para ser herando
 }
+#endif
 
 String Protocol::getPinMode(const int pin)
 {
@@ -137,7 +140,9 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
+#ifndef ARDUINO_AVR
         afterChanged(pin, newValue, getPinMode(pin));
+#endif
         if (exectrigger)
             checkTrigger(pin, newValue);
         return true;
@@ -466,12 +471,13 @@ void Protocol::setup()
 #endif
 }
 
+#ifndef ARDUINO_AVR
+
 void Protocol::afterConfigChanged()
 {
     getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
 }
 
-#ifndef ARDUINO_AVR
 String Protocol::restoreConfig()
 {
 
@@ -687,6 +693,7 @@ String Protocol::localIP()
 
 int convertOnOff(String pin)
 {
+#ifndef ARDUINO_AVR
     pin.toLowerCase();
     if (pin == "on" || pin == "high" || pin == "1")
     {
@@ -696,6 +703,7 @@ int convertOnOff(String pin)
     {
         return 0;
     }
+#endif
     return pin.toInt();
 }
 
@@ -713,8 +721,6 @@ String Protocol::doCommand(String command)
         resetDeepSleep();
 #endif
         String *cmd = split(command, ' ');
-        Serial.print("CMD: ");
-        Serial.println(command);
 #ifdef ESP8266
         if (cmd[0] == "format")
         {
@@ -770,10 +776,9 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
 
         else
-#endif
+
             if (cmd[0] == "reset")
         {
-#ifndef ARDUINO_AVR
             if (cmd[1] == "wifi")
             {
                 resetWiFi();
@@ -784,15 +789,11 @@ String Protocol::doCommand(String command)
                 defaultConfig();
                 return "OK";
             }
-#endif
             print("reiniciando...");
             delay(1000);
-#ifndef ARDUINO_AVR
             reset();
-#endif
             return "OK";
         }
-#ifndef ARDUINO_AVR
 
         else if (cmd[0] == "save")
         {
@@ -810,8 +811,6 @@ String Protocol::doCommand(String command)
 #endif
         else if (cmd[0] == "set")
         {
-            Serial.println("set: " + command);
-
             if (cmd[2] == "none")
             {
                 config.remove(cmd[1]);
@@ -825,14 +824,10 @@ String Protocol::doCommand(String command)
         }
         else if (cmd[0] == "get")
         {
-            Serial.println("get: " + command);
-
             return config[cmd[1]];
         }
         else if (cmd[0] == "pwm")
         {
-            Serial.println("pwm: " + command);
-
             int pin = getPinByName(cmd[1]);
             int timeout = 0;
             if (cmd[4] == "until" || cmd[4] == "timeout")
@@ -851,23 +846,19 @@ String Protocol::doCommand(String command)
         }
         else if (cmd[0] == "switch")
         {
-            Serial.println("switch: " + command);
             int pin = getPinByName(cmd[1]);
             return String(switchPin(pin));
         }
         else if (cmd[0] == "gpio")
         {
-            Serial.println("gpio: " + command);
             int pin = getPinByName(cmd[1]);
             String spin = String(pin);
 
             if (cmd[2] == "get" || cmd[2] == "set")
             {
-                Serial.println("Busca de Drivers");
                 Driver *drv = getDrivers()->findByPin(pin);
                 if (drv)
                 {
-                    Serial.println("Executa Driver: " + command);
                     if (cmd[2] == "status")
                     {
                         JsonObject j = drv->readStatus(pin);
@@ -1018,6 +1009,9 @@ void lerSerial()
         if (cmd.length() == 0)
             return;
         String validos = "gpio,get,show,switch";
+#ifdef ARDUINO_AVR
+        validos += ",set";
+#endif
         String *r = split(cmd, ' ');
         if (validos.indexOf(r[0]) > -1)
         {
@@ -1061,6 +1055,7 @@ void Protocol::loop()
     //===========================
 }
 
+#ifndef ARDUINO_AVR
 JsonObject Protocol::getValues()
 {
     return docPinValues.as<JsonObject>();
@@ -1070,6 +1065,7 @@ void Protocol::afterLoop()
 {
     // usado na herança
 }
+#endif
 
 void Protocol::eventLoop()
 {
@@ -1094,7 +1090,9 @@ void Protocol::eventLoop()
                 readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
             }
             eventLoopMillis = millis();
+#ifndef ARDUINO_AVR
             afterLoop();
+#endif
         }
 
 #ifndef ARDUINO_AVR

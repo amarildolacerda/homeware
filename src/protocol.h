@@ -89,10 +89,6 @@ public:
     }
 
 protected:
-    // eventos
-    virtual void afterChanged(const int pin, const int value, const String mode);
-    virtual void afterLoop();
-    virtual void afterConfigChanged();
 
     // processos
     void initPinMode(int pin, const String m);
@@ -100,6 +96,10 @@ protected:
     void checkTrigger(int pin, int value);
     void errorMsg(String msg);
 #ifndef ARDUINO_AVR
+    // eventos
+    virtual void afterConfigChanged();
+    virtual void afterChanged(const int pin, const int value, const String mode);
+    virtual void afterLoop();
     virtual void afterBegin();
     virtual void afterSetup();
     virtual String localIP();
@@ -112,8 +112,8 @@ protected:
     void printConfig();
     bool readFile(String filename, char *buffer, size_t maxLen);
     String showGpio();
-#endif
     JsonObject getValues();
+#endif
 
 private:
     DynamicJsonDocument baseConfig();
