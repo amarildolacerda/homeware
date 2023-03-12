@@ -1,20 +1,17 @@
 #include "Arduino.h"
 #include "options.h"
 
+#ifndef ARDUINO_AVR
+
 #ifdef LITTLEFS
 #include "LittleFS.h"
 #endif
-
-
 
 #ifdef ESP32
 const char *getChipId() { return ESP.getChipModel(); }
 
 #else
-#ifdef ARDUINO_AVR
-#else
 uint32_t getChipId() { return ESP.getChipId(); }
-#endif
 #endif
 
 char *stringf(const char *format, ...)
@@ -29,8 +26,7 @@ char *stringf(const char *format, ...)
     return buffer;
 }
 
-
-
+#endif
 
 String *split(String s, const char delimiter)
 {

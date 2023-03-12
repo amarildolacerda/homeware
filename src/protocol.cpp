@@ -7,7 +7,9 @@
 #include <LittleFS.h>
 #endif
 
+#ifndef ARDUINO_AVR
 unsigned int timeoutDeepSleep = 10000;
+#endif
 
 #include "drivers.h"
 #include "drivers/drivers_setup.h"
@@ -32,15 +34,18 @@ Protocol *getInstanceOfProtocol()
 
 size_t driversCount = 0;
 
+#ifndef ARDUINO_AVR
 void Protocol::reset()
 {
     // noop
 }
+#endif
 
 JsonObject Protocol::getTrigger()
 {
     return config["trigger"].as<JsonObject>();
 }
+#ifndef ARDUINO_AVR
 JsonObject Protocol::getDevices()
 {
     return config["device"].as<JsonObject>();
@@ -49,6 +54,7 @@ JsonObject Protocol::getSensors()
 {
     return config["sensor"].as<JsonObject>();
 }
+#endif
 
 JsonObject Protocol::getMode()
 {
@@ -59,10 +65,13 @@ JsonObject Protocol::getStable()
 {
     return config["stable"].as<JsonObject>();
 }
+
+#ifndef ARDUINO_AVR
 JsonObject Protocol::getDefaults()
 {
     return config["default"];
 }
+#endif
 
 void Protocol::initPinMode(int pin, const String m)
 {
@@ -94,8 +103,6 @@ int Protocol::writePin(const int pin, const int value)
             digitalWrite(pin, value);
         }
     }
-    debug(stringf("{ 'writePin': %d, 'value': %d }", pin, value));
-    // docPinValues[String(pin)] = v;
     return value;
 }
 
@@ -223,16 +230,12 @@ String Protocol::print(String msg)
     return msg;
 }
 
-bool inCheckTrigger = false;
 void Protocol::checkTrigger(int pin, int value)
 {
-    if (inCheckTrigger)
-        return;
 #ifndef ARDUINO_AVR
     try
     {
 #endif
-        inCheckTrigger = true;
         String p = String(pin);
         JsonObject trig = getTrigger();
         if (trig.containsKey(p))
@@ -260,7 +263,6 @@ void Protocol::checkTrigger(int pin, int value)
     {
     }
 #endif
-    inCheckTrigger = false;
 }
 
 int Protocol::switchPin(const int pin)
@@ -269,11 +271,13 @@ int Protocol::switchPin(const int pin)
     if (drv)
     {
         int r = drv->readPin(pin);
-        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+        //        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
         return drv->writePin(pin, (r > 0) ? LOW : HIGH);
     }
     return -1;
 }
+
+#ifndef ARDUINO_AVR
 
 void Protocol::setLedMode(const int mode)
 {
@@ -281,7 +285,7 @@ void Protocol::setLedMode(const int mode)
     if (drv && drv->active)
         drv->setV1(5 - ((mode <= 5) ? mode : 4) * 1000);
 }
-
+#endif
 String Protocol::getStatus()
 {
     StaticJsonDocument<256> doc;
@@ -294,6 +298,7 @@ String Protocol::getStatus()
     return r;
 }
 
+#ifndef ARDUINO_AVR
 const String optionStable[] = {"monostable", "monostableNC", "bistable", "bistableNC"};
 String Protocol::showGpio()
 {
@@ -330,6 +335,7 @@ String Protocol::showGpio()
     r += "]";
     return r;
 }
+#endif
 
 void Protocol::setupPins()
 {
@@ -340,12 +346,17 @@ void Protocol::setupPins()
         int pin = String(k.key().c_str()).toInt();
         initPinMode(pin, k.value().as<String>());
     }
+#ifndef ARDUINO_AVR
+
     for (JsonPair k : getDefaults())
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
+#endif
     debugln("OK");
 }
+
+#ifndef ARDUINO_AVR
 
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
@@ -356,18 +367,15 @@ void Protocol::resetDeepSleep(const unsigned int t)
         sleeptmp = v;
     }
 }
-
 void Protocol::doSleep(const int tempo)
 {
-#ifdef ARDUINO_AVR
-#else
     if (millis() > sleeptmp)
     {
         print("sleeping");
         ESP.deepSleep(tempo * 1000 * 1000);
     }
-#endif
 }
+
 const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
@@ -406,9 +414,6 @@ String Protocol::help()
 
 bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 {
-#ifdef ARDUINO_AVR
-
-#else
 #ifdef ESP32
 
     File file = SPIFFS.open(filename, "r");
@@ -427,11 +432,9 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     file.readBytes(buffer, len); //(buffer, len);
     buffer[len] = 0;
     file.close();
-#endif
     return true;
 }
 
-#ifndef ARDUINO_AVR
 void driverCallbackEventFunc(String mode, int pin, int value)
 {
     getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
@@ -446,19 +449,21 @@ void Protocol::driverCallbackEvent(String mode, int pin, int value)
 void Protocol::setup()
 {
     protocol = this;
-
-    debug("Registrando os drivers: ");
     drivers_register();
-
 #ifndef ARDUINO_AVR
+    debug("Registrando os drivers: ");
     analogWriteRange(256);
 
     for (Driver *drv : getDrivers()->items)
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
-#endif
-    afterSetup();
     debugln("OK");
+#endif
+    getDrivers()->setup();
+
+#ifndef ARDUINO_AVR
+    afterSetup();
+#endif
 }
 
 void Protocol::afterConfigChanged()
@@ -466,11 +471,10 @@ void Protocol::afterConfigChanged()
     getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
 }
 
+#ifndef ARDUINO_AVR
 String Protocol::restoreConfig()
 {
-#ifdef ARDUINO_AVR
 
-#else
     String rt = "nao restaurou config";
     Serial.println("");
     // linha();
@@ -510,26 +514,37 @@ String Protocol::restoreConfig()
     Serial.println("");
     afterConfigChanged();
     return rt;
-#endif
     return "";
 }
+#endif
 
 DynamicJsonDocument Protocol::baseConfig()
 {
     DynamicJsonDocument config = DynamicJsonDocument(1024);
     config["label"] = LABEL;
-    config["board"] = "esp8266";
     config.createNestedObject("mode");
     config.createNestedObject("trigger");
     config.createNestedObject("stable");
+#ifndef ARDUINO_AVR
+    config["board"] = "esp8266";
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
-    config["debug"] = inDebug ? "on" : "off";
-    config["interval"] = "500";
     config["adc_min"] = "125";
     config["adc_max"] = "126";
     config["sleep"] = "0";
+    config["ap_ssid"] = "none";
+    config["ap_password"] = "123456780";
+#else
+    config["board"] = "AVR";
+#endif
+    config["debug"] =
+#ifndef ARDUINO_AVR
+        inDebug ? "on" : "off";
+#else
+        "off";
+#endif
+    config["interval"] = "500";
 
 #ifdef MQTT
     config["mqtt_host"] = "none"; //"test.mosquitto.org";
@@ -539,8 +554,6 @@ DynamicJsonDocument Protocol::baseConfig()
     config["mqtt_interval"] = 1;
     config["mqtt_prefix"] = "mesh";
 #endif
-    config["ap_ssid"] = "none";
-    config["ap_password"] = "123456780";
 #ifdef SINRIC
     config["app_key"] = "";
     config["app_secret"] = "";
@@ -548,10 +561,9 @@ DynamicJsonDocument Protocol::baseConfig()
     return config;
 }
 
+#ifndef ARDUINO_AVR
 String Protocol::saveConfig()
 { // TODO: ajustar para gravar somente os alterado e reduzir uso de espaço.
-#ifdef ARDUINO_AVR
-#else
     String rsp = "OK";
     DynamicJsonDocument doc = baseConfig();
     DynamicJsonDocument base = DynamicJsonDocument(SIZE_BUFFER);
@@ -575,8 +587,6 @@ String Protocol::saveConfig()
     file.close();
     afterConfigChanged();
     return rsp;
-#endif
-    return "";
 }
 
 void Protocol::defaultConfig()
@@ -589,6 +599,7 @@ void Protocol::defaultConfig()
     }
     afterConfigChanged();
 }
+#endif
 
 void Protocol::begin()
 {
@@ -597,19 +608,22 @@ void Protocol::begin()
     resources += "telnet,";
     setupTelnet();
 #endif
+#ifndef ARDUINO_AVR
     afterBegin();
     debug("Resources: ");
     debugln(resources);
+#endif
     inited = true;
 }
 
+#ifndef ARDUINO_AVR
 void Protocol::afterBegin()
 {
 }
 void Protocol::afterSetup()
 {
-    getDrivers()->setup();
 }
+#endif
 
 #ifdef TELNET
 void telnetOnConnect(String ip)
@@ -664,10 +678,12 @@ void Protocol::errorMsg(String msg)
 #endif
 }
 
+#ifndef ARDUINO_AVR
 String Protocol::localIP()
 {
     return "";
 }
+#endif
 
 int convertOnOff(String pin)
 {
@@ -694,8 +710,8 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
     try
     {
-#endif
         resetDeepSleep();
+#endif
         String *cmd = split(command, ' ');
         Serial.print("CMD: ");
         Serial.println(command);
@@ -721,10 +737,12 @@ String Protocol::doCommand(String command)
             return VERSION;
         }
         else
-#endif
+
             if (cmd[0] == "help")
             return help();
-        else if (cmd[0] == "show")
+        else
+#endif
+            if (cmd[0] == "show")
         {
 #ifndef ARDUINO_AVR
 
@@ -740,12 +758,14 @@ String Protocol::doCommand(String command)
 #endif
                 if (cmd[1] == "config")
                 return config.as<String>();
+#ifndef ARDUINO_AVR
             else if (cmd[1] == "gpio")
                 return showGpio();
             char buffer[128];
             String ip = localIP();
             sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
             return buffer;
+#endif
         }
 #ifndef ARDUINO_AVR
 
@@ -767,7 +787,9 @@ String Protocol::doCommand(String command)
 #endif
             print("reiniciando...");
             delay(1000);
+#ifndef ARDUINO_AVR
             reset();
+#endif
             return "OK";
         }
 #ifndef ARDUINO_AVR
@@ -895,6 +917,8 @@ String Protocol::doCommand(String command)
             }
             else if (cmd[2] == "mode")
             {
+#ifndef ARDUINO_AVR
+
                 if (resources.indexOf(cmd[3]) > -1)
                 {
                     initPinMode(pin, cmd[3]);
@@ -902,6 +926,11 @@ String Protocol::doCommand(String command)
                 }
                 else
                     return "driver indisponivel";
+#else
+            initPinMode(pin, cmd[3]);
+            return "OK";
+
+#endif
             }
 #ifndef ARDUINO_AVR
             else if (cmd[2] == "device")
@@ -931,7 +960,6 @@ String Protocol::doCommand(String command)
                 sensors[spin] = cmd[3];
                 return "OK";
             }
-#endif
             else if (cmd[2] == "default")
             {
                 JsonObject d = getDefaults();
@@ -943,6 +971,7 @@ String Protocol::doCommand(String command)
                 d[spin] = cmd[3];
                 return "OK";
             }
+#endif
             else if (cmd[2] == "trigger")
             {
                 if (!cmd[4])
@@ -1019,14 +1048,13 @@ void Protocol::loop()
 #endif
     eventLoop();
 
-    //=========================== usado somente quando conectado
-    if (connected)
-    {
-    }
     getDrivers()->loop();
+
+#ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0)
         doSleep(sleep);
+#endif
     yield();
 
     inLooping = false;

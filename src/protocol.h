@@ -16,27 +16,27 @@
 #include "ESPTelnet.h"
 #endif
 
+#ifndef ARDUINO_AVR
 typedef void (*callbackDebugFunction)(String texto);
-
+#endif
 class Protocol
 {
 private:
 public:
-
+#ifndef ARDUINO_AVR
+    bool connected = false;
+    int ledPin = 255;
+    unsigned int ledTimeChanged = 5000;
+    String resources = "";
+    bool inDebug = false;
+    bool inTelnet = false;
+#endif
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
     String hostname = "AutoConnect";
-    unsigned int currentAdcState = 0;
     DynamicJsonDocument docPinValues = DynamicJsonDocument(256);
-    unsigned int ledTimeChanged = 5000;
     unsigned int eventLoopMillis = millis();
     bool inited = false;
-    bool connected = false;
-
-    int ledPin = 255;
-    bool inDebug = false;
-    bool inTelnet = false;
-    String resources = "";
 
     void setup();
 #ifdef TELNET
@@ -46,14 +46,15 @@ public:
     JsonObject getTrigger();
     JsonObject getStable();
     JsonObject getMode();
+#ifndef ARDUINO_AVR
     JsonObject getDevices();
     JsonObject getSensors();
     JsonObject getDefaults();
-
     virtual void resetDeepSleep(const unsigned int t = 60000);
+#endif
+
     virtual String doCommand(String command);
     virtual String print(String msg);
-    virtual void setLedMode(const int mode);
     virtual int writePin(const int pin, const int value);
     virtual int writePWM(const int pin, const int value, const int timeout = 0);
     virtual int readPin(const int pin, const String mode = "");
@@ -67,9 +68,10 @@ public:
     virtual String getPinMode(const int pin);
     virtual void loop();
     virtual bool pinValueChanged(const int pin, const int value, bool exectrigger = true);
-    virtual void reset();
     virtual void setupPins();
 #ifndef ARDUINO_AVR
+    virtual void setLedMode(const int mode);
+    virtual void reset();
     callbackDebugFunction debugCallback;
     virtual void driverCallbackEvent(String mode, int pin, int value);
 #endif
@@ -90,27 +92,28 @@ protected:
     // eventos
     virtual void afterChanged(const int pin, const int value, const String mode);
     virtual void afterLoop();
-    virtual void afterBegin();
-    virtual void afterSetup();
     virtual void afterConfigChanged();
 
     // processos
     void initPinMode(int pin, const String m);
     int pinValue(const int pin);
     void checkTrigger(int pin, int value);
+    void errorMsg(String msg);
+#ifndef ARDUINO_AVR
+    virtual void afterBegin();
+    virtual void afterSetup();
+    virtual String localIP();
     void doSleep(const int tempo);
-    virtual String help();
     String restoreConfig();
     void defaultConfig();
     String saveConfig();
-    void errorMsg(String msg);
-    virtual String localIP();
-#ifndef ARDUINO_AVR
+    virtual String help();
     virtual void resetWiFi();
     void printConfig();
+    bool readFile(String filename, char *buffer, size_t maxLen);
+    String showGpio();
 #endif
     JsonObject getValues();
-    bool readFile(String filename, char *buffer, size_t maxLen);
 
 private:
     DynamicJsonDocument baseConfig();
@@ -120,7 +123,6 @@ private:
 #endif
     void eventLoop();
     String getStatus();
-    String showGpio();
 };
 
 Protocol *getInstanceOfProtocol();
