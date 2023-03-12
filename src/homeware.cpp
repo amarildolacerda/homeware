@@ -75,7 +75,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
 
 void Homeware::setupServer()
 {
-    resources += "servidor comandos,";
+    resources += "cmd,";
     server->on("/cmd", []()
                {
         if (homeware.server->hasArg("q"))

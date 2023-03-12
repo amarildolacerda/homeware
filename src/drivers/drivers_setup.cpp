@@ -7,7 +7,7 @@
 #include "drivers/drv_adc.h"
 #include "drivers/drv_in_out.h"
 
-#if defined(ESP8266) || defined(ESP32)
+#if defined(DRIVERS_EX)
 #include "drivers/drv_led.h"
 #include "drivers/drv_srn.h"
 #ifdef LCTECHRELAY
@@ -41,7 +41,7 @@ PWMDriver pwm_;
 ADCDriver adc_;
 InDriver in_;
 OutDriver out_;
-#if defined(ESP8266) || defined(ESP32)
+#if defined(DRIVERS_EX)
 LedDriver led_;
 DownDriver down_;
 UpDriver up_;
@@ -57,7 +57,7 @@ void drivers_register()
     driv->add(&adc_);
     driv->add(&in_);
     driv->add(&out_);
-#if defined(ESP8266) || defined(ESP32)
+#if defined(DRIVERS_EX)
     driv->add(&led_);
     driv->add(&down_);
     driv->add(&up_);
