@@ -19,7 +19,7 @@
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
 #define SINRIC
-//#define TELNET
+#define TELNET
 #define USE_PIN_NAMES
 #define LITTLEFS
 #define DRIVERS_EX

@@ -92,6 +92,7 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
+        debugf("write %s pin: %i to: %i",mode,pin,value);
         Driver *drv = getDrivers()->findByMode(mode);
         if (drv && drv->isSet())
         {
