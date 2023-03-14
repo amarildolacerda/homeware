@@ -17,7 +17,7 @@ public:
     }
     void setV1(long v) override
     {
-        if (v < 1000)
+        if (v < 100)
             return;
         v1 = v;
     }
@@ -49,7 +49,7 @@ public:
         }
         else
         {
-            if ((millis() - ultimoChanged > v1) || (curStatus && millis() - ultimoChanged > interval))
+            if ((!curStatus && (millis() - ultimoChanged > v1)) || (curStatus && (millis() - ultimoChanged > interval)))
             {
                 curStatus = !curStatus;
                 digitalWrite(curPin, curStatus);

@@ -166,7 +166,7 @@ int Protocol::readPin(const int pin, const String mode)
     else
         drv = getDrivers()->findByMode(m);
     if (!drv)
-        debug("Não tem um drive especifico: " + m);
+        debugf("Pin: %i. Não tem um drive especifico: %s \r\n" ,pin,m);
 
     if (drv && drv->isGet())
     {
