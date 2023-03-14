@@ -12,6 +12,10 @@
 #include <ArduinoJson.h>
 #include <options.h>
 
+#ifdef TELEGRAM
+#include "telegram.h"
+#endif
+
 #ifdef TELNET
 #include "ESPTelnet.h"
 #endif
@@ -89,7 +93,6 @@ public:
     }
 
 protected:
-
     // processos
     void initPinMode(int pin, const String m);
     int pinValue(const int pin);

@@ -25,6 +25,10 @@
 #define DRIVERS_EX
 #endif
 
+#ifdef ESP32
+#define TELEGRAM
+#endif
+
 #if defined(BOARD_ESP12S)
 //-------------------------
 #define BOARD_MIN
