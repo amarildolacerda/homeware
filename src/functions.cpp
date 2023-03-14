@@ -79,8 +79,32 @@ int getPinByName(String dig)
         D15};
 
     dig.toUpperCase();
-    if (dig.substring(0, 1) == "A")
-        return PIN_A0;
+    if (dig == nullptr)
+        return -1;
+#ifdef PIN_WIRE_SDA
+    else if (dig == "SDA")
+        return SDA;
+#endif
+#ifdef PIN_WIRE_SCL
+    else if (dig == "SCL")
+        return SCL;
+#endif
+#ifdef LED_BUILTIN
+    else if (dig == "LED")
+        return LED_BUILTIN;
+#endif
+#ifdef PIN_A0
+    else if (dig == "A0")
+        return A0;
+#endif
+#ifdef PIN_A1
+    else if (dig == "A1")
+        return A1;
+#endif
+#ifdef PIN_A2
+    else if (dig == "A2")
+        return A2;
+#endif
     else if (dig.substring(0, 1) == "D")
     {
         String p = dig.substring(1);

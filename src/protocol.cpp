@@ -92,7 +92,7 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
-        debugf("write %s pin: %i to: %i",mode,pin,value);
+        debugf("write %s pin: %i to: %i", mode, pin, value);
         Driver *drv = getDrivers()->findByMode(mode);
         if (drv && drv->isSet())
         {
@@ -250,8 +250,6 @@ void Protocol::checkTrigger(int pin, int value)
             if (!getStable().containsKey(p))
                 return;
 
-            debugf("{'pin':%i,'trigger': %s, 'set': %i }", pin, pinTo, value);
-
             int bistable = getStable()[p];
             int v = value;
 
@@ -261,7 +259,9 @@ void Protocol::checkTrigger(int pin, int value)
                     switchPin(pinTo.toInt());
             }
             else if (pinTo.toInt() != pin)
+            {
                 writePin(pinTo.toInt(), v);
+            }
         }
 #ifndef ARDUINO_AVR
     }
@@ -277,7 +277,7 @@ int Protocol::switchPin(const int pin)
     if (drv)
     {
         int r = drv->readPin(pin);
-        //        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
         return drv->writePin(pin, (r > 0) ? LOW : HIGH);
     }
     return -1;
