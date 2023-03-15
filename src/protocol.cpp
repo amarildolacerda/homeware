@@ -682,7 +682,7 @@ void Protocol::afterSetup()
 void telnetOnConnect(String ip)
 {
     protocol->inTelnet = true;
-    protocol->resetDeepSleep();
+    protocol->resetDeepSleep(60*5);
     Serial.print("- Telnet: ");
     Serial.print(ip);
     Serial.println(" conectou");
@@ -765,7 +765,7 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
     try
     {
-        resetDeepSleep(60*60);
+        resetDeepSleep(60*5);
 #endif
         String *cmd = split(command, ' ');
 #ifdef ESP8266
