@@ -61,6 +61,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
         webSocket.sendTXT(num, "Connected ");
         webSocket.sendTXT(num,homeware.resources);
         homeware.config["debug"] = "term";
+        homeware.resetDeepSleep(60);
 
         break;
     case WStype_DISCONNECTED:

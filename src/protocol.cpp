@@ -11,7 +11,7 @@
 #endif
 
 #ifndef ARDUINO_AVR
-unsigned int timeoutDeepSleep = 10000;
+unsigned int timeoutDeepSleep = 1000;
 #endif
 
 #include "drivers.h"
@@ -389,7 +389,10 @@ void Protocol::setupPins()
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
 {
-    unsigned int v = millis() + (timeoutDeepSleep * t);
+    int x = timeoutDeepSleep * t;
+    Serial.printf("next %i sleep at: %i \r\n",t,x);
+    unsigned int v = millis() + (x);
+
     if (v > sleeptmp)
     {
         sleeptmp = v;
@@ -400,7 +403,7 @@ void Protocol::doSleep(const int tempo)
 
     print("sleeping");
 #ifdef ESP32
-    esp_sleep_enable_timer_wakeup(tempo *  1000000);
+    esp_sleep_enable_timer_wakeup(tempo * 1000000);
     esp_deep_sleep_start();
 #else
     ESP.deepSleep(tempo * 1000 * 1000);
@@ -762,7 +765,7 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
     try
     {
-        resetDeepSleep();
+        resetDeepSleep(60*60);
 #endif
         String *cmd = split(command, ' ');
 #ifdef ESP8266

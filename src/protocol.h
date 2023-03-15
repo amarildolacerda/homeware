@@ -55,7 +55,7 @@ public:
     JsonObject getDevices();
     JsonObject getSensors();
     JsonObject getDefaults();
-    virtual void resetDeepSleep(const unsigned int t = 60000);
+    virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
 
     virtual String doCommand(String command);
