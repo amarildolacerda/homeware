@@ -397,11 +397,14 @@ void Protocol::resetDeepSleep(const unsigned int t)
 }
 void Protocol::doSleep(const int tempo)
 {
-    if (millis() > sleeptmp)
-    {
-        print("sleeping");
-        ESP.deepSleep(tempo * 1000 * 1000);
-    }
+
+    print("sleeping");
+#ifdef ESP32
+    esp_sleep_enable_timer_wakeup(tempo *  1000000);
+    esp_deep_sleep_start();
+#else
+    ESP.deepSleep(tempo * 1000 * 1000);
+#endif
 }
 
 const char HELP[] =
@@ -770,8 +773,14 @@ String Protocol::doCommand(String command)
         }
         else
 #endif
+            if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
+        {
+            print("sleeping....");
+            doSleep(String(cmd[1]).toInt());
+            return "OK";
+        }
 #ifndef ARDUINO_AVR
-            if (cmd[0] == "open")
+        if (cmd[0] == "open")
         {
             char json[1024];
             readFile(cmd[1], json, 1024);
@@ -1087,7 +1096,7 @@ void Protocol::loop()
 
 #ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();
-    if (sleep > 0)
+    if (sleep > 0 && millis() > sleeptmp)
         doSleep(sleep);
 #endif
     yield();
