@@ -3,7 +3,10 @@
 #include "protocol.h"
 #include <functions.h>
 
-#ifdef LITTLEFS
+#ifdef SPIFFs
+#include <SPIFFS.h>
+#endif
+#ifdef LITTLEFs
 #include <LittleFS.h>
 #endif
 
@@ -25,6 +28,11 @@ void Protocol::debugf(const char *format, ...)
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     protocol->debug(buffer);
+}
+
+void driverCallbackEventFunc(String mode, int pin, int value)
+{
+    getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
 }
 
 Protocol *getInstanceOfProtocol()
@@ -166,7 +174,7 @@ int Protocol::readPin(const int pin, const String mode)
     else
         drv = getDrivers()->findByMode(m);
     if (!drv)
-        debugf("Pin: %i. Não tem um drive especifico: %s \r\n" ,pin,m);
+        debugf("Pin: %i. Não tem um drive especifico: %s \r\n", pin, m);
 
     if (drv && drv->isGet())
     {
@@ -345,6 +353,20 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
+#ifndef ARDUINO_AVR
+    debug("Registrando os drivers: ");
+#ifdef ESP8266
+    analogWriteRange(256);
+#endif
+
+    drivers_register();
+    for (Driver *drv : getDrivers()->items)
+        if (drv)
+            drv->setTriggerEvent(driverCallbackEventFunc);
+    debugln("OK");
+#endif
+    getDrivers()->setup();
+
     debug("Configurando as portas: ");
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
@@ -420,11 +442,14 @@ String Protocol::help()
 
 bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 {
-#ifdef ESP32
-
+#ifdef SPIFFs
     File file = SPIFFS.open(filename, "r");
 #else
+#ifdef ESP32
+    File file = LITTLEFS.open(filename, "r", true);
+#else
     File file = LittleFS.open(filename, "r");
+#endif
 #endif
     if (!file)
     {
@@ -441,10 +466,6 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
     return true;
 }
 
-void driverCallbackEventFunc(String mode, int pin, int value)
-{
-    getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
-}
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
     debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
@@ -452,21 +473,27 @@ void Protocol::driverCallbackEvent(String mode, int pin, int value)
 }
 #endif
 
+void Protocol::prepare()
+{
+#ifdef SPIFFs
+    if (!SPIFFS.begin())
+#else
+#ifdef LITTLEFs
+#ifdef ESP32
+    if (!LITTLEFS.begin(true))
+#else
+    if (!LittleFS.begin())
+#endif
+#endif
+#endif
+    {
+        Serial.println("FS mount failed");
+    }
+
+    protocol = this;
+}
 void Protocol::setup()
 {
-    protocol = this;
-    drivers_register();
-#ifndef ARDUINO_AVR
-    debug("Registrando os drivers: ");
-    analogWriteRange(256);
-
-    for (Driver *drv : getDrivers()->items)
-        if (drv)
-            drv->setTriggerEvent(driverCallbackEventFunc);
-    debugln("OK");
-#endif
-    getDrivers()->setup();
-
 #ifndef ARDUINO_AVR
     afterSetup();
 #endif
@@ -488,10 +515,14 @@ String Protocol::restoreConfig()
     try
     {
         String old = config.as<String>();
-#ifdef ESP32
+#ifdef SPIFFs
         File file = SPIFFS.open("/config.json", "r");
 #else
+#ifdef ESP32
+        File file = LITTLEFS.open("/config.json", "r", true);
+#else
         File file = LittleFS.open("/config.json", "r");
+#endif
 #endif
         if (!file)
             return "erro ao abrir /config.json";
@@ -533,7 +564,13 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("trigger");
     config.createNestedObject("stable");
 #ifndef ARDUINO_AVR
-    config["board"] = "esp8266";
+
+#ifdef ESP8266
+    config["board"] = "ESP8266";
+#endif
+#ifdef ESP32
+    config["board"] = "ESP32";
+#endif
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
@@ -584,10 +621,14 @@ String Protocol::saveConfig()
 
     base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
     // serializeJson(base, Serial);
-#ifdef ESP32
+#ifdef SPIFFs
     File file = SPIFFS.open("/config.json", "w");
 #else
+#ifdef ESP32
+    File file = LITTLEFS.open("/config.json", "w", true);
+#else
     File file = LittleFS.open("/config.json", "w");
+#endif
 #endif
     if (serializeJson(base, file) == 0)
         rsp = "não gravou /config.json";
@@ -604,7 +645,6 @@ void Protocol::defaultConfig()
         String key = k.key().c_str();
         config[key] = doc[key];
     }
-    afterConfigChanged();
 }
 #endif
 

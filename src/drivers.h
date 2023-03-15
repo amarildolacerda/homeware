@@ -33,7 +33,8 @@ public:
     virtual void setup()
     {
 #ifndef ARDUINO_AVR
-        getProtocol()->resources += _mode + ",";
+        if (getProtocol()->resources.indexOf(_mode) < 0)
+            getProtocol()->resources += _mode + ",";
 #endif
     };
     virtual void loop(){};

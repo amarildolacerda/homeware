@@ -114,8 +114,14 @@ int getPinByName(String dig)
             return p.toInt();
     }
 #else
-    if (dig.substring(0, 1) == "A")
-        return PIN_A0;
+    if (dig.substring(0, 2) == "A0")
+        return A0;
+#ifdef ESP32
+    else if (dig.substring(0, 2) == "A3")
+        return A3;
+    else if (dig.substring(0, 2) == "A4")
+        return A4;
+#endif
     else if (dig.substring(0, 1) == "D")
     {
         String p = dig.substring(1);

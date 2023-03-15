@@ -49,8 +49,11 @@ SireneDriver srn_;
 PulseDriver pls_;
 #endif
 
+bool drivers_loaded = false;
 void drivers_register()
 {
+    if (drivers_loaded)
+        return;
 
     Drivers *driv = getDrivers();
     // defaults
@@ -81,4 +84,5 @@ void drivers_register()
     driv->add(&rst_);
 #endif // DRIVER_ENABLED
 #endif
+    drivers_loaded = true;
 }

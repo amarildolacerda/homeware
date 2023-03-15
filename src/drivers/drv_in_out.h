@@ -52,7 +52,11 @@ public:
 #ifdef ARDUINO_AVR
         pinMode(pin, INPUT);
 #else
+#ifdef ESP32
+        pinMode(pin, INPUT_PULLDOWN);
+#else
         pinMode(pin, INPUT_PULLDOWN_16);
+#endif        
 #endif
     }
 };

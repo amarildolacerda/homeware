@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.03.11.11"
+#define VERSION "23.03.14.12"
 
 //---- opcoes de boards
 #define WEMO_D1
@@ -21,12 +21,16 @@
 #define SINRIC
 #define TELNET
 #define USE_PIN_NAMES
-#define LITTLEFS
+#define LITTLEFs
 #define DRIVERS_EX
 #endif
 
 #ifdef ESP32
+// -------------------------------------
 #define TELEGRAM
+//#undef LITTLEFs
+#undef USE_PIN_NAMES 
+//#define SPIFFs
 #endif
 
 #if defined(BOARD_ESP12S)

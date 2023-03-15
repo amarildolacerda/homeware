@@ -43,6 +43,7 @@ public:
     bool inited = false;
 
     void setup();
+    void prepare();
 #ifdef TELNET
     ESPTelnet telnet;
 #endif

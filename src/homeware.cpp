@@ -10,13 +10,8 @@
 
 #include <ArduinoJson.h>
 
-#ifdef ESP8266
-#define USE_LittleFS
-#endif
-
 #include <FS.h>
-#ifdef USE_LittleFS
-#define SPIFFS LITTLEFS
+#ifdef LITTLEFs
 #include <LittleFS.h>
 #else
 #include <SPIFFS.h>
@@ -118,24 +113,18 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
+    prepare();
     setServer(externalServer);
-
-#ifdef ESP32
-    if (!SPIFFS.begin())
-#else
-    if (!LittleFS.begin())
-#endif
-    {
-        Serial.println("LittleFS mount failed");
-    }
-
     defaultConfig();
     restoreConfig();
+
+
+    Protocol::setup();
+
     if (config["label"])
     {
         hostname = config["label"].as<String>() + ".local";
     }
-    Protocol::setup();
     setupPins();
 }
 
