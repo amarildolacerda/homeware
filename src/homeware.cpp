@@ -110,14 +110,17 @@ void Homeware::afterBegin()
 #ifdef ESP32
 void Homeware::setup(WebServer *externalServer)
 #else
+void Homeware::prepare()
+{
+    Protocol::prepare();
+    defaultConfig();
+    restoreConfig();
+}
+
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
-    prepare();
     setServer(externalServer);
-    defaultConfig();
-    restoreConfig();
-
 
     Protocol::setup();
 
@@ -183,7 +186,6 @@ void Homeware::reset()
     ESP.restart();
 #endif
 }
-
 
 #ifdef ESP32
 const char *Homeware::getChipId()
@@ -462,7 +464,6 @@ void Homeware::afterChanged(const int pin, const int value, const String mode)
 #endif
     Protocol::afterChanged(pin, value, mode);
 }
-
 
 Homeware homeware;
 #ifdef ESP32

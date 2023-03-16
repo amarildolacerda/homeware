@@ -43,7 +43,7 @@ public:
     bool inited = false;
 
     void setup();
-    void prepare();
+    virtual void prepare();
 #ifdef TELNET
     ESPTelnet telnet;
 #endif
@@ -92,10 +92,16 @@ public:
     {
         return config.containsKey(name);
     }
+    void setKeyIfNull(String key, String value)
+    {
+        if (!containsKey(key))
+            config[key] = value;
+    }
 
 protected:
     // processos
-    void initPinMode(int pin, const String m);
+    void
+    initPinMode(int pin, const String m);
     int pinValue(const int pin);
     void checkTrigger(int pin, int value);
     void errorMsg(String msg);

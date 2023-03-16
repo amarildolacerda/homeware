@@ -56,6 +56,7 @@ public:
     void afterLoop() override;
     void afterBegin() override;
     void reset() override;
+    void prepare()override;
 
     //============================= potencial para mudar para Protocol
 

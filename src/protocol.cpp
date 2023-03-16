@@ -359,7 +359,6 @@ void Protocol::setupPins()
     analogWriteRange(256);
 #endif
 
-    drivers_register();
     for (Driver *drv : getDrivers()->items)
         if (drv)
             drv->setTriggerEvent(driverCallbackEventFunc);
@@ -390,7 +389,7 @@ unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
 {
     int x = timeoutDeepSleep * t;
-    Serial.printf("next %i sleep at: %i \r\n",t,x);
+    Serial.printf("next %i sleep at: %i \r\n", t, x);
     unsigned int v = millis() + (x);
 
     if (v > sleeptmp)
@@ -497,6 +496,7 @@ void Protocol::prepare()
     }
 
     protocol = this;
+    drivers_register();
 }
 void Protocol::setup()
 {
@@ -682,7 +682,7 @@ void Protocol::afterSetup()
 void telnetOnConnect(String ip)
 {
     protocol->inTelnet = true;
-    protocol->resetDeepSleep(60*5);
+    protocol->resetDeepSleep(60 * 5);
     Serial.print("- Telnet: ");
     Serial.print(ip);
     Serial.println(" conectou");
@@ -765,7 +765,7 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
     try
     {
-        resetDeepSleep(60*5);
+        resetDeepSleep(60 * 5);
 #endif
         String *cmd = split(command, ' ');
 #ifdef ESP8266
