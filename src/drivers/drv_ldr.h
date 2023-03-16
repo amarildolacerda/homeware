@@ -66,6 +66,8 @@ public:
     }
     void loop() override
     {
+        getAdcState(getPin());
+
         if (eventState != genStatus())
         {
             eventState = genStatus();

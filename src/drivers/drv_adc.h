@@ -53,6 +53,8 @@ public:
     bool isLoop() override { return active; }
     void loop() override
     {
+        getAdcState(getPin());
+
         if (eventState != genStatus())
         {
             eventState = genStatus();
@@ -76,7 +78,8 @@ public:
         {
             Driver::setPin(pin);
             tmpAdc = analogRead(pin);
-            ultimoLoop = millis();
+            getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(),min,max);
+                ultimoLoop = millis();
         }
         return genStatus();
     }

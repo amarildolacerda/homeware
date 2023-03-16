@@ -43,7 +43,7 @@ public:
     }
     int writePin(const int pin, const int value) override
     {
-        // Serial.printf("mudou %i para %i", pin, value);
+        Serial.printf("srn %i para %i", pin, value);
         onOffStatus = (value > 0); // ativa o loop modo sirene
         if (onOffStatus)
             iniciadoEm = millis();
