@@ -29,6 +29,7 @@ public:
         else
             Serial.write(relON, sizeof(relON));
         ultimoStatus = value;
+        getProtocol()->debugf("LcTech Relay: %i to: %i",pin,value);
         return value;
     }
 

@@ -2,17 +2,17 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.03.14.12"
+#define VERSION "23.03.16.13"
 
-//---- opcoes de boards
-#define WEMO_D1
-// #define BOARD_ESP12S
+//---- opcoes de boards  -- configurado no platformio.ini
+// #define WEMO_D1
+// #define BOARD_ESP12S // LCTECHRELAY
 // #define ESP8285
 // #define SONOFF_BASIC
 // #define ARDUINO_AVR
 
 //-------------------------------
-
+#define LITTLEFs
 
 #if defined(WEMO_D1)
 //----------------------
@@ -21,16 +21,15 @@
 #define SINRIC
 #define TELNET
 #define USE_PIN_NAMES
-#define LITTLEFs
 #define DRIVERS_EX
 #endif
 
 #ifdef ESP32
 // -------------------------------------
 #define TELEGRAM
-//#undef LITTLEFs
-#undef USE_PIN_NAMES 
-//#define SPIFFs
+// #undef LITTLEFs
+#undef USE_PIN_NAMES
+// #define SPIFFs
 #endif
 
 #if defined(BOARD_ESP12S)
@@ -40,8 +39,6 @@
 #define DRIVERS_ENABLED
 
 #endif
-
-
 
 #ifndef ARDUINO_AVR
 //-----------------------------------------------
@@ -95,7 +92,6 @@
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
 #undef SINRIC
-#undef TELNET
 #undef DHT_SENSOR
 #undef GROOVE_ULTRASONIC
 #undef LCTECHRELAY
@@ -106,4 +102,8 @@
 
 #if defined(BOARD_ESP12S)
 #define LCTECHRELAY
+#define LITTLEFs
+#define TELNET
+#define WEBSOCKET
+
 #endif

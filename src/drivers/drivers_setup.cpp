@@ -7,13 +7,14 @@
 #include "drivers/drv_adc.h"
 #include "drivers/drv_in_out.h"
 
-#if defined(DRIVERS_EX)
-#include "drivers/drv_led.h"
-#include "drivers/drv_srn.h"
 #ifdef LCTECHRELAY
 #include "drivers/drv_lctech.h"
 LCTechRelayDriver lcTech_;
 #endif
+
+#if defined(DRIVERS_EX)
+#include "drivers/drv_led.h"
+#include "drivers/drv_srn.h"
 #ifdef DHT_SENSOR
 #include <drivers/drv_dht.h>
 DHTDriver dht_;
@@ -60,15 +61,17 @@ void drivers_register()
     driv->add(&adc_);
     driv->add(&in_);
     driv->add(&out_);
+
+#ifdef LCTECHRELAY
+    driv->add(&lcTech_);
+#endif
+
 #if defined(DRIVERS_EX)
     driv->add(&led_);
     driv->add(&down_);
     driv->add(&up_);
     driv->add(&srn_);
     driv->add(&pls_);
-#ifdef LCTECHRELAY
-    driv->add(&lcTech_);
-#endif
 #ifdef DHT_SENSOR
     driv->add(&dht_);
 #endif

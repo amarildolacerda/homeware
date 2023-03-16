@@ -268,7 +268,7 @@ void Protocol::checkTrigger(int pin, int value)
             }
             else if (pinTo.toInt() != pin)
             {
-                debugf("{'trigger':%i, 'to':%i}", pin,  value);
+                debugf("{'trigger':%i, 'to':%i}", pin, value);
                 writePin(pinTo.toInt(), v);
             }
         }
@@ -570,24 +570,23 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("mode");
     config.createNestedObject("trigger");
     config.createNestedObject("stable");
+#ifdef BOARD_NAME
+    config["board"] = BOARD_NAME;
+#endif
 #ifndef ARDUINO_AVR
-
-#ifdef ESP8266
-    config["board"] = "ESP8266";
-#endif
-#ifdef ESP32
-    config["board"] = "ESP32";
-#endif
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
     config["adc_min"] = "125";
     config["adc_max"] = "126";
     config["sleep"] = "0";
+#ifdef SSID_NAME
+    config["ap_ssid"] = SSID_NAME;
+    config["ap_password"] = SSID_PASWORD;
+#else
     config["ap_ssid"] = "none";
     config["ap_password"] = "123456780";
-#else
-    config["board"] = "AVR";
+#endif
 #endif
     config["debug"] =
 #ifndef ARDUINO_AVR
