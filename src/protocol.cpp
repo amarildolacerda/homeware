@@ -499,6 +499,7 @@ void Protocol::prepare()
     protocol = this;
     drivers_register();
 }
+
 void Protocol::setup()
 {
 #ifndef ARDUINO_AVR
@@ -588,11 +589,18 @@ DynamicJsonDocument Protocol::baseConfig()
     config["ap_password"] = "123456780";
 #endif
 #endif
+
+#if defined(DEBUG_ON)
+    config["debug"] = "on";
+#elif defined(DEBUG_OFF)
+    config["debug"] = "off";
+#else
     config["debug"] =
 #ifndef ARDUINO_AVR
         inDebug ? "on" : "off";
 #else
         "off";
+#endif
 #endif
     config["interval"] = "500";
 

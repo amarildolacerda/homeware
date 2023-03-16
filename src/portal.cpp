@@ -2,9 +2,7 @@
 
 #ifdef ARDUINO_AVR
 
-
 #else
-
 
 #include <Arduino.h>
 #include <portal.h>
@@ -29,10 +27,8 @@ SimpleTimer timer;
 WebSocketsServer webSocket = WebSocketsServer(81);
 #endif
 
-
 #ifdef ESP32
-    void
-    Portal::setup(WebServer *externalServer)
+void Portal::setup(WebServer *externalServer)
 #else
 void Portal::setup(ESP8266WebServer *externalServer)
 #endif
@@ -48,7 +44,7 @@ bool timeout_reconect = millis();
 uint8_t ws_num;
 void debugCallbackFunc(String texto)
 {
-    webSocket.sendTXT(ws_num,  texto);
+    webSocket.sendTXT(ws_num, texto);
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
@@ -59,7 +55,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     case WStype_CONNECTED:
 
         webSocket.sendTXT(num, "Connected ");
-        webSocket.sendTXT(num,homeware.resources);
+        webSocket.sendTXT(num, homeware.resources);
         homeware.config["debug"] = "term";
         homeware.resetDeepSleep(60);
 
@@ -127,7 +123,10 @@ void Portal::autoConnect(const String slabel)
 #ifdef TIMMED
     int ntimer = timer.setInterval(1000, sendUptime);
 #endif
-    
+#ifdef BOARD_NAME
+    // String tmp = BOARD_NAME;
+    //Serial.printf("Board: %s \r\n", BOARD_NAME);
+#endif
     label = slabel;
     if (homeware.config["password"] && homeware.config["ssid"])
     {
