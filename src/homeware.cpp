@@ -107,15 +107,16 @@ void Homeware::afterBegin()
     Protocol::afterBegin();
 }
 
-#ifdef ESP32
-void Homeware::setup(WebServer *externalServer)
-#else
 void Homeware::prepare()
 {
     Protocol::prepare();
     defaultConfig();
     restoreConfig();
 }
+
+#ifdef ESP32
+void Homeware::setup(WebServer *externalServer)
+#else
 
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
