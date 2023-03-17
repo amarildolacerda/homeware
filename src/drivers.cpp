@@ -15,6 +15,7 @@ void registerDriverMode(String mode, Driver *(*create)())
 {
     modeDriverList[numModes] = {mode, create};
     numModes++;
+    drivers->getProtocol()->resources += mode + ",";
 }
 
 Driver *createByDriverMode(const String mode, const int pin)

@@ -218,6 +218,10 @@ public:
     {
         items[count++] = driver;
     }
+    Protocol *getProtocol()
+    {
+        return getInstanceOfProtocol();
+    }
 
     void setup()
     {
