@@ -354,6 +354,15 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
+
+    JsonObject mode = config["mode"];
+
+    for (JsonPair k : mode)
+    {
+        int pin = String(k.key().c_str()).toInt();
+        getDrivers()->initPinMode(k.value().as<String>(), pin);
+    }
+
 #ifndef ARDUINO_AVR
     debug("Registrando os drivers: ");
 #ifdef ESP8266
@@ -368,7 +377,6 @@ void Protocol::setupPins()
     getDrivers()->setup();
 
     debug("Configurando as portas: ");
-    JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
         int pin = String(k.key().c_str()).toInt();
@@ -390,8 +398,11 @@ unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
 {
     int x = timeoutDeepSleep * t;
-    Serial.printf("next %i sleep at: %i \r\n", t, x);
     unsigned int v = millis() + (x);
+
+#ifdef DEBUG_ON
+    Serial.printf("next %i sleep: %i at: %i \r\n", t, x, v);
+#endif
 
     if (v > sleeptmp)
     {
@@ -406,6 +417,9 @@ void Protocol::doSleep(const int tempo)
     esp_sleep_enable_timer_wakeup(tempo * 1000000);
     esp_deep_sleep_start();
 #else
+#ifdef DEBUG_ON
+    Serial.println("checar se RST e D0 conectados para weakup");
+#endif
     ESP.deepSleep(tempo * 1000 * 1000);
 #endif
 }
@@ -764,6 +778,10 @@ int convertOnOff(String pin)
 
 String Protocol::doCommand(String command)
 {
+#ifdef DEBUG_ON
+    Serial.print("Command: ");
+    Serial.println(command);
+#endif
     if (command.startsWith("SERIAL "))
     {
         command.replace("SERIAL ", "");
@@ -786,7 +804,6 @@ String Protocol::doCommand(String command)
 #endif
             if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
         {
-            print("sleeping....");
             doSleep(String(cmd[1]).toInt());
             return "OK";
         }
@@ -953,6 +970,7 @@ String Protocol::doCommand(String command)
 
             if (cmd[2] == "none")
             {
+                getDrivers()->deleteByPin(pin);
                 config["mode"].remove(spin);
                 return "OK";
             }
@@ -973,6 +991,7 @@ String Protocol::doCommand(String command)
 
                 if (resources.indexOf(cmd[3]) > -1)
                 {
+                    getDrivers()->initPinMode(cmd[3], pin);
                     initPinMode(pin, cmd[3]);
                     return "OK";
                 }
@@ -1108,7 +1127,9 @@ void Protocol::loop()
 #ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0 && millis() > sleeptmp)
+    {
         doSleep(sleep);
+    }
 #endif
     yield();
 

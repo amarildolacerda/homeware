@@ -35,6 +35,15 @@ private:
     bool lastStatus = false;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("dht", create);
+    }
+    static Driver *create()
+    {
+        return new DHTDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("dht");

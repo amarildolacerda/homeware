@@ -8,6 +8,15 @@ private:
     int ultimoStatus = 0;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("lc", create);
+    }
+    static Driver *create()
+    {
+        return new LCTechRelayDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("lc");

@@ -9,6 +9,15 @@ private
     unsigned long entrada = millis();
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("pwm", create);
+    }
+    static Driver *create()
+    {
+        return new PWMDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("pwm");

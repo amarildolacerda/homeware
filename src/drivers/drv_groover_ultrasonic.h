@@ -14,6 +14,15 @@ private:
     unsigned ultimoStatus = 0;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("gus", create);
+    }
+    static Driver *create()
+    {
+        return new GrooverUltrasonicDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("gus");
@@ -36,7 +45,7 @@ public:
         Driver::setPin(pin);
         try
         {
-           // Protocol *protocol = getProtocol();
+            // Protocol *protocol = getProtocol();
             if (millis() - ultimo_ultrasonic > interval)
             {
                 Ultrasonic ultrasonic(pin);

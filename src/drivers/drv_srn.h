@@ -10,6 +10,15 @@ public:
     unsigned long iniciadoEm = 0;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("srn", create);
+    }
+    static Driver *create()
+    {
+        return new SireneDriver();
+    }
+
     SireneDriver()
     {
         setMode("srn");
@@ -57,6 +66,15 @@ public:
 class PulseDriver : public SireneDriver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("pulse", create);
+    }
+    static Driver *create()
+    {
+        return new PulseDriver();
+    }
+
     PulseDriver()
     {
         setMode("pulse");

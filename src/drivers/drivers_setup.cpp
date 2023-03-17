@@ -9,7 +9,7 @@
 
 #ifdef LCTECHRELAY
 #include "drivers/drv_lctech.h"
-LCTechRelayDriver lcTech_;
+// LCTechRelayDriver lcTech_;
 #endif
 
 #if defined(DRIVERS_EX)
@@ -17,11 +17,11 @@ LCTechRelayDriver lcTech_;
 #include "drivers/drv_srn.h"
 #ifdef DHT_SENSOR
 #include <drivers/drv_dht.h>
-DHTDriver dht_;
+// DHTDriver dht_;
 #endif
 #ifdef GROOVE_ULTRASONIC
 #include <drivers/drv_groover_ultrasonic.h>
-GrooverUltrasonicDriver gus_ = GrooverUltrasonicDriver();
+//GrooverUltrasonicDriver gus_ = GrooverUltrasonicDriver();
 #endif
 #endif
 
@@ -31,23 +31,23 @@ GrooverUltrasonicDriver gus_ = GrooverUltrasonicDriver();
 #include "drivers/drv_rst.h"
 #include "drivers/drv_pwm.h"
 
-LDRDriver ldr_;
-ResetButtonDriver rst_;
-PWMDriver pwm_;
+//LDRDriver ldr_;
+//ResetButtonDriver rst_;
+//PWMDriver pwm_;
 //=================================fim enabled
 #endif
 
 // expose==========================================
 // default
-ADCDriver adc_;
-InDriver in_;
-OutDriver out_;
+// ADCDriver adc_;
+// InDriver in_;
+// OutDriver out_;
 #if defined(DRIVERS_EX)
-LedDriver led_;
-DownDriver down_;
-UpDriver up_;
-SireneDriver srn_;
-PulseDriver pls_;
+// LedDriver led_;
+//DownDriver down_;
+//UpDriver up_;
+//SireneDriver srn_;
+//PulseDriver pls_;
 #endif
 
 bool drivers_loaded = false;
@@ -56,35 +56,51 @@ void drivers_register()
     if (drivers_loaded)
         return;
 
-    Drivers *driv = getDrivers();
+    //Drivers *driv = getDrivers();
     // defaults
-    driv->add(&adc_);
-    driv->add(&in_);
-    driv->add(&out_);
+    ADCDriver::registerMode();
+
+    // driv->add(&adc_);
+    InDriver::registerMode();
+    // driv->add(&in_);
+    OutDriver::registerMode();
+    // driv->add(&out_);
 
 #ifdef LCTECHRELAY
-    driv->add(&lcTech_);
+    //    driv->add(&lcTech_);
+    LCTechRelayDriver::registerMode();
+
 #endif
 
 #if defined(DRIVERS_EX)
-    driv->add(&led_);
-    driv->add(&down_);
-    driv->add(&up_);
-    driv->add(&srn_);
-    driv->add(&pls_);
+    LedDriver::registerMode();
+    // driv->add(&led_);
+    // driv->add(&down_);
+    DownDriver::registerMode();
+    // driv->add(&up_);
+    UpDriver::registerMode();
+    // driv->add(&srn_);
+    SireneDriver::registerMode();
+    // driv->add(&pls_);
+    PulseDriver::registerMode();
 #ifdef DHT_SENSOR
-    driv->add(&dht_);
+    DHTDriver::registerMode();
+    // driv->add(&dht_);
 #endif
 
 #ifdef GROOVE_ULTRASONIC
-    driv->add(&gus_);
+    // driv->add(&gus_);
+    GrooverUltrasonicDriver::registerMode();
 #endif // GROOVER
 
 // enableds
 #ifdef DRIVERS_ENABLED
-    driv->add(&ldr_);
-    driv->add(&pwm_);
-    driv->add(&rst_);
+    // driv->add(&ldr_);
+    LDRDriver::registerMode();
+    // driv->add(&pwm_);
+    PWMDriver::registerMode();
+    // driv->add(&rst_);
+    ResetButtonDriver::registerMode();
 #endif // DRIVER_ENABLED
 #endif
     drivers_loaded = true;

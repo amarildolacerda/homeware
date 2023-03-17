@@ -1,4 +1,79 @@
 
+/*
+
+Sim, é possível modificar o código para permitir que as classes filhas de Driver se auto-registrem na lista `modeDriverList`. Aqui está um exemplo de como isso pode ser feito:
+
+```c++
+class Driver {
+  public:
+    virtual void run() = 0;
+};
+
+
+class DriverA : public Driver {
+  public:
+    static void registerMode() {
+      ::registerMode("A", create);
+    }
+
+    static Driver* create() {
+      return new DriverA();
+    }
+
+    void run() {
+      // código para executar o driver A
+    }
+};
+
+class DriverB : public Driver {
+  public:
+    static void registerMode() {
+      ::registerMode("B", create);
+    }
+
+    static Driver* create() {
+      return new DriverB();
+    }
+
+    void run() {
+      // código para executar o driver B
+    }
+};
+
+Driver* drivers[10];
+int numDrivers = 0;
+
+void createDriver(String mode) {
+  for (int i = 0; i < numModes; i++) {
+    if (mode == modeDriverList[i].mode) {
+      drivers[numDrivers] = modeDriverList[i].create();
+      numDrivers++;
+      break;
+    }
+  }
+}
+
+void setup() {
+  DriverA::registerMode();
+  DriverB::registerMode();
+
+  createDriver("A");
+  createDriver("B");
+}
+
+void loop() {
+  for (int i = 0; i < numDrivers; i++) {
+    drivers[i]->run();
+  }
+}
+```
+
+Neste exemplo, cada classe filha de `Driver` possui um método estático `registerMode` que chama a função global `registerMode` para registrar a classe na lista `modeDriverList`. O método `setup` chama os métodos `registerMode` de cada classe filha para registrar todas as classes disponíveis.
+
+Espero que isso ajude! 😊
+
+*/
+
 #ifndef drivers_h
 #define drivers_h
 
@@ -93,6 +168,21 @@ public:
     }
 };
 
+/// -----------------------------------------------------
+/// Registra os tipos de drivers disponiveis para uso
+/// -----------------------------------------------------
+struct ModeDriverPair
+{
+    String mode;
+    Driver *(*create)();
+};
+
+void registerDriverMode(String mode, Driver *(*create)());
+Driver *createByDriverMode(const String mode, const int pin);
+
+// -----------------------------------------------
+//  Coleção de Drivers
+// -----------------------------------------------
 class Drivers
 {
 
@@ -102,6 +192,27 @@ private:
 
 public:
     Driver *items[32];
+    Driver *initPinMode(const String mode, const int pin)
+    {
+        Driver *old = findByPin(pin);
+        if (old && old->getMode() == mode)
+            return old;
+        Driver *nwer = createByDriverMode(mode, pin);
+        if (nwer)
+        {
+            deleteByPin(pin);
+
+            nwer->setMode(mode);
+            nwer->setPin(pin);
+            items[count++] = nwer;
+#ifdef DEBUG_ON
+            Serial.printf("Criou %s em %i\r\n", mode, pin);
+#endif
+            return nwer;
+            // add(nwer);
+        }
+        return nullptr;
+    }
     template <class T>
     void add(T *driver)
     {
@@ -116,6 +227,36 @@ public:
                 drv->setup();
         }
     }
+    void deleteByPin(const int pin)
+    {
+        int idx = indexOf(pin);
+        if (idx > -1)
+        {
+            items[idx] = nullptr;
+            for (int i = idx; i < count - 1; i++)
+            {
+                items[i] = items[i + 1];
+            }
+            count--;
+        }
+    }
+    int indexOf(const int pin)
+    {
+        int idx = 0;
+        for (auto *drv : items)
+        {
+            if (drv)
+            {
+                if (drv->getPin() == pin)
+                {
+                    return idx;
+                }
+            }
+            idx++;
+        }
+        return -1;
+    }
+
     Driver *findByMode(String mode)
     {
         for (auto *drv : items)

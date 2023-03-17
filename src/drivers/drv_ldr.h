@@ -18,6 +18,15 @@ private:
     unsigned interval = 60000;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("ldr", create);
+    }
+    static Driver *create()
+    {
+        return new LDRDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("ldr");

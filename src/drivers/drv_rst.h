@@ -5,6 +5,15 @@
 class ResetButtonDriver : public Driver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("rst", create);
+    }
+    static Driver *create()
+    {
+        return new ResetButtonDriver();
+    }
+
     void setup() override
     {
         Driver::setMode("rst");

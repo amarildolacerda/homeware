@@ -17,6 +17,14 @@ private:
     int max = 0;
 
 public:
+    static void registerMode()
+    {
+        registerDriverMode("adc", create);
+    }
+    static Driver *create()
+    {
+        return new ADCDriver();
+    }
     void setup() override
     {
         Driver::setMode("adc");
@@ -78,8 +86,8 @@ public:
         {
             Driver::setPin(pin);
             tmpAdc = analogRead(pin);
-            getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(),min,max);
-                ultimoLoop = millis();
+            getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(), min, max);
+            ultimoLoop = millis();
         }
         return genStatus();
     }

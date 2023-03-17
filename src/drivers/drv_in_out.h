@@ -28,6 +28,15 @@ public:
 class InDriver : public InOutDriver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("in", create);
+    }
+    static Driver *create()
+    {
+        return new InDriver();
+    }
+
     InDriver()
     {
         setMode("in");
@@ -42,6 +51,14 @@ public:
 class DownDriver : public InOutDriver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("pulldown", create);
+    }
+    static Driver *create()
+    {
+        return new DownDriver();
+    }
     DownDriver()
     {
         setMode("pulldown");
@@ -56,13 +73,22 @@ public:
         pinMode(pin, INPUT_PULLDOWN);
 #else
         pinMode(pin, INPUT_PULLDOWN_16);
-#endif        
+#endif
 #endif
     }
 };
 class UpDriver : public InOutDriver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("pullup", create);
+    }
+    static Driver *create()
+    {
+        return new UpDriver();
+    }
+
     UpDriver()
     {
         setMode("pullup");
@@ -80,6 +106,15 @@ public:
     {
         setMode("out");
     }
+    static void registerMode()
+    {
+        registerDriverMode("out", create);
+    }
+    static Driver *create()
+    {
+        return new OutDriver();
+    }
+
     void setPinMode(int pin) override
     {
         InOutDriver::setPinMode(pin);

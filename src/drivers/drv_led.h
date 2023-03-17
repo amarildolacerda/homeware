@@ -66,6 +66,14 @@ public:
 class LedDriver : public AlternateDriver
 {
 public:
+    static void registerMode()
+    {
+        registerDriverMode("led", create);
+    }
+    static Driver *create()
+    {
+        return new LedDriver();
+    }
     LedDriver()
     {
         Driver::setV1(5000);
