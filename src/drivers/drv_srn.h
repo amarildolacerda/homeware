@@ -13,6 +13,7 @@ public:
     static void registerMode()
     {
         registerDriverMode("srn", create);
+        registerDriverMode("alarm", create);
     }
     static Driver *create()
     {
@@ -21,7 +22,6 @@ public:
 
     SireneDriver()
     {
-        setMode("srn");
         interval = 1000;
     }
     void setup() override

@@ -78,9 +78,11 @@ public:
     virtual void setLedMode(const int mode);
     virtual void reset();
     callbackDebugFunction debugCallback;
-    virtual void driverCallbackEvent(String mode, int pin, int value);
+    static void driverCallbackEvent(String mode, int pin, int value);
+    static void driverOkCallbackEvent(String mode, int pin, int value);
+
 #endif
-    String getKey(String name)
+        String getKey(String name)
     {
         return config[name];
     }

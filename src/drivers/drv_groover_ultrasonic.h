@@ -11,7 +11,8 @@ private:
     int lastValue;
     int param = 100;
     unsigned interval = 1000;
-    unsigned ultimoStatus = 0;
+    unsigned eventState = 0;
+    bool trgOkState = true;
 
 public:
     static void registerMode()
@@ -77,10 +78,16 @@ public:
     }
     void loop() override
     {
-        if (getStatus() != ultimoStatus)
+        if (getStatus() != eventState)
         {
-            ultimoStatus = getStatus();
-            triggerCallback(getMode(), getPin(), ultimoStatus);
+            eventState = getStatus();
+            triggerCallback(getMode(), getPin(), eventState);
+            trgOkState = true;
+        }
+        if (trgOkState)
+        {
+            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            trgOkState = false;
         }
     }
     bool isLoop() override { return active; }

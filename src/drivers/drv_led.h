@@ -9,6 +9,7 @@ protected:
     bool curStatus = false;
     unsigned long ultimoChanged = 0;
     unsigned long interval = 1000;
+    bool stateOn = true;
 
 public:
     AlternateDriver()
@@ -26,7 +27,6 @@ public:
         pinMode(pin, OUTPUT);
         Driver::setPinMode(pin);
     }
-
     virtual int readPin(const int pin) override
     {
         Driver::setPin(pin);
@@ -38,22 +38,25 @@ public:
     }
     virtual int internalLoop(const int pin = 255)
     {
-        curPin = pin;
-        if (pin == 255 || pin < 0)
-            curPin = getProtocol()->findPinByMode(getMode());
-        if (pin < 0)
+        if (stateOn)
         {
-            curStatus = false;
-            digitalWrite(curPin, curStatus);
-            ultimoChanged = 0;
-        }
-        else
-        {
-            if ((!curStatus && (millis() - ultimoChanged > v1)) || (curStatus && (millis() - ultimoChanged > interval)))
+            curPin = pin;
+            if (pin == 255 || pin < 0)
+                curPin = getProtocol()->findPinByMode(getMode());
+            if (pin < 0)
             {
-                curStatus = !curStatus;
+                curStatus = false;
                 digitalWrite(curPin, curStatus);
-                ultimoChanged = millis();
+                ultimoChanged = 0;
+            }
+            else
+            {
+                if ((!curStatus && (millis() - ultimoChanged > v1)) || (curStatus && (millis() - ultimoChanged > interval)))
+                {
+                    curStatus = !curStatus;
+                    digitalWrite(curPin, curStatus);
+                    ultimoChanged = millis();
+                }
             }
         }
         return curStatus;
@@ -65,10 +68,12 @@ public:
 
 class LedDriver : public AlternateDriver
 {
+
 public:
     static void registerMode()
     {
         registerDriverMode("led", create);
+        registerDriverMode("ok", create);
     }
     static Driver *create()
     {
@@ -77,6 +82,14 @@ public:
     LedDriver()
     {
         Driver::setV1(5000);
-        Driver::setMode("led");
+    }
+    int writePin(const int pin, const int value) override
+    {
+        if (getMode() != "led")
+        {
+            stateOn = value > 0;
+            digitalWrite(pin, stateOn);
+        }
+        return stateOn;
     }
 };

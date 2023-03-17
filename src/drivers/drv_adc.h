@@ -15,9 +15,11 @@ private:
     int tmpAdc = 0;
     int min = 0;
     int max = 0;
+    bool trgOkState = true;
 
 public:
-    static void registerMode()
+    static void
+    registerMode()
     {
         registerDriverMode("adc", create);
     }
@@ -67,6 +69,12 @@ public:
         {
             eventState = genStatus();
             triggerCallback(getMode(), getPin(), eventState);
+            trgOkState = true;
+        }
+        if (trgOkState)
+        {
+            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            trgOkState = false;
         }
     }
     int genStatus()

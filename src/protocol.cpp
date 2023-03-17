@@ -30,11 +30,6 @@ void Protocol::debugf(const char *format, ...)
     protocol->debug(buffer);
 }
 
-void driverCallbackEventFunc(String mode, int pin, int value)
-{
-    getInstanceOfProtocol()->driverCallbackEvent(mode, pin, value);
-}
-
 Protocol *getInstanceOfProtocol()
 {
     return protocol;
@@ -371,7 +366,10 @@ void Protocol::setupPins()
 
     for (Driver *drv : getDrivers()->items)
         if (drv)
-            drv->setTriggerEvent(driverCallbackEventFunc);
+        {
+            drv->setTriggerEvent(driverCallbackEvent);
+            drv->setTriggerOkState(driverOkCallbackEvent);
+        }
     debugln("OK");
 #endif
     getDrivers()->setup();
@@ -488,9 +486,16 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
-    debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
-    checkTrigger(pin, value);
+    getInstanceOfProtocol()->debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
+    getInstanceOfProtocol()->checkTrigger(pin, value);
 }
+void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
+{
+    Driver *drv = getDrivers()->findByMode("ok");
+    if (drv)
+        drv->writePin(pin, value);
+}
+
 #endif
 
 void Protocol::prepare()
@@ -813,6 +818,34 @@ String Protocol::doCommand(String command)
             char json[1024];
             readFile(cmd[1], json, 1024);
             return String(json);
+        }
+        else if (cmd[0] == "test")
+        {
+            config["debug"] = "on";
+            int pin = getPinByName(cmd[1]);
+            if (cmd[1].substring(0, 1) == "A")
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    debugf("%i. %i: %i",i, pin, analogRead(pin));
+                    yield();
+                    delay(1000);
+                }
+            }
+            else
+            {
+                pinMode(pin, OUTPUT);
+                for (int i = 0; i < 10; i++)
+                {
+                    digitalWrite(pin, i % 2);
+                    debugf("%i. %i: %i",i, pin, i % 2);
+                    yield();
+                    delay(1000);
+                    yield();
+                }
+                digitalWrite(pin, LOW);
+            }
+            return "OK";
         }
         else
 

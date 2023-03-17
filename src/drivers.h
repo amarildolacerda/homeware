@@ -90,13 +90,14 @@ private:
 
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
-    callbackFunction triggerCallback;
     long v1 = 0;
+    callbackFunction triggerCallback;
+    callbackFunction triggerOkState;
 
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
-
     bool triggerEnabled = false;
+
     bool active = false;
     virtual void setV1(long x) { v1 = x; }
     virtual void setPinMode(int pin)
@@ -165,6 +166,10 @@ public:
     void setTriggerEvent(callbackFunction callback)
     {
         triggerCallback = callback;
+    }
+    void setTriggerOkState(callbackFunction callback)
+    {
+        triggerOkState = callback;
     }
 };
 

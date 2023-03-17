@@ -16,9 +16,11 @@ private:
     unsigned int tmpAdc = 0;
     unsigned int ultimoLoop = 0;
     unsigned interval = 60000;
+    bool trgOkState = true;
 
 public:
-    static void registerMode()
+    static void
+    registerMode()
     {
         registerDriverMode("ldr", create);
     }
@@ -81,6 +83,12 @@ public:
         {
             eventState = genStatus();
             triggerCallback(getMode(), getPin(), eventState);
+            trgOkState = true;
+        }
+        if (trgOkState)
+        {
+            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            trgOkState = false;
         }
     }
 };
