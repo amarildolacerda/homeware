@@ -54,7 +54,6 @@ public:
 class TemperatureSinricCloud : public SinricCloud
 {
 protected:
-
 public:
     void setup() override;
     void changed(const int pin, const long value) override;
@@ -67,7 +66,6 @@ public:
         return new TemperatureSinricCloud();
     }
     static bool onSinricDHTPowerState(const String &deviceId, bool &state);
-    static void sinricTemperaturesensor();
 };
 
 void registerSinricApi();

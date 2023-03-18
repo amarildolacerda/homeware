@@ -101,41 +101,9 @@ void MotionSinricCloud::setup()
 #endif
 }
 
-int ultimaTemperaturaAferida = 0;
-
-void TemperatureSinricCloud::sinricTemperaturesensor()
-{
-    auto *drv = getDrivers()->findByMode("dht");
-    if (!drv)
-        return;
-
-    auto *cDrv = getCloudDrivers().findByType("dht");
-    if (!cDrv)
-        return;
-
-    int pin = drv->getPin();
-
-    JsonObject r = drv->readStatus(pin);
-    float t = r["temperature"];
-    float h = r["humidity"];
-    if (ultimaTemperaturaAferida != t)
-    {
-        if (TemperatureSinricCloud *filho = static_cast<TemperatureSinricCloud *>(cDrv))
-        {
-            ultimaTemperaturaAferida = t;
-            SinricProTemperaturesensor &mySensor = SinricPro[filho->sensorId]; // get temperaturesensor device
-            mySensor.sendTemperatureEvent(t, h);                               // send event
-            String result;
-            serializeJson(r, result);
-            Serial.println(result);
-        }
-    }
-}
-
 bool TemperatureSinricCloud::onSinricDHTPowerState(const String &deviceId, bool &state)
 {
     Serial.printf("PowerState turned %s  \r\n", state ? "on" : "off");
-    sinricTemperaturesensor();
     return true; // request handled properly
 }
 
@@ -153,8 +121,25 @@ void DoorbellSinricCloud::setup()
     myDoorbell.onPowerState(onSinricPowerState);
 }
 
+float ultimaTemperaturaAferida = 0;
 void TemperatureSinricCloud::changed(const int pin, const long value)
 {
+    auto *drv = getDrivers()->findByPin(pin);
+    if (!drv)
+        return;
+
+    JsonObject r = drv->readStatus(pin);
+    float t = r["temperature"];
+    float h = r["humidity"];
+    if (ultimaTemperaturaAferida != t)
+    {
+        ultimaTemperaturaAferida = t;
+        SinricProTemperaturesensor &mySensor = SinricPro[sensorId]; // get temperaturesensor device
+        mySensor.sendTemperatureEvent(t, h);                        // send event
+        String result;
+        serializeJson(r, result);
+        Serial.println(result);
+    }
 }
 
 void DoorbellSinricCloud::changed(const int pin, const long value)
@@ -169,5 +154,5 @@ void DoorbellSinricCloud::changed(const int pin, const long value)
 
 void SinricCloud::loop()
 {
-    // SinricPro.handle();
+     //SinricPro.handle();
 }

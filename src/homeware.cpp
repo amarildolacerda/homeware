@@ -39,15 +39,6 @@
 void alexaTrigger(int pin, int value);
 #endif
 
-#ifdef SINRIC
-bool sinricActive = false;
-void sinricTrigger(int pin, int value);
-void sinricTemperaturesensor();
-
-#endif
-
-unsigned int sinric_count = 0;
-
 void linha()
 {
     Serial.println("-------------------------------");
@@ -136,16 +127,6 @@ void Homeware::afterLoop()
     alexa.loop();
 #endif
 
-#ifdef SINRIC
-    if (millis() - ultimaTemperatura > 60000)
-    {
-        if (sinric_count > 0 && sinricActive && !inTelnet)
-        {
-            sinricTemperaturesensor();
-            ultimaTemperatura = millis();
-        }
-    }
-#endif
     Protocol::afterLoop();
 }
 
@@ -265,7 +246,6 @@ void dimmableChanged(EspalexaDevice *d)
         homeware.writePin(pin, d->getValue());
     }
 }
-
 
 void Homeware::setupSensores()
 {
