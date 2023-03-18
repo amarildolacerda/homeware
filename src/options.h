@@ -18,7 +18,7 @@
 //----------------------
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
-#define SINRIC
+#define SINRICPRO
 #define TELNET
 #define USE_PIN_NAMES
 #define DRIVERS_EX
@@ -72,7 +72,7 @@
 #endif
 
 #ifdef BOARD_MIN
-#undef SINRIC
+#undef SINRICPRO
 #undef USE_PIN_NAMES
 #endif
 
@@ -91,11 +91,11 @@
 #if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC)
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
-#undef SINRIC
+#undef SINRICPRO
 #undef DHT_SENSOR
 #undef GROOVE_ULTRASONIC
 #undef LCTECHRELAY
-#undef SINRIC
+#undef SINRICPRO
 #undef GROOVE_ULTRASONIC
 #undef MQTT
 #endif

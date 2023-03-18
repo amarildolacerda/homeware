@@ -1,5 +1,6 @@
 #pragma once
 #include <options.h>
+
 #ifdef ARDUINO_AVR
 // nada aqui para AVR
 #else

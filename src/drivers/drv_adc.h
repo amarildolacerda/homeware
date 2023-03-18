@@ -94,7 +94,9 @@ public:
         {
             Driver::setPin(pin);
             tmpAdc = analogRead(pin);
+#ifdef DEBUG_ON
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(), min, max);
+#endif
             ultimoLoop = millis();
         }
         return genStatus();

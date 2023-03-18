@@ -17,6 +17,9 @@ unsigned int timeoutDeepSleep = 1000;
 #include "drivers.h"
 #include "drivers/drivers_setup.h"
 
+#include "cloud/cloud_setup.h"
+#include <cloud.h>
+
 Protocol *protocol;
 
 void Protocol::debugf(const char *format, ...)
@@ -144,6 +147,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
+        getCloudDrivers().changed(pin, newValue);
 #ifndef ARDUINO_AVR
         afterChanged(pin, newValue, getPinMode(pin));
 #endif
@@ -386,7 +390,23 @@ void Protocol::setupPins()
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
+
+    register_cloud_setup();
+    JsonObject sensores = getDevices();
+    for (JsonPair k : sensores)
+    {
+#ifdef DEBUG_ON
+        Serial.printf("Configurando sensor  '%s' em %s \r\n", k.value().as<String>(), k.key().c_str());
 #endif
+        getCloudDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
+#ifdef DEBUG_ON
+        Serial.println("OK");
+#endif
+    }
+    getCloudDrivers().afterSetup();
+
+#endif
+
     debugln("OK");
 }
 
@@ -729,6 +749,7 @@ void telnetOnInputReceive(String str)
         protocol->resetDeepSleep();
         protocol->print(protocol->doCommand(str));
     }
+    yield();
 }
 
 void Protocol::setupTelnet()
@@ -827,7 +848,7 @@ String Protocol::doCommand(String command)
             {
                 for (int i = 0; i < 10; i++)
                 {
-                    debugf("%i. %i: %i",i, pin, analogRead(pin));
+                    debugf("%i. %i: %i", i, pin, analogRead(pin));
                     yield();
                     delay(1000);
                 }
@@ -838,7 +859,7 @@ String Protocol::doCommand(String command)
                 for (int i = 0; i < 10; i++)
                 {
                     digitalWrite(pin, i % 2);
-                    debugf("%i. %i: %i",i, pin, i % 2);
+                    debugf("%i. %i: %i", i, pin, i % 2);
                     yield();
                     delay(1000);
                     yield();
@@ -1047,10 +1068,10 @@ String Protocol::doCommand(String command)
                     return "OK";
                 }
                 devices[spin] = cmd[3];
-                if (String("motion,doorbell").indexOf(cmd[3]) > -1)
+                /*if (String("motion,doorbell").indexOf(cmd[3]) > -1)
                     getMode()[spin] = "in";
                 if (String("ldr,dht").indexOf(cmd[3]) > -1)
-                    getMode()[spin] = cmd[3];
+                    getMode()[spin] = cmd[3];*/
                 return "OK";
             }
             else if (cmd[2] == "sensor")
@@ -1081,6 +1102,11 @@ String Protocol::doCommand(String command)
                 if (!cmd[4])
                     return "cmd incompleto";
                 JsonObject trigger = getTrigger();
+                if (cmd[3] == "none")
+                {
+                    trigger.remove(spin);
+                    return "OK";
+                }
                 trigger[spin] = getPinByName(cmd[3]);
 
                 // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
@@ -1156,6 +1182,7 @@ void Protocol::loop()
     eventLoop();
 
     getDrivers()->loop();
+    getCloudDrivers().loop();
 
 #ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();

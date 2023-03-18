@@ -33,13 +33,7 @@
 #include <mqtt.h>
 #endif
 
-#ifdef SINRIC
-#include "SinricPro.h"
-#include "SinricProMotionsensor.h"
-#include "SinricProTemperaturesensor.h"
-#include "SinricProDoorbell.h"
-
-#endif
+#include <cloud.h>
 
 #ifdef ALEXA
 void alexaTrigger(int pin, int value);
@@ -142,13 +136,6 @@ void Homeware::afterLoop()
     alexa.loop();
 #endif
 
-#ifdef SINRIC
-    if (sinric_count > 0 && sinricActive)
-        SinricPro.handle();
-    if (sinric_count > 0 && !sinricActive)
-        setLedMode(4);
-
-#endif
 
 #ifdef SINRIC
     if (millis() - ultimaTemperatura > 60000)
@@ -208,14 +195,6 @@ void sinricTrigger(int pin, int value)
     if (id)
     {
         String sType = homeware.getDevices()[String(pin)];
-        if (sType.startsWith("motion"))
-        {
-            bool bValue = value > 0;
-            Serial.printf("Motion %s\r\n", bValue ? "detected" : "not detected");
-            SinricProMotionsensor &myMotionsensor = SinricPro[id]; // get motion sensor device
-            myMotionsensor.sendPowerStateEvent(bValue);
-            myMotionsensor.sendMotionEvent(bValue);
-        }
         if (sType.startsWith("doorbell"))
         {
             bool bValue = value > 0;
@@ -310,15 +289,6 @@ void dimmableChanged(EspalexaDevice *d)
 }
 
 #ifdef SINRIC
-int findSinricPin(String id)
-{
-    for (JsonPair k : homeware.getSensors())
-    {
-        if (k.value().as<String>() == id)
-            return String(k.key().c_str()).toInt();
-    }
-    return -1;
-}
 
 int ultimaTemperaturaAferida = 0;
 void sinricTemperaturesensor()
@@ -355,14 +325,6 @@ bool onSinricDHTPowerState(const String &deviceId, bool &state)
     return true; // request handled properly
 }
 
-bool onSinricPowerState(const String &deviceId, bool &state)
-{
-    Serial.printf("Device %s turned %s (via SinricPro) \r\n", deviceId.c_str(), state ? "on" : "off");
-    int pin = findSinricPin(deviceId.c_str());
-    if (pin > -1)
-        homeware.writePin(pin, state ? HIGH : LOW);
-    return true; // req
-}
 
 #endif
 
@@ -394,13 +356,7 @@ void Homeware::setupSensores()
             myDoorbell.onPowerState(onSinricPowerState);
             sinric_count += 1;
         }
-        else if (sValue.startsWith("motion") && getSensors()[k.key().c_str()])
-        {
-            debug("Ativando PIR");
-            SinricProMotionsensor &myMotionsensor = SinricPro[getSensors()[k.key().c_str()]];
-            myMotionsensor.onPowerState(onSinricPowerState);
-            sinric_count += 1;
-        }
+       
         else if (sValue.startsWith("dht") && getSensors()[k.key().c_str()])
         {
             debug("Ativando DHT11");

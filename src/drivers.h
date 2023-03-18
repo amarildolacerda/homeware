@@ -193,7 +193,6 @@ class Drivers
 
 private:
     int count = 0;
-    int next = 0;
 
 public:
     Driver *items[32];
@@ -211,7 +210,7 @@ public:
             nwer->setPin(pin);
             items[count++] = nwer;
 #ifdef DEBUG_ON
-            Serial.printf("Criou %s em %i\r\n", mode, pin);
+            Serial.printf("Criou %s em %i, count: %i\r\n", mode.c_str(), pin, count);
 #endif
             return nwer;
             // add(nwer);
@@ -241,12 +240,20 @@ public:
         int idx = indexOf(pin);
         if (idx > -1)
         {
-            items[idx] = nullptr;
-            for (int i = idx; i < count - 1; i++)
+            Driver *drv = items[idx];
+            if (drv)
             {
-                items[i] = items[i + 1];
+#ifdef DEBUG_ON
+                Serial.printf("removeu driver: %s em %i\r\n", drv->getMode(), pin);
+#endif
+                delete drv;
+                drv = NULL;
+                for (int i = idx; i < count - 1; i++)
+                {
+                    items[i] = items[i + 1];
+                }
+                count--;
             }
-            count--;
         }
     }
     int indexOf(const int pin)
