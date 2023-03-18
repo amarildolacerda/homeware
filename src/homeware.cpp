@@ -136,7 +136,6 @@ void Homeware::afterLoop()
     alexa.loop();
 #endif
 
-
 #ifdef SINRIC
     if (millis() - ultimaTemperatura > 60000)
     {
@@ -184,27 +183,6 @@ const char *Homeware::getChipId()
 uint32_t Homeware::getChipId()
 {
     return ESP.getChipId();
-}
-#endif
-
-#ifdef SINRIC
-
-void sinricTrigger(int pin, int value)
-{
-    String id = homeware.getSensors()[String(pin)];
-    if (id)
-    {
-        String sType = homeware.getDevices()[String(pin)];
-        if (sType.startsWith("doorbell"))
-        {
-            bool bValue = value > 0;
-            Serial.printf("Doorbell %s\r\n", bValue ? "detected" : "not detected");
-            SinricProDoorbell &myDoorbell = SinricPro[id];
-            myDoorbell.sendPowerStateEvent(bValue);
-            if (bValue)
-                myDoorbell.sendDoorbellEvent();
-        }
-    }
 }
 #endif
 
@@ -288,45 +266,6 @@ void dimmableChanged(EspalexaDevice *d)
     }
 }
 
-#ifdef SINRIC
-
-int ultimaTemperaturaAferida = 0;
-void sinricTemperaturesensor()
-{
-#if defined(DRIVERS_ENABLED) && defined(DHT_SENSOR)
-    int pin = homeware.findPinByMode("dht");
-    if (pin < 0)
-        return;
-    String id = homeware.getSensors()[String(pin)];
-    if (!id)
-        return;
-    Driver *drv = getDrivers()->findByMode("dht");
-    if (!drv)
-        return;
-    JsonObject r = drv->readStatus(pin);
-    float t = r["temperature"];
-    float h = r["humidity"];
-    if (ultimaTemperaturaAferida != t)
-    {
-        ultimaTemperaturaAferida = t;
-        SinricProTemperaturesensor &mySensor = SinricPro[id]; // get temperaturesensor device
-        mySensor.sendTemperatureEvent(t, h);                  // send event
-        String result;
-        serializeJson(r, result);
-        Serial.println(result);
-    }
-#endif
-}
-
-bool onSinricDHTPowerState(const String &deviceId, bool &state)
-{
-    Serial.printf("PowerState turned %s  \r\n", state ? "on" : "off");
-    sinricTemperaturesensor();
-    return true; // request handled properly
-}
-
-
-#endif
 
 void Homeware::setupSensores()
 {
@@ -348,42 +287,8 @@ void Homeware::setupSensores()
         {
             alexa.addDevice(sName, dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
         }
-#ifdef SINRIC
-        else if (sValue.startsWith("doorbell") && getSensors()[k.key().c_str()])
-        {
-            debug("Ativando Doorbell");
-            SinricProDoorbell &myDoorbell = SinricPro[getSensors()[k.key().c_str()]];
-            myDoorbell.onPowerState(onSinricPowerState);
-            sinric_count += 1;
-        }
-       
-        else if (sValue.startsWith("dht") && getSensors()[k.key().c_str()])
-        {
-            debug("Ativando DHT11");
-            SinricProTemperaturesensor &mySensor = SinricPro[getSensors()[k.key().c_str()]];
-            mySensor.onPowerState(onSinricDHTPowerState);
-            sinric_count += 1;
-        }
-#endif
     }
 
-#ifdef SINRIC
-    resources += "SINRIC,";
-    if (sinric_count > 0)
-    {
-        SinricPro.onConnected([]()
-                              {            
-                                sinricActive = true;               
-                                homeware.resetDeepSleep();
-                                Serial.printf("Connected to SinricPro\r\n"); });
-        SinricPro.onDisconnected([]()
-                                 { 
-                                    sinricActive = false; 
-                                    Serial.printf("Disconnected from SinricPro\r\n"); });
-        SinricPro.begin(config["app_key"], config["app_secret"]);
-        sinricActive = true;
-    }
-#endif
     alexa.begin(server);
     Serial.println("OK");
 }
@@ -405,20 +310,10 @@ String Homeware::localIP()
 void Homeware::afterChanged(const int pin, const int value, const String mode)
 {
 
-#ifdef DHT_SENSOR
-#ifdef SINRIC
-    if (mode == "dht")
-        sinricTemperaturesensor();
-#endif
-#endif
 #ifdef ALEXA
     alexaTrigger(pin, value);
 #endif
 
-#ifdef SINRIC
-    if (sinricActive)
-        sinricTrigger(pin, value);
-#endif
     Protocol::afterChanged(pin, value, mode);
 }
 

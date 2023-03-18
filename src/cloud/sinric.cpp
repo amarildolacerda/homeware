@@ -1,5 +1,6 @@
 #include <cloud/sinric.h>
 #include "ArduinoJson.h"
+#include "drivers.h"
 
 #include "SinricPro.h"
 #include "SinricProMotionsensor.h"
@@ -12,8 +13,11 @@ static int sinricInstanceCount = 0;
 void registerSinricApi()
 {
     MotionSinricCloud::registerCloud();
+    DoorbellSinricCloud::registerCloud();
+    TemperatureSinricCloud::registerCloud();
 
-    getInstanceOfProtocol()->resources += "SINRIC,";
+    getInstanceOfProtocol()
+        ->resources += "SINRIC,";
 }
 
 int SinricCloud::findSinricPin(String id)
@@ -97,7 +101,73 @@ void MotionSinricCloud::setup()
 #endif
 }
 
+int ultimaTemperaturaAferida = 0;
+
+void TemperatureSinricCloud::sinricTemperaturesensor()
+{
+    auto *drv = getDrivers()->findByMode("dht");
+    if (!drv)
+        return;
+
+    auto *cDrv = getCloudDrivers().findByType("dht");
+    if (!cDrv)
+        return;
+
+    int pin = drv->getPin();
+
+    JsonObject r = drv->readStatus(pin);
+    float t = r["temperature"];
+    float h = r["humidity"];
+    if (ultimaTemperaturaAferida != t)
+    {
+        if (TemperatureSinricCloud *filho = static_cast<TemperatureSinricCloud *>(cDrv))
+        {
+            ultimaTemperaturaAferida = t;
+            SinricProTemperaturesensor &mySensor = SinricPro[filho->sensorId]; // get temperaturesensor device
+            mySensor.sendTemperatureEvent(t, h);                               // send event
+            String result;
+            serializeJson(r, result);
+            Serial.println(result);
+        }
+    }
+}
+
+bool TemperatureSinricCloud::onSinricDHTPowerState(const String &deviceId, bool &state)
+{
+    Serial.printf("PowerState turned %s  \r\n", state ? "on" : "off");
+    sinricTemperaturesensor();
+    return true; // request handled properly
+}
+
+void TemperatureSinricCloud::setup()
+{
+    getInstanceOfProtocol()->debug("Ativando DHT11");
+    SinricProTemperaturesensor &mySensor = SinricPro[sensorId];
+    mySensor.onPowerState(onSinricDHTPowerState);
+}
+
+void DoorbellSinricCloud::setup()
+{
+    getInstanceOfProtocol()->debug("Ativando Doorbell");
+    SinricProDoorbell &myDoorbell = SinricPro[sensorId];
+    myDoorbell.onPowerState(onSinricPowerState);
+}
+
+void TemperatureSinricCloud::changed(const int pin, const long value)
+{
+}
+
+void DoorbellSinricCloud::changed(const int pin, const long value)
+{
+    bool bValue = value > 0;
+    Serial.printf("Doorbell %s\r\n", bValue ? "detected" : "not detected");
+    SinricProDoorbell &myDoorbell = SinricPro[sensorId];
+    myDoorbell.sendPowerStateEvent(bValue);
+    if (bValue)
+        myDoorbell.sendDoorbellEvent();
+}
+
 void SinricCloud::loop()
 {
-   SinricPro.handle();
+    // SinricPro.handle();
 }

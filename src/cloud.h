@@ -84,6 +84,18 @@ public:
             }
         return nullptr;
     }
+    CloudDriver *findByType(const String sensorType)
+    {
+        for (auto *drv : items)
+            if (drv)
+            {
+                if (drv->sensorType == sensorType)
+                {
+                    return drv;
+                }
+            }
+        return nullptr;
+    }
 
     void changed(const int pin, const long value)
     {

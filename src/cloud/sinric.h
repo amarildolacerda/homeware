@@ -36,4 +36,38 @@ public:
     void setup() override;
 };
 
+class DoorbellSinricCloud : public SinricCloud
+{
+public:
+    void setup() override;
+    void changed(const int pin, const long value) override;
+    static void registerCloud()
+    {
+        registerCloudDriver("doorbell", create);
+    }
+    static CloudDriver *create()
+    {
+        return new DoorbellSinricCloud();
+    }
+};
+
+class TemperatureSinricCloud : public SinricCloud
+{
+protected:
+
+public:
+    void setup() override;
+    void changed(const int pin, const long value) override;
+    static void registerCloud()
+    {
+        registerCloudDriver("dht", create);
+    }
+    static CloudDriver *create()
+    {
+        return new TemperatureSinricCloud();
+    }
+    static bool onSinricDHTPowerState(const String &deviceId, bool &state);
+    static void sinricTemperaturesensor();
+};
+
 void registerSinricApi();
