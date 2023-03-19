@@ -25,6 +25,9 @@ public:
     virtual void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
+#ifdef DEBUG_DRV
+        Serial.println("AlternateDriver set OUTPUT mode");
+#endif
         Driver::setPinMode(pin);
     }
     virtual int readPin() override
@@ -37,8 +40,8 @@ public:
     }
     virtual int internalLoop(const int pin = 255)
     {
-#ifdef DEBUG_FULL
-        Serial.printf(" %s internalLoop %i stateOn %i status %i\r\n", _mode, pin, stateOn, curStatus);
+#ifdef DEBUG_DRV
+        Serial.printf(" %s internalLoop %i stateOn %i status %i v1 %i\r\n", _mode, pin, stateOn, curStatus, v1);
 #endif
         if (stateOn)
         {
@@ -53,12 +56,12 @@ public:
             }
             else
             {
-                if ((!curStatus && (millis() - ultimoChanged > v1)) || (curStatus && (millis() - ultimoChanged > interval)))
+                if (((!curStatus && millis() - ultimoChanged > v1)) || (curStatus && (millis() - ultimoChanged > interval)))
                 {
                     curStatus = !curStatus;
                     digitalWrite(curPin, curStatus);
-#ifdef DEBUG_ON
-                    Serial.printf("write %i: %i", curPin, curStatus);
+#ifdef DEBUG_DRV
+                    Serial.printf("write %s status %i set %i\r\n", _mode, curPin, curStatus);
 #endif
                     ultimoChanged = millis();
                 }
@@ -71,6 +74,32 @@ public:
     bool isLoop() override { return true; }
 };
 
+class OkDriver : public AlternateDriver
+{
+public:
+    static void registerMode()
+    {
+        registerDriverMode("ok", create);
+    }
+    static Driver *create()
+    {
+        return new OkDriver();
+    }
+    OkDriver()
+    {
+        Driver::setV1(5000);
+    }
+    int writePin(const int value) override
+    {
+        stateOn = value > 0;
+#ifdef DEBUG_DRV
+        Serial.printf("write %s: %i set %i", getMode(), _pin, stateOn);
+#endif
+        digitalWrite(_pin, stateOn);
+        return stateOn;
+    }
+};
+
 class LedDriver : public AlternateDriver
 {
 
@@ -78,7 +107,6 @@ public:
     static void registerMode()
     {
         registerDriverMode("led", create);
-        registerDriverMode("ok", create);
     }
     static Driver *create()
     {
@@ -90,14 +118,6 @@ public:
     }
     int writePin(const int value) override
     {
-        if (getMode() == "ok")
-        {
-            stateOn = value > 0;
-#ifdef DEBUG_ON
-            Serial.printf("WritePin %s: %i v: %i", getMode(), _pin, stateOn);
-#endif
-            digitalWrite(_pin, stateOn);
-        }
         return stateOn;
     }
 };

@@ -25,6 +25,9 @@ public:
     }
     static Driver *create()
     {
+#ifdef DEBUG_DRV
+        Serial.println("ADCDriver creating");
+#endif
         return new ADCDriver();
     }
     void setup() override
@@ -40,6 +43,9 @@ public:
             max = prot->getKey(sMax).toInt();
         triggerEnabled = true;
         active = true;
+#ifdef DEBUG_DRV
+        Serial.println("END: ADC setup()");
+#endif
     }
 
     int readPin() override
@@ -49,32 +55,52 @@ public:
             return tmpAdc;
         return genStatus();
     }
-    int writePin( const int value) override
+    int writePin(const int value) override
     {
         analogWrite(_pin, value);
         return value;
     }
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
+    bool isGet() override { return active; } // executa somente leitura
+    bool isSet() override { return false; }
     bool isLoop() override { return active; }
+    int internalRead() override
+    {
+        return tmpAdc;
+    }
+
     void loop() override
     {
-        getAdcState();
+#ifdef DEBUG_DRV
+        Serial.println("BEGIN: ADC loop()");
+#endif
 
-        if (eventState != genStatus())
+        int st = getAdcState();
+
+        if (eventState != st)
         {
-            eventState = genStatus();
-            triggerCallback(_mode, _pin, eventState);
+            eventState = st;
+#ifdef DEBUG_DRV
+            getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, st, min, max);
+#endif
+            if (triggerCallback)
+                triggerCallback(_mode, _pin, eventState);
             trgOkState = true;
         }
         if (trgOkState)
         {
-            triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
+            if (triggerOkState)
+                triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
+#ifdef DEBUG_DRV
+        Serial.println("END: ADC loop()");
+#endif
     }
     int genStatus()
     {
+#ifdef DEBUG_DRV
+        Serial.println("BEGIN: ADC genStatus()");
+#endif
         int rt = eventState;
         if (max > 0 && tmpAdc >= max)
             rt = HIGH;
@@ -82,18 +108,24 @@ public:
             rt = HIGH;
         else
             rt = LOW;
+#ifdef DEBUG_DRV
+        Serial.printf("END: genStatus()->%i\r\n", rt);
+#endif
         return rt;
     }
     int getAdcState()
     {
+#ifdef DEBUG_DRV
+        Serial.println("BEGIN: getAdcState()");
+#endif
         if (millis() - ultimoLoop > interval)
         {
             tmpAdc = analogRead(_pin);
-#ifdef DEBUG_FULL
-            getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(), min, max);
-#endif
             ultimoLoop = millis();
         }
+#ifdef DEBUG_DRV
+        Serial.printf("END: getAdcState() (%i)\r\n", tmpAdc);
+#endif
         return genStatus();
     }
 };

@@ -13,7 +13,7 @@ private:
     int eventState = 0;
     unsigned int min = 300;
     unsigned int max = 800;
-    unsigned int tmpAdc = 0;
+    unsigned int tmpValue = 0;
     unsigned int ultimoLoop = 0;
     unsigned interval = 60000;
     bool trgOkState = true;
@@ -53,9 +53,9 @@ public:
     int genStatus()
     {
         int rt = eventState;
-        if (tmpAdc >= max)
+        if (tmpValue >= max)
             rt = LOW;
-        if (tmpAdc < min)
+        if (tmpValue < min)
             rt = HIGH;
         return rt;
     }
@@ -63,7 +63,7 @@ public:
     {
         if (millis() - ultimoLoop > interval)
         {
-            tmpAdc = analogRead(_pin);
+            tmpValue = analogRead(_pin);
             ultimoLoop = millis();
         }
         return genStatus();
@@ -87,5 +87,9 @@ public:
             triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
+    }
+    int internalRead() override
+    {
+        return tmpValue;
     }
 };

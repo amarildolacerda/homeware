@@ -27,6 +27,7 @@ class Protocol
 {
 private:
 public:
+    //size_t driversCount = 0;
 #ifndef ARDUINO_AVR
     bool connected = false;
     int ledPin = 255;

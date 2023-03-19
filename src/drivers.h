@@ -101,7 +101,6 @@ public:
     virtual void setV1(long x) { v1 = x; }
     virtual void setPinMode(int pin)
     {
-        setPin(pin);
         active = true;
     }
 
@@ -117,6 +116,10 @@ public:
     virtual int readPin()
     {
         return -1;
+    }
+    virtual int internalRead()
+    {
+        return readPin();
     }
     void setMode(String md)
     {
@@ -156,6 +159,7 @@ public:
     virtual bool isLoop() { return false; }
 
     virtual void changed(const int value){};
+    virtual void beforeSetup() {}
 
     int getPin()
     {
@@ -190,37 +194,14 @@ Driver *createByDriverMode(const String mode, const int pin);
 class Drivers
 {
 
-private:
-    int count = 0;
-
 public:
     Driver *items[32];
-    Driver *initPinMode(const String mode, const int pin)
-    {
-        Driver *old = findByPin(pin);
-        if (old && old->getMode() == mode)
-            return old;
-        Driver *nwer = createByDriverMode(mode, pin);
-        if (nwer)
-        {
-            deleteByPin(pin);
+    int driversCount = 0;
 
-            nwer->setMode(mode);
-            nwer->setPin(pin);
-            items[count++] = nwer;
-#ifdef DEBUG_ON
-            Serial.printf("Criou %s em %i, count: %i\r\n", mode.c_str(), pin, count);
-#endif
-            return nwer;
-            // add(nwer);
-        }
-        return nullptr;
-    }
-    template <class T>
-    void add(T *driver)
-    {
-        items[count++] = driver;
-    }
+    Driver *initPinMode(const String mode, const int pin);
+
+    // template <class T>
+    void add(Driver *driver);
     Protocol *getProtocol()
     {
         return getInstanceOfProtocol();
@@ -236,24 +217,25 @@ public:
     }
     void deleteByPin(const int pin)
     {
-        int idx = indexOf(pin);
-        if (idx > -1)
-        {
-            Driver *drv = items[idx];
-            if (drv)
-            {
-#ifdef DEBUG_ON
-                Serial.printf("removeu driver: %s em %i\r\n", drv->getMode(), pin);
-#endif
-                delete drv;
-                drv = NULL;
-                for (int i = idx; i < count - 1; i++)
-                {
-                    items[i] = items[i + 1];
-                }
-                count--;
-            }
-        }
+        /*   int idx = indexOf(pin);
+           if (idx > -1)
+           {
+               Driver *drv = items[idx];
+               if (drv)
+               {
+   #ifdef DEBUG_ON
+                   Serial.printf("removeu driver: %s em %i\r\n", drv->getMode(), pin);
+   #endif
+                   delete drv;
+                   drv = NULL;
+                   for (int i = idx; i < count - 1; i++)
+                   {
+                       items[i] = items[i + 1];
+                   }
+                   count--;
+               }
+           }
+           */
     }
     int indexOf(const int pin)
     {
@@ -300,7 +282,7 @@ public:
     {
         auto *drv = findByPin(pin);
         if (drv && drv->active)
-            drv->changed( value);
+            drv->changed(value);
     }
     void loop()
     {

@@ -2,14 +2,12 @@
 
 #include "drv_led.h"
 
-class SireneDriver : public AlternateDriver
+/// @brief Sirene
+class SireneDriver : public OkDriver
 {
 public:
-    bool onOffStatus = false;
     unsigned long desligarDepoisDe = 60000;
-    unsigned long iniciadoEm = 0;
-
-public:
+    int iniciadoEm = 0;
     static void registerMode()
     {
         registerDriverMode("srn", create);
@@ -19,7 +17,6 @@ public:
     {
         return new SireneDriver();
     }
-
     SireneDriver()
     {
         interval = 1000;
@@ -36,33 +33,33 @@ public:
     }
     void loop() override
     {
-        if (!onOffStatus)
-            return; // Sirene não esta ligada
-        if (desligarDepoisDe > 0 && (millis() - iniciadoEm > desligarDepoisDe))
+        if (stateOn && desligarDepoisDe > 0 && (millis() - iniciadoEm > desligarDepoisDe))
         {
-            onOffStatus = false;
+            stateOn = false;
             internalLoop(-1);
             return;
         }
-        internalLoop(curPin);
+        else
+            internalLoop(curPin);
     }
     int readPin() override
     {
-        return onOffStatus;
+        return stateOn;
     }
     int writePin(const int value) override
     {
-        Serial.printf("srn %i para %i", _pin, value);
-        onOffStatus = (value > 0); // ativa o loop modo sirene
-        if (onOffStatus)
-            iniciadoEm = millis();
-        digitalWrite(_pin, onOffStatus);
+        stateOn = (value > 0); // ativa o loop modo sirene
+        iniciadoEm = millis();
+        digitalWrite(_pin, stateOn);
         ultimoChanged = millis();
-        curStatus = onOffStatus;
-        return onOffStatus;
+        curStatus = stateOn;
+        return stateOn;
     }
+    bool isSet() override { return true; }
+    bool isLoop() override { return true; }
 };
 
+/// @brief PulseDriver
 class PulseDriver : public SireneDriver
 {
 public:

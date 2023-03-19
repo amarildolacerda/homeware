@@ -30,15 +30,13 @@ void Protocol::debugf(const char *format, ...)
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    protocol->debug(buffer);
+    debug(buffer);
 }
 
 Protocol *getInstanceOfProtocol()
 {
     return protocol;
 }
-
-size_t driversCount = 0;
 
 #ifndef ARDUINO_AVR
 void Protocol::reset()
@@ -81,15 +79,27 @@ JsonObject Protocol::getDefaults()
 
 void Protocol::initPinMode(int pin, const String m)
 {
-    Driver *drv = getDrivers()->findByPin(pin);
+
+    Driver *drv = getDrivers()->initPinMode(m, pin);
     if (drv)
     {
-        drv->setPinMode(pin);
+        drv->setTriggerEvent(driverCallbackEvent);
+        drv->setTriggerOkState(driverOkCallbackEvent);
     }
-    else
-        pinMode(pin, OUTPUT);
+#ifdef DEBUG_DRV
+    Serial.print("DRV: ");
+    Serial.printf("%i is %s - ", pin, m);
+#endif
     JsonObject mode = getMode();
-    mode[String(pin)] = m;
+#ifdef DEBUG_DRV
+    if (!mode)
+        Serial.println("não inicializou o config");
+    else
+#endif
+        mode[String(pin)] = m;
+#ifdef DEBUG_DRV
+    Serial.println("OK");
+#endif
 }
 
 int Protocol::writePin(const int pin, const int value)
@@ -98,11 +108,11 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
-        debugf("write %s pin: %i to: %i", mode, pin, value);
+        debugf("write %s pin: %i set %i\r\n", mode, pin, value);
         Driver *drv = getDrivers()->findByPin(pin);
         if (drv && drv->isSet())
         {
-            drv->writePin( value);
+            drv->writePin(value);
         }
 
         else
@@ -120,7 +130,7 @@ int Protocol::writePWM(const int pin, const int value, const int timeout)
     if (drv && drv->active)
     {
         drv->setV1(timeout);
-        return drv->writePin( value);
+        return drv->writePin(value);
     }
     return 0;
 }
@@ -268,7 +278,7 @@ void Protocol::checkTrigger(int pin, int value)
             }
             else if (pinTo.toInt() != pin)
             {
-                debugf("{'trigger':%i, 'to':%i}", pin, value);
+                // debugf("{'trigger':%i, 'to':%i}", pin, value);
                 writePin(pinTo.toInt(), v);
             }
         }
@@ -354,27 +364,17 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
-
     JsonObject mode = config["mode"];
-
     for (JsonPair k : mode)
     {
         int pin = String(k.key().c_str()).toInt();
-        getDrivers()->initPinMode(k.value().as<String>(), pin);
+        initPinMode(pin, k.value().as<String>());
     }
-
 #ifndef ARDUINO_AVR
     debug("Registrando os drivers: ");
 #ifdef ESP8266
     analogWriteRange(256);
 #endif
-
-    for (Driver *drv : getDrivers()->items)
-        if (drv)
-        {
-            drv->setTriggerEvent(driverCallbackEvent);
-            drv->setTriggerOkState(driverOkCallbackEvent);
-        }
 #endif
     getDrivers()->setup();
 
@@ -495,20 +495,22 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
-    getInstanceOfProtocol()->debugf("callback: %s(%i,%i)", mode.c_str(), pin, value);
+#ifdef DEBUG_DRV
+    getInstanceOfProtocol()->debugf("callback: %s(%i,%i)\r\n", mode.c_str(), pin, value);
+#endif
     getInstanceOfProtocol()->checkTrigger(pin, value);
 }
 void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 {
-#if defined(DEBUG_ON) || defined(DEBUG_FULL)
-    Serial.printf("driverOkCallback %s: %i set %i\r\n", mode, pin, value);
-#endif
     Driver *drv = getDrivers()->findByMode(mode);
     if (drv)
     {
+#if defined(DEBUG_DRV)
+        Serial.printf("driverOkCallback %s: %i set %i\r\n", mode, drv->getPin(), value);
+#endif
         drv->writePin(value);
     }
-#if defined(DEBUG_ON) || defined(DEBUG_FULL)
+#if defined(DEBUG_DRV)
     else
     {
         Serial.println(" nao encotrei.");
@@ -611,7 +613,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("trigger");
     config.createNestedObject("stable");
 #ifdef BOARD_NAME
-    config["board"] = BOARD_NAME;
+    config["board"] = "ESP";
 #endif
 #ifndef ARDUINO_AVR
     config.createNestedObject("device");
@@ -630,7 +632,7 @@ DynamicJsonDocument Protocol::baseConfig()
 #endif
 
 #if defined(DEBUG_ON)
-    config["debug"] = "on";
+    config["debug"] = "term";
 #elif defined(DEBUG_OFF)
     config["debug"] = "off";
 #else
@@ -1000,7 +1002,7 @@ String Protocol::doCommand(String command)
                     }
                     else if (cmd[2] == "get" && drv->isGet())
                     {
-                        return String(drv->readPin());
+                        return String(drv->internalRead());
                     }
                     else if (cmd[2] == "set" && drv->isSet())
                     {
@@ -1045,7 +1047,6 @@ String Protocol::doCommand(String command)
 
                 if (resources.indexOf(cmd[3]) > -1)
                 {
-                    getDrivers()->initPinMode(cmd[3], pin);
                     initPinMode(pin, cmd[3]);
                     return "OK";
                 }
