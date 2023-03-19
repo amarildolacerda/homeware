@@ -37,6 +37,9 @@ public:
     }
     virtual int internalLoop(const int pin = 255)
     {
+#ifdef DEBUG_FULL
+        Serial.printf(" %s internalLoop %i stateOn %i status %i\r\n", _mode, pin, stateOn, curStatus);
+#endif
         if (stateOn)
         {
             curPin = pin;
@@ -54,6 +57,9 @@ public:
                 {
                     curStatus = !curStatus;
                     digitalWrite(curPin, curStatus);
+#ifdef DEBUG_ON
+                    Serial.printf("write %i: %i", curPin, curStatus);
+#endif
                     ultimoChanged = millis();
                 }
             }
