@@ -5,20 +5,14 @@
 class InOutDriver : public Driver
 {
 public:
-    virtual void setup() override
-    {
-        Driver::setup();
-    }
-    int readPin(const int pin) override
+    int readPin() override
     {
         active = true;
-
-        Driver::setPin(pin);
-        return digitalRead(pin);
+        return digitalRead(_pin);
     }
-    int writePin(const int pin, const int value) override
+    int writePin( const int value) override
     {
-        digitalWrite(pin, value);
+        digitalWrite(_pin, value);
         return value;
     }
     bool isGet() override { return true; }
@@ -37,10 +31,6 @@ public:
         return new InDriver();
     }
 
-    InDriver()
-    {
-        setMode("in");
-    }
     void setPinMode(int pin) override
     {
         InOutDriver::setPinMode(pin);
@@ -58,10 +48,6 @@ public:
     static Driver *create()
     {
         return new DownDriver();
-    }
-    DownDriver()
-    {
-        setMode("pulldown");
     }
     void setPinMode(int pin) override
     {
@@ -89,10 +75,6 @@ public:
         return new UpDriver();
     }
 
-    UpDriver()
-    {
-        setMode("pullup");
-    }
     void setPinMode(int pin) override
     {
         InOutDriver::setPinMode(pin);
@@ -102,10 +84,6 @@ public:
 class OutDriver : public InOutDriver
 {
 public:
-    OutDriver()
-    {
-        setMode("out");
-    }
     static void registerMode()
     {
         registerDriverMode("out", create);

@@ -26,7 +26,6 @@ public:
 
     void setup() override
     {
-        Driver::setMode("gus");
         Driver::setup();
         if (getProtocol()->containsKey("gus"))
             param = getProtocol()->getKey("gus").toInt();
@@ -41,15 +40,14 @@ public:
         active = true;
     }
 
-    int readPin(const int pin) override
+    int readPin() override
     {
-        Driver::setPin(pin);
         try
         {
             // Protocol *protocol = getProtocol();
             if (millis() - ultimo_ultrasonic > interval)
             {
-                Ultrasonic ultrasonic(pin);
+                Ultrasonic ultrasonic(_pin);
                 long RangeInCentimeters;
                 RangeInCentimeters = ultrasonic.MeasureInCentimeters(); // two measurements should keep an interval
                 // Serial.print(RangeInCentimeters);                       // 0~400cm
@@ -86,7 +84,7 @@ public:
         }
         if (trgOkState)
         {
-            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            triggerOkState("ok", getPin(), eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
     }

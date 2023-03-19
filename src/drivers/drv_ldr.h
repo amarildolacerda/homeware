@@ -31,7 +31,6 @@ public:
 
     void setup() override
     {
-        Driver::setMode("ldr");
         Driver::setup();
         Protocol *prot = getProtocol();
         if (prot->containsKey(sMin))
@@ -47,10 +46,9 @@ public:
         pinMode(pin, INPUT);
         active = true;
     }
-    int readPin(const int pin) override
+    int readPin() override
     {
-        Driver::setPin(pin);
-        return getAdcState(pin);
+        return getAdcState();
     }
     int genStatus()
     {
@@ -61,12 +59,11 @@ public:
             rt = HIGH;
         return rt;
     }
-    int getAdcState(int pin)
+    int getAdcState()
     {
         if (millis() - ultimoLoop > interval)
         {
-            Driver::setPin(pin);
-            tmpAdc = analogRead(pin);
+            tmpAdc = analogRead(_pin);
             ultimoLoop = millis();
         }
         return genStatus();
@@ -77,17 +74,17 @@ public:
     }
     void loop() override
     {
-        getAdcState(getPin());
+        getAdcState();
 
         if (eventState != genStatus())
         {
             eventState = genStatus();
-            triggerCallback(getMode(), getPin(), eventState);
+            triggerCallback(_mode, _pin, eventState);
             trgOkState = true;
         }
         if (trgOkState)
         {
-            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
     }

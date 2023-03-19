@@ -85,14 +85,13 @@ Espero que isso ajude! 😊
 class Driver
 {
 private:
-    String _mode;
-    int _pin = -1;
-
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
     long v1 = 0;
     callbackFunction triggerCallback;
     callbackFunction triggerOkState;
+    String _mode;
+    int _pin = -1;
 
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
@@ -115,7 +114,7 @@ public:
     };
     virtual void loop(){};
 
-    virtual int readPin(const int pin)
+    virtual int readPin()
     {
         return -1;
     }
@@ -135,7 +134,7 @@ public:
     {
         _pin = pin;
     }
-    virtual int writePin(const int pin, const int value)
+    virtual int writePin(const int value)
     {
         return value;
     }
@@ -145,9 +144,9 @@ public:
     {
         return "NAK";
     }
-    virtual JsonObject readStatus(const int pin)
+    virtual JsonObject readStatus()
     {
-        int rsp = readPin(pin);
+        int rsp = readPin();
         DynamicJsonDocument json = DynamicJsonDocument(128);
         json["result"] = rsp;
         return json.as<JsonObject>();
@@ -156,7 +155,7 @@ public:
     virtual bool isCommand() { return false; }
     virtual bool isLoop() { return false; }
 
-    virtual void changed(const int pin, const int value){};
+    virtual void changed(const int value){};
 
     int getPin()
     {
@@ -301,7 +300,7 @@ public:
     {
         auto *drv = findByPin(pin);
         if (drv && drv->active)
-            drv->changed(pin, value);
+            drv->changed( value);
     }
     void loop()
     {

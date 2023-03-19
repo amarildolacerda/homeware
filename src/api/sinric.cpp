@@ -43,16 +43,11 @@ void SinricCloud::setup()
     {
         sensorId = prot->getSensors()[String(pin)].as<String>();
 
-#ifdef DEBUG_ON
-        String sJson;
-        serializeJson(json, sJson);
-        Serial.printf("Sensores: %i - %s \r\n", pin, sJson.c_str());
-#endif
     }
 #ifdef DEBUG_ON
     else
     {
-        Serial.println("a instância protocol não esta completa sua inicialização");
+        Serial.println("a instância protocol não esta completa na sua inicialização");
     }
     Serial.printf("Sensor: %s \r\n", sensorId.c_str());
 #endif
@@ -130,7 +125,7 @@ void TemperatureSinricCloud::changed(const int pin, const long value)
     if (!drv)
         return;
 
-    JsonObject r = drv->readStatus(pin);
+    JsonObject r = drv->readStatus();
     float t = r["temperature"];
     float h = r["humidity"];
     if (ultimaTemperaturaAferida != t)

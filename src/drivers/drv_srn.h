@@ -46,17 +46,17 @@ public:
         }
         internalLoop(curPin);
     }
-    int readPin(const int pin) override
+    int readPin() override
     {
         return onOffStatus;
     }
-    int writePin(const int pin, const int value) override
+    int writePin(const int value) override
     {
-        Serial.printf("srn %i para %i", pin, value);
+        Serial.printf("srn %i para %i", _pin, value);
         onOffStatus = (value > 0); // ativa o loop modo sirene
         if (onOffStatus)
             iniciadoEm = millis();
-        digitalWrite(pin, onOffStatus);
+        digitalWrite(_pin, onOffStatus);
         ultimoChanged = millis();
         curStatus = onOffStatus;
         return onOffStatus;
@@ -77,7 +77,6 @@ public:
 
     PulseDriver()
     {
-        setMode("pulse");
         interval = 10000;
     }
     void setup() override

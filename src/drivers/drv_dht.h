@@ -46,7 +46,6 @@ public:
 
     void setup() override
     {
-        Driver::setMode("dht");
         Driver::setup();
         if (getProtocol()->containsKey("dht_min"))
             min = getProtocol()->getKey("dht_min").toInt();
@@ -71,18 +70,17 @@ public:
         Serial.print("command dht: ");
         Serial.println(command);
         String *cmd = split(command, ' ');
-        JsonObject j = readStatus(String(cmd[1]).toInt());
+        JsonObject j = readStatus();
         String result;
         serializeJson(j, result);
         getProtocol()->debug(result);
         return result;
     }
-    JsonObject readStatus(const int pin) override
+    JsonObject readStatus() override
     {
         if (!dht_inited)
         {
-            Driver::setPin(pin);
-            dht.setup(pin, DHTesp::AUTO_DETECT);
+            dht.setup(_pin, DHTesp::AUTO_DETECT);
             dht_inited = true;
         }
         delay(dht.getMinimumSamplingPeriod());
@@ -95,13 +93,12 @@ public:
     }
     virtual bool isGet() override { return true; }
     virtual bool isStatus() override { return true; }
-    virtual int readPin(const int pin) override
+    virtual int readPin() override
     {
         if (!ultimoStatus || millis() - ultimoLeitura > interval)
         {
             ultimoLeitura = millis();
-            Driver::setPin(pin);
-            ultimoStatus = readStatus(pin);
+            ultimoStatus = readStatus();
         }
         return ultimoStatus["temperature"];
     }
@@ -115,7 +112,7 @@ public:
         if (getStatus() != lastStatus)
         {
             lastStatus = getStatus();
-            triggerCallback(getMode(), getPin(), lastStatus);
+            triggerCallback(_mode, _pin, lastStatus);
         }
     }
 };

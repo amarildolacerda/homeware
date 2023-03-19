@@ -81,7 +81,7 @@ JsonObject Protocol::getDefaults()
 
 void Protocol::initPinMode(int pin, const String m)
 {
-    Driver *drv = getDrivers()->findByMode(m);
+    Driver *drv = getDrivers()->findByPin(pin);
     if (drv)
     {
         drv->setPinMode(pin);
@@ -99,15 +99,16 @@ int Protocol::writePin(const int pin, const int value)
     if (mode != NULL)
     {
         debugf("write %s pin: %i to: %i", mode, pin, value);
-        Driver *drv = getDrivers()->findByMode(mode);
+        Driver *drv = getDrivers()->findByPin(pin);
         if (drv && drv->isSet())
         {
-            drv->writePin(pin, value);
+            drv->writePin( value);
         }
 
         else
         {
-            digitalWrite(pin, value);
+            if (mode != "adc")
+                digitalWrite(pin, value);
         }
     }
     return value;
@@ -115,11 +116,11 @@ int Protocol::writePin(const int pin, const int value)
 
 int Protocol::writePWM(const int pin, const int value, const int timeout)
 {
-    Driver *drv = getDrivers()->findByMode("pwm");
+    Driver *drv = getDrivers()->findByPin(pin);
     if (drv && drv->active)
     {
         drv->setV1(timeout);
-        return drv->writePin(pin, value);
+        return drv->writePin( value);
     }
     return 0;
 }
@@ -171,13 +172,13 @@ int Protocol::readPin(const int pin, const String mode)
             m = drv->getMode();
     }
     else
-        drv = getDrivers()->findByMode(m);
+        drv = getDrivers()->findByPin(pin);
     if (!drv)
         debugf("Pin: %i. Não tem um drive especifico: %s \r\n", pin, m);
 
     if (drv && drv->isGet())
     {
-        newValue = drv->readPin(pin);
+        newValue = drv->readPin();
         // checa quem dispara trigger de alteração do estado
         // quando o driver esta  triggerEnabled=true significa que o driver dispara os eventos
         // por conta de regras especificas do driver;
@@ -284,9 +285,9 @@ int Protocol::switchPin(const int pin)
     Driver *drv = getDrivers()->findByPin(pin);
     if (drv)
     {
-        int r = drv->readPin(pin);
+        int r = drv->readPin();
         debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
-        return drv->writePin(pin, (r > 0) ? LOW : HIGH);
+        return drv->writePin((r > 0) ? LOW : HIGH);
     }
     return -1;
 }
@@ -374,7 +375,6 @@ void Protocol::setupPins()
             drv->setTriggerEvent(driverCallbackEvent);
             drv->setTriggerOkState(driverOkCallbackEvent);
         }
-    debugln("OK");
 #endif
     getDrivers()->setup();
 
@@ -394,10 +394,9 @@ void Protocol::setupPins()
         getApiDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
     }
     getApiDrivers().afterSetup();
+    debugln("OK");
 
 #endif
-
-    debugln("OK");
 }
 
 #ifndef ARDUINO_AVR
@@ -425,7 +424,7 @@ void Protocol::doSleep(const int tempo)
     esp_sleep_enable_timer_wakeup(tempo * 1000000);
     esp_deep_sleep_start();
 #else
-#ifdef DEBUG_ON
+#if defined(DEBUG_ON) || defined(DEBUG_FULL)
     Serial.println("checar se RST e D0 conectados para weakup");
 #endif
     ESP.deepSleep(tempo * 1000 * 1000);
@@ -501,9 +500,20 @@ void Protocol::driverCallbackEvent(String mode, int pin, int value)
 }
 void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 {
-    Driver *drv = getDrivers()->findByMode("ok");
+#if defined(DEBUG_ON) || defined(DEBUG_FULL)
+    Serial.printf("driverOkCallback %s: %i set %i\r\n", mode, pin, value);
+#endif
+    Driver *drv = getDrivers()->findByMode(mode);
     if (drv)
-        drv->writePin(pin, value);
+    {
+        drv->writePin(value);
+    }
+#if defined(DEBUG_ON) || defined(DEBUG_FULL)
+    else
+    {
+        Serial.println(" nao encotrei.");
+    }
+#endif
 }
 
 #endif
@@ -983,22 +993,22 @@ String Protocol::doCommand(String command)
                 {
                     if (cmd[2] == "status")
                     {
-                        JsonObject j = drv->readStatus(pin);
+                        JsonObject j = drv->readStatus();
                         String rsp;
                         serializeJson(j, rsp);
                         return rsp;
                     }
                     else if (cmd[2] == "get" && drv->isGet())
                     {
-                        return String(drv->readPin(pin));
+                        return String(drv->readPin());
                     }
                     else if (cmd[2] == "set" && drv->isSet())
                     {
-                        return String(drv->writePin(pin, convertOnOff(cmd[3])));
+                        return String(drv->writePin(convertOnOff(cmd[3])));
                     }
                     else if (cmd[2] == "get" && drv->isStatus())
                     {
-                        JsonObject sts = drv->readStatus(pin);
+                        JsonObject sts = drv->readStatus();
                         String rsp;
                         serializeJson(sts, rsp);
                         return rsp;

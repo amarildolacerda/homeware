@@ -17,9 +17,6 @@ void Alexa::init()
     getInstanceOfProtocol()->resources += "alexa,";
     alexa.setFriendlyName(getInstanceOfProtocol()->config["label"]);
     alexa.begin(homeware.server);
-#ifdef DEBUG_ON
-    Serial.println("Alexa pronta");
-#endif
 }
 
 void Alexa::beforeSetup()

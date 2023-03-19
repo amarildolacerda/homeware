@@ -39,23 +39,19 @@ public:
         if (prot->containsKey(sMax))
             max = prot->getKey(sMax).toInt();
         triggerEnabled = true;
-    }
-    void setPinMode(int pin) override
-    {
         active = true;
     }
 
-    int readPin(const int pin) override
+    int readPin() override
     {
-        Driver::setPin(pin);
-        getAdcState(pin);
+        getAdcState();
         if (min == 0 && max == 0)
             return tmpAdc;
         return genStatus();
     }
-    int writePin(const int pin, const int value) override
+    int writePin( const int value) override
     {
-        analogWrite(pin, value);
+        analogWrite(_pin, value);
         return value;
     }
     bool isGet() override { return true; }
@@ -63,17 +59,17 @@ public:
     bool isLoop() override { return active; }
     void loop() override
     {
-        getAdcState(getPin());
+        getAdcState();
 
         if (eventState != genStatus())
         {
             eventState = genStatus();
-            triggerCallback(getMode(), getPin(), eventState);
+            triggerCallback(_mode, _pin, eventState);
             trgOkState = true;
         }
         if (trgOkState)
         {
-            triggerOkState(getMode(), getPin(), eventState == 0 ? HIGH : LOW);
+            triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
     }
@@ -88,13 +84,12 @@ public:
             rt = LOW;
         return rt;
     }
-    int getAdcState(int pin)
+    int getAdcState()
     {
         if (millis() - ultimoLoop > interval)
         {
-            Driver::setPin(pin);
-            tmpAdc = analogRead(pin);
-#ifdef DEBUG_ON
+            tmpAdc = analogRead(_pin);
+#ifdef DEBUG_FULL
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, genStatus(), min, max);
 #endif
             ultimoLoop = millis();

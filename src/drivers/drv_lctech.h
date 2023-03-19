@@ -17,17 +17,11 @@ public:
         return new LCTechRelayDriver();
     }
 
-    void setup() override
+    int readPin() override
     {
-        Driver::setMode("lc");
-        Driver::setup();
-    }
-    int readPin(const int pin) override
-    {
-        Driver::setPin(pin);
         return ultimoStatus;
     }
-    int writePin(const int pin, const int value) override
+    int writePin( const int value) override
     {
         byte relON[] = {0xA0, 0x01, 0x01, 0xA2}; // Hex command to send to serial for open relay
         byte relOFF[] = {0xA0, 0x01, 0x00, 0xA1};
@@ -38,7 +32,7 @@ public:
         else
             Serial.write(relON, sizeof(relON));
         ultimoStatus = value;
-        getProtocol()->debugf("LcTech Relay: %i to: %i",pin,value);
+        getProtocol()->debugf("LcTech Relay: %i to: %i",_pin,value);
         return value;
     }
 

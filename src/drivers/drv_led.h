@@ -27,10 +27,9 @@ public:
         pinMode(pin, OUTPUT);
         Driver::setPinMode(pin);
     }
-    virtual int readPin(const int pin) override
+    virtual int readPin() override
     {
-        Driver::setPin(pin);
-        return internalLoop(pin);
+        return internalLoop(_pin);
     }
     virtual void loop() override
     {
@@ -83,12 +82,15 @@ public:
     {
         Driver::setV1(5000);
     }
-    int writePin(const int pin, const int value) override
+    int writePin(const int value) override
     {
-        if (getMode() != "led")
+        if (getMode() == "ok")
         {
             stateOn = value > 0;
-            digitalWrite(pin, stateOn);
+#ifdef DEBUG_ON
+            Serial.printf("WritePin %s: %i v: %i", getMode(), _pin, stateOn);
+#endif
+            digitalWrite(_pin, stateOn);
         }
         return stateOn;
     }

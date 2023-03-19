@@ -14,30 +14,24 @@ public:
         return new ResetButtonDriver();
     }
 
-    void setup() override
-    {
-        Driver::setMode("rst");
-        Driver::setup();
-    }
     void setPinMode(int pin) override
     {
-        Driver::setPin(pin);
         pinMode(pin, INPUT);
         active = true;
     }
 
-    int readPin(const int pin) override
+    int readPin() override
     {
-        int v = digitalRead(pin);
+        int v = digitalRead(_pin);
         if (v == HIGH)
         {
             getProtocol()->reset();
         }
         return v;
     }
-    int writePin(const int pin, const int value) override
+    int writePin( const int value) override
     {
-        digitalWrite(pin, value);
+        digitalWrite(_pin, value);
         return value;
     }
     bool isGet() override { return true; }

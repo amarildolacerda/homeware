@@ -18,39 +18,33 @@ public:
         return new PWMDriver();
     }
 
-    void setup() override
-    {
-        Driver::setMode("pwm");
-        Driver::setup();
-    }
     void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
         active = true;
     }
 
-    int readPin(const int pin) override
+    int readPin() override
     {
-        Driver::setPin(pin);
-        return analogRead(pin);
+        return analogRead(_pin);
     }
-    int writePin(const int pin, const int value) override
+    int writePin( const int value) override
     {
 
         if (value == 0)
         {
-            digitalWrite(pin, LOW);
+            digitalWrite(_pin, LOW);
         }
         else
         {
             int timeout = v1;
-            analogWrite(pin, value);
+            analogWrite(_pin, value);
             if (value > 0 && timeout > 0)
             {
                 const int entrada = millis();
-                digitalWrite(pin, HIGH);
+                digitalWrite(_pin, HIGH);
                 delay(timeout);
-                digitalWrite(pin, LOW);
+                digitalWrite(_pin, LOW);
                 return millis() - entrada;
             }
         }
