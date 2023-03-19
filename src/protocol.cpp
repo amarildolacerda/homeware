@@ -17,8 +17,8 @@ unsigned int timeoutDeepSleep = 1000;
 #include "drivers.h"
 #include "drivers/drivers_setup.h"
 
-#include "cloud/cloud_setup.h"
-#include <cloud.h>
+#include "api/api_setup.h"
+#include <api.h>
 
 Protocol *protocol;
 
@@ -147,7 +147,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
-        getCloudDrivers().changed(pin, newValue);
+        getApiDrivers().changed(pin, newValue);
 #ifndef ARDUINO_AVR
         afterChanged(pin, newValue, getPinMode(pin));
 #endif
@@ -378,12 +378,6 @@ void Protocol::setupPins()
 #endif
     getDrivers()->setup();
 
-    debug("Configurando as portas: ");
-    for (JsonPair k : mode)
-    {
-        int pin = String(k.key().c_str()).toInt();
-        initPinMode(pin, k.value().as<String>());
-    }
 #ifndef ARDUINO_AVR
 
     for (JsonPair k : getDefaults())
@@ -391,19 +385,15 @@ void Protocol::setupPins()
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
 
-    register_cloud_setup();
+    /// APIs externas
+    register_Api_setup();
     JsonObject sensores = getDevices();
     for (JsonPair k : sensores)
     {
-#ifdef DEBUG_ON
-        Serial.printf("Configurando sensor  '%s' em %s \r\n", k.value().as<String>(), k.key().c_str());
-#endif
-        getCloudDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
-#ifdef DEBUG_ON
-        Serial.println("OK");
-#endif
+        // init sensor, set pins e setup();
+        getApiDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
     }
-    getCloudDrivers().afterSetup();
+    getApiDrivers().afterSetup();
 
 #endif
 
@@ -454,7 +444,7 @@ const char HELP[] =
 #ifdef ALEXA
     "gpio <pin> device <onoff,dimmable> (usado na alexa)\r\n"
 #endif
-#ifdef SINRIC
+#ifdef SINRICPRO
     "set app_key <x> (SINRIC)\r\n"
     "set app_secret <x> (SINRIC)\r\n"
     "gpio <pin> sensor <deviceId> (SINRIC)\r\n"
@@ -651,7 +641,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config["mqtt_interval"] = 1;
     config["mqtt_prefix"] = "mesh";
 #endif
-#ifdef SINRIC
+#ifdef SINRICPRO
     config["app_key"] = "";
     config["app_secret"] = "";
 #endif
@@ -1182,7 +1172,7 @@ void Protocol::loop()
     eventLoop();
 
     getDrivers()->loop();
-    getCloudDrivers().loop();
+    getApiDrivers().loop();
 
 #ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();

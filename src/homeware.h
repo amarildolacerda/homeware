@@ -9,17 +9,14 @@
 #include "WiFi.h"
 #include "WebServer.h"
 #else
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "ESP8266WiFi.h"
+#include "ESP8266WebServer.h"
 #endif
 
-#include "homewareWiFiManager.h"
+#include <homewareWiFiManager.h>
 
-#include <ArduinoJson.h>
+#include "ArduinoJson.h"
 
-#ifdef ALEXA
-#include <Espalexa.h>
-#endif
 
 #include <functions.h>
 
@@ -37,9 +34,6 @@ public:
     void setServer(ESP8266WebServer *externalServer = nullptr);
 #endif
     virtual String localIP();
-#ifdef ALEXA
-    Espalexa alexa = Espalexa();
-#endif
 #ifdef ESP32
     WebServer *server;
 #else
@@ -69,9 +63,6 @@ public:
 
 private:
     void setupServer();
-#ifdef ALEXA
-    void setupSensores();
-#endif
 };
 
 extern Homeware homeware;

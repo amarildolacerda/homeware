@@ -10,6 +10,10 @@
 // #include <wm_strings_pt_BR.h>
 #include <homeware.h>
 
+#ifdef ALEXA
+#include <api/alexa.h>
+#endif
+
 #ifdef ESP32
 #include "WiFi.h"
 #else
@@ -125,7 +129,7 @@ void Portal::autoConnect(const String slabel)
 #endif
 #ifdef BOARD_NAME
     // String tmp = BOARD_NAME;
-    //Serial.printf("Board: %s \r\n", BOARD_NAME);
+    // Serial.printf("Board: %s \r\n", BOARD_NAME);
 #endif
     label = slabel;
     if (homeware.config["password"] && homeware.config["ssid"])
@@ -447,7 +451,7 @@ void Portal::setupServer()
 #ifdef ALEXA
     server->onNotFound([]()
                        {
-	if (!homeware.alexa.handleAlexaApiCall(homeware.server->uri(),homeware.server->arg(0)))
+	if (!getAlexa().handleAlexaApiCall(homeware.server->uri(),homeware.server->arg(0)))
 	{
         homeware.server->send(404, "text/plain", "Not found");
     } });

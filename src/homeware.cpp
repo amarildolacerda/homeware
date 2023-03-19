@@ -33,11 +33,8 @@
 #include <mqtt.h>
 #endif
 
-#include <cloud.h>
+#include <api.h>
 
-#ifdef ALEXA
-void alexaTrigger(int pin, int value);
-#endif
 
 void linha()
 {
@@ -71,10 +68,6 @@ void Homeware::setupServer()
 
 void Homeware::afterBegin()
 {
-#ifdef ALEXA
-    resources += "alexa,";
-    setupSensores();
-#endif
     setupServer();
 
 #ifdef OTA
@@ -123,9 +116,6 @@ void Homeware::afterLoop()
 #ifdef MQTT
     mqtt.loop();
 #endif
-#ifdef ALEXA
-    alexa.loop();
-#endif
 
     Protocol::afterLoop();
 }
@@ -167,112 +157,6 @@ uint32_t Homeware::getChipId()
 }
 #endif
 
-#ifdef ALEXA
-void alexaTrigger(int pin, int value)
-{
-    for (int i = 0; i < ESPALEXA_MAXDEVICES; i++)
-    {
-        EspalexaDevice *d = homeware.alexa.getDevice(i);
-        if (d != nullptr && d->getValue() != value)
-        {
-            int id = d->getId();
-            int index = 0;
-            for (JsonPair k : homeware.getDevices())
-            {
-                String sType = k.value().as<String>();
-                if (sType != "onoff" && sType != "dimmable")
-                    continue;
-                if (index == id)
-                {
-                    if (String(pin) == k.key().c_str())
-                    {
-                        d->setState(value != 0);
-                        if (value > 0 && sType == "onoff")
-                        {
-                            d->setValue(value);
-                            d->setPercent((value > 0) ? 100 : 0);
-                        }
-                        else if (sType.startsWith("dimmable"))
-                        {
-                            d->setValue(value);
-                            d->setPercent((value / 1024) * 100);
-                        }
-                        homeware.debug(stringf("Alexa Pin %d setValue(%d)", pin, value));
-                    }
-                }
-                index += 1;
-            }
-        }
-    }
-}
-int findAlexaPin(EspalexaDevice *d)
-{
-
-    if (d == nullptr)
-        return -1;       // this is good practice, but not required
-    int id = d->getId(); // * base 0
-    Serial.printf("\r\nId: %d \r\n", id);
-    JsonObject devices = homeware.getDevices();
-    int index = 0;
-    int pin = -1;
-    for (JsonPair k : devices)
-    {
-        homeware.debug(stringf("Alexa: %s %s %d", k.key().c_str(), k.value(), d->getValue()));
-        if (index == (id))
-        {
-            pin = String(k.key().c_str()).toInt();
-            break;
-        }
-        index += 1;
-    }
-    return pin;
-}
-
-void onoffChanged(EspalexaDevice *d)
-{
-    int pin = findAlexaPin(d);
-    bool value = d->getState();
-    if (pin > -1)
-    {
-        homeware.writePin(pin, (value) ? HIGH : LOW);
-    }
-}
-
-void dimmableChanged(EspalexaDevice *d)
-{
-    int pin = findAlexaPin(d);
-    if (pin > -1)
-    {
-        homeware.writePin(pin, d->getValue());
-    }
-}
-
-void Homeware::setupSensores()
-{
-    Serial.print("Ativando sensores: ");
-    JsonObject devices = getDevices();
-    alexa.setFriendlyName(config["label"]);
-    for (JsonPair k : devices)
-    {
-        debug(stringf("%s is %s\r\n", k.key().c_str(), k.value().as<String>()));
-        String sName = config["label"];
-        sName += "-";
-        sName += k.key().c_str();
-        String sValue = k.value().as<String>();
-        if (sValue == "onoff")
-        {
-            alexa.addDevice(sName, onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
-        }
-        else if (sValue.startsWith("dim"))
-        {
-            alexa.addDevice(sName, dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
-        }
-    }
-
-    alexa.begin(server);
-    Serial.println("OK");
-}
-#endif
 
 String IPAddressToString(const IPAddress x)
 {
@@ -289,11 +173,6 @@ String Homeware::localIP()
 // ============= revisados para ficar aqui mesmo
 void Homeware::afterChanged(const int pin, const int value, const String mode)
 {
-
-#ifdef ALEXA
-    alexaTrigger(pin, value);
-#endif
-
     Protocol::afterChanged(pin, value, mode);
 }
 

@@ -3,15 +3,18 @@
 #include "Arduino.h"
 #include "protocol.h"
 
-class CloudDriver
+class ApiDriver
 {
 private:
 public:
+    String productName = "local";
     String sensorType;
+    int sensorIndex = -1;
     int pin;
     virtual void setup() {}
     virtual void loop() {}
     virtual bool isLoop() { return false; }
+    virtual void beforeSetup() {}
     virtual void afterSetup() {}
     virtual void changed(const int pin, const long value) {}
     static Protocol *getProtocol()
@@ -29,26 +32,25 @@ public:
 #endif
 };
 
-struct CloudDriverPair
+struct ApiDriverPair
 {
     String sensorType;
-    CloudDriver *(*create)();
+    ApiDriver *(*create)();
 };
 
-void registerCloudDriver(String sensorType, CloudDriver *(*create)());
-CloudDriver *createCloudDriver(const String sensorType, const int pin);
+void registerApiDriver(String sensorType, ApiDriver *(*create)());
+ApiDriver *createApiDriver(const String sensorType, const int pin);
 
-class CloudDrivers
+class ApiDrivers
 {
-private:
-    CloudDriver *items[32];
 
 public:
-    void add(CloudDriver *driver);
+    ApiDriver *items[32];
+    void add(ApiDriver *driver);
 
-    CloudDriver *initPinSensor(const int pin, const String sensorType)
+    ApiDriver *initPinSensor(const int pin, const String sensorType)
     {
-        CloudDriver *drv = createCloudDriver(sensorType, pin);
+        ApiDriver *drv = createApiDriver(sensorType, pin);
         if (drv)
         {
             drv->setup();
@@ -72,7 +74,7 @@ public:
                 drv->loop();
             }
     }
-    CloudDriver *findByPin(const int pin)
+    ApiDriver *findByPin(const int pin)
     {
         for (auto *drv : items)
             if (drv)
@@ -84,7 +86,7 @@ public:
             }
         return nullptr;
     }
-    CloudDriver *findByType(const String sensorType)
+    ApiDriver *findByType(const String sensorType)
     {
         for (auto *drv : items)
             if (drv)
@@ -114,4 +116,4 @@ public:
     }
 };
 
-CloudDrivers getCloudDrivers();
+ApiDrivers getApiDrivers();

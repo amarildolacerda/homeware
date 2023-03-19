@@ -1,4 +1,4 @@
-#include <cloud/sinric.h>
+#include <api/sinric.h>
 #include "ArduinoJson.h"
 #include "drivers.h"
 
@@ -7,17 +7,16 @@
 #include "SinricProTemperaturesensor.h"
 #include "SinricProDoorbell.h"
 
-static bool sinricLoaded = false;
-static int sinricInstanceCount = 0;
+bool sinricLoaded = false;
+int sinricInstanceCount = 0;
 
 void registerSinricApi()
 {
-    MotionSinricCloud::registerCloud();
-    DoorbellSinricCloud::registerCloud();
-    TemperatureSinricCloud::registerCloud();
+    MotionSinricCloud::registerApi();
+    DoorbellSinricCloud::registerApi();
+    TemperatureSinricCloud::registerApi();
 
-    getInstanceOfProtocol()
-        ->resources += "SINRIC,";
+    getInstanceOfProtocol()->resources += "SINRIC,";
 }
 
 int SinricCloud::findSinricPin(String id)
@@ -80,7 +79,6 @@ void SinricCloud::initSinric()
         Serial.printf("Key: %s token: %s", prot->config["app_key"], prot->config["app_secret"]);
 #endif
     }
-    sinricInstanceCount++;
 }
 
 void MotionSinricCloud::changed(const int pin, const long value)
@@ -93,6 +91,8 @@ void MotionSinricCloud::changed(const int pin, const long value)
 }
 void MotionSinricCloud::setup()
 {
+    sensorIndex = sinricInstanceCount++;
+
     SinricCloud::setup();
     SinricProMotionsensor &myMotionsensor = SinricPro[sensorId];
     myMotionsensor.onPowerState(onSinricPowerState);
@@ -109,6 +109,7 @@ bool TemperatureSinricCloud::onSinricDHTPowerState(const String &deviceId, bool 
 
 void TemperatureSinricCloud::setup()
 {
+    sensorIndex = sinricInstanceCount++;
     getInstanceOfProtocol()->debug("Ativando DHT11");
     SinricProTemperaturesensor &mySensor = SinricPro[sensorId];
     mySensor.onPowerState(onSinricDHTPowerState);
@@ -116,6 +117,7 @@ void TemperatureSinricCloud::setup()
 
 void DoorbellSinricCloud::setup()
 {
+    sensorIndex = sinricInstanceCount++;
     getInstanceOfProtocol()->debug("Ativando Doorbell");
     SinricProDoorbell &myDoorbell = SinricPro[sensorId];
     myDoorbell.onPowerState(onSinricPowerState);
@@ -154,5 +156,6 @@ void DoorbellSinricCloud::changed(const int pin, const long value)
 
 void SinricCloud::loop()
 {
-     //SinricPro.handle();
+    // if (sensorIndex == 0)
+    //  SinricPro.handle();
 }

@@ -1,13 +1,14 @@
 #pragma once
 
 #include <options.h>
-#include <cloud.h>
+#include <api.h>
 
-class SinricCloud : public CloudDriver
+class SinricCloud : public ApiDriver
 {
 private:
 protected:
 public:
+    int sensorIndex = -1;
     String sensorId;
     static void initSinric();
     void loop() override;
@@ -23,11 +24,11 @@ public:
 class MotionSinricCloud : public SinricCloud
 {
 public:
-    static void registerCloud()
+    static void registerApi()
     {
-        registerCloudDriver("motion", create);
+        registerApiDriver("motion", create);
     }
-    static CloudDriver *create()
+    static ApiDriver *create()
     {
         return new MotionSinricCloud();
     }
@@ -41,11 +42,11 @@ class DoorbellSinricCloud : public SinricCloud
 public:
     void setup() override;
     void changed(const int pin, const long value) override;
-    static void registerCloud()
+    static void registerApi()
     {
-        registerCloudDriver("doorbell", create);
+        registerApiDriver("doorbell", create);
     }
-    static CloudDriver *create()
+    static ApiDriver *create()
     {
         return new DoorbellSinricCloud();
     }
@@ -57,11 +58,11 @@ protected:
 public:
     void setup() override;
     void changed(const int pin, const long value) override;
-    static void registerCloud()
+    static void registerApi()
     {
-        registerCloudDriver("dht", create);
+        registerApiDriver("dht", create);
     }
-    static CloudDriver *create()
+    static ApiDriver *create()
     {
         return new TemperatureSinricCloud();
     }
