@@ -27,6 +27,7 @@ public:
     static void registerApi()
     {
         registerApiDriver("motion", create);
+        registerApiDriver("alarm", create);
     }
     static ApiDriver *create()
     {

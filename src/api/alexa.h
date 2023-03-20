@@ -15,6 +15,7 @@ public:
 
     static void init();
     String getName();
+    bool isLoop() override { return true; }
 };
 
 /// @brief AlexaLight liga um Sensor onoff controlado pela alexa
@@ -28,14 +29,13 @@ public:
     }
     static ApiDriver *create()
     {
+#ifdef DEBUG_ALEXA
+        Serial.println("AlexaLight create");
+#endif
         return new AlexaLight();
     }
     void beforeSetup() override;
 
-    void loop() override
-    {
-        Alexa::loop();
-    }
     static void onoffChanged(EspalexaDevice *d)
     {
         bool value = d->getState();
