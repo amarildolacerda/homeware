@@ -14,7 +14,7 @@ public:
     virtual void loop() override;
     static int findAlexaPin(EspalexaDevice *d);
 
-    static void begin();
+    static void begin(Espalexa server);
     String getName();
     bool isLoop() override { return true; }
 };

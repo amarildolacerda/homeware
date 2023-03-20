@@ -5,23 +5,24 @@
 #include "homeware.h"
 #include <Espalexa.h>
 
-Espalexa alexa = Espalexa();
+Espalexa localalexa;
+
 Espalexa getAlexa()
 {
-    return alexa;
+    return localalexa;
 }
 
 int localSensorId = 0;
 bool localAlexaInited = false;
 
-void Alexa::begin()
+void Alexa::begin(Espalexa server)
 {
     if (localAlexaInited)
         return;
+    localalexa = server;
     getInstanceOfProtocol()
         ->resources += "alexa,";
-    alexa.setFriendlyName(getInstanceOfProtocol()->config["label"]);
-    alexa.begin(homeware.server);
+    localalexa.setFriendlyName(getInstanceOfProtocol()->config["label"]);
     localAlexaInited = true;
 
 #ifdef DEBUG_ALEXA
@@ -29,8 +30,8 @@ void Alexa::begin()
 #endif
 }
 
-void Alexa::afterSetup(){
-    Alexa::begin();
+void Alexa::afterSetup()
+{
 }
 void Alexa::beforeSetup()
 {
@@ -46,7 +47,7 @@ void Alexa::loop()
 #ifdef DEBUG_ALEXA
         Serial.println("AlexaLight loop()");
 #endif
-        alexa.loop();
+       // alexa.loop();  // passado para o main
     }
 }
 
@@ -90,14 +91,14 @@ void AlexaLight::beforeSetup()
 {
     Alexa::beforeSetup();
     sensorId = localSensorId++;
-    alexa.addDevice(getName(), onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
+    localalexa.addDevice(getName(), onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
 #ifdef DEBUG_ALEXA
     Serial.println("AlexaLight.addDevice(..)");
 #endif
 }
 void AlexaLight::changed(const int pin, const long value)
 {
-    EspalexaDevice *d = alexa.getDevice(sensorId);
+    EspalexaDevice *d = localalexa.getDevice(sensorId);
     d->setState(true); // indica se esta ligado
     d->setValue(value);
     d->setPercent((value > 0) ? 100 : 0);
@@ -110,7 +111,7 @@ void AlexaDimmable::beforeSetup()
 {
     Alexa::beforeSetup();
     sensorId = localSensorId++;
-    alexa.addDevice(getName(), dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
+    localalexa.addDevice(getName(), dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
 #ifdef DEBUG_ALEXA
     Serial.println("AlexaDimmable.addDevice(..)");
 #endif
@@ -118,7 +119,7 @@ void AlexaDimmable::beforeSetup()
 
 void AlexaDimmable::changed(const int pin, const long value)
 {
-    EspalexaDevice *d = alexa.getDevice(sensorId);
+    EspalexaDevice *d = localalexa.getDevice(sensorId);
     d->setState(true); // indica se esta ligado
     d->setValue(value);
     d->setPercent((value / 1024) * 100);

@@ -151,6 +151,6 @@ void DoorbellSinricCloud::changed(const int pin, const long value)
 
 void SinricCloud::loop()
 {
-    if (sensorIndex == 0)
-      SinricPro.handle();
+//    if (sensorIndex == 0)
+//      SinricPro.handle();
 }
