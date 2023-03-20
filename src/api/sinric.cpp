@@ -1,8 +1,8 @@
 #include <api/sinric.h>
+#include "SinricPro.h"
 #include "ArduinoJson.h"
 #include "drivers.h"
 
-#include "SinricPro.h"
 #include "SinricProMotionsensor.h"
 #include "SinricProTemperaturesensor.h"
 #include "SinricProDoorbell.h"
@@ -151,6 +151,6 @@ void DoorbellSinricCloud::changed(const int pin, const long value)
 
 void SinricCloud::loop()
 {
-//    if (sensorIndex == 0)
-//      SinricPro.handle();
+    if (sensorIndex == 0)
+      SinricPro.handle();
 }
