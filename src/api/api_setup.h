@@ -18,6 +18,5 @@ void register_Api_setup()
 #ifdef ALEXA
     AlexaLight::registerApi();
     AlexaDimmable::registerApi();
-    Alexa::init();// last - deixar por último - need to be last one
 #endif
 }

@@ -10,10 +10,11 @@ class Alexa : public ApiDriver
 public:
     int sensorId = -1;
     void beforeSetup() override;
+    void afterSetup() override;
     virtual void loop() override;
     static int findAlexaPin(EspalexaDevice *d);
 
-    static void init();
+    static void begin();
     String getName();
     bool isLoop() override { return true; }
 };

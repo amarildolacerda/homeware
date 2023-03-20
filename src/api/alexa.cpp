@@ -3,26 +3,35 @@
 #include <protocol.h>
 #include "ArduinoJson.h"
 #include "homeware.h"
+#include <Espalexa.h>
 
-Espalexa alexa;
+Espalexa alexa = Espalexa();
 Espalexa getAlexa()
 {
     return alexa;
 }
 
 int localSensorId = 0;
+bool localAlexaInited = false;
 
-void Alexa::init()
+void Alexa::begin()
 {
-    getInstanceOfProtocol()->resources += "alexa,";
+    if (localAlexaInited)
+        return;
+    getInstanceOfProtocol()
+        ->resources += "alexa,";
     alexa.setFriendlyName(getInstanceOfProtocol()->config["label"]);
-    alexa.setDiscoverable(true);
     alexa.begin(homeware.server);
+    localAlexaInited = true;
+
 #ifdef DEBUG_ALEXA
     Serial.println("Alexa::init()");
 #endif
 }
 
+void Alexa::afterSetup(){
+    Alexa::begin();
+}
 void Alexa::beforeSetup()
 {
     productName = "Alexa"; // dont change - nao alterar, usado para checar qual drive na busca do pin
