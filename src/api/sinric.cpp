@@ -42,7 +42,6 @@ void SinricCloud::setup()
     if (prot)
     {
         sensorId = prot->getSensors()[String(pin)].as<String>();
-
     }
 #ifdef DEBUG_ON
     else
@@ -55,10 +54,13 @@ void SinricCloud::setup()
 
 void SinricCloud::initSinric()
 {
-    if (!sinricLoaded)
+    Protocol *prot = getInstanceOfProtocol();
+    if (!sinricLoaded && sinricInstanceCount > 0 && prot->config["app_key"] && prot->config["app_secret"])
     {
+#ifdef DEBUG_SINRIC
+        Serial.println("BEGIN: initSinric() ");
+#endif
 
-        Protocol *prot = getInstanceOfProtocol();
         SinricPro.onConnected([]()
                               {
                                 Protocol *prot = getInstanceOfProtocol();
@@ -69,7 +71,9 @@ void SinricCloud::initSinric()
         SinricPro.begin(prot->config["app_key"], prot->config["app_secret"]);
 
         sinricLoaded = true;
-        Serial.println("Sinric pronto");
+#ifdef DEBUG_SINRIC
+        Serial.println("END: InitSinric() OK ");
+#endif
 #ifdef DEBUG_ON
         Serial.printf("Key: %s token: %s", prot->config["app_key"], prot->config["app_secret"]);
 #endif
@@ -80,20 +84,32 @@ void MotionSinricCloud::changed(const int pin, const long value)
 {
     bool bValue = value > 0;
     Serial.printf("Motion %s\r\n", bValue ? "detected" : "not detected");
-    SinricProMotionsensor &myMotionsensor = SinricPro[sensorId]; // get motion sensor device
-    myMotionsensor.sendPowerStateEvent(bValue);
-    myMotionsensor.sendMotionEvent(bValue);
+    if (sensorId)
+    {
+#ifdef DEBUG_SINRIC
+        Serial.println("BEGIN: Sinric Motion changed ");
+#endif
+
+        SinricProMotionsensor &myMotionsensor = SinricPro[sensorId]; // get motion sensor device
+        myMotionsensor.sendPowerStateEvent(bValue);
+        myMotionsensor.sendMotionEvent(bValue);
+#ifdef DEBUG_SINRIC
+        Serial.println("END: Sinric loop() ");
+#endif
+    }
 }
 void MotionSinricCloud::setup()
 {
-    sensorIndex = sinricInstanceCount++;
-
     SinricCloud::setup();
-    SinricProMotionsensor &myMotionsensor = SinricPro[sensorId];
-    myMotionsensor.onPowerState(onSinricPowerState);
-#ifdef DEBUG_ON
-    Serial.println("Sinric Motion OK");
+    if (sensorId)
+    {
+        sensorIndex = sinricInstanceCount++;
+        SinricProMotionsensor &myMotionsensor = SinricPro[sensorId];
+        myMotionsensor.onPowerState(onSinricPowerState);
+#ifdef DEBUG_SINRIC
+        Serial.println("Sinric Motion setup() OK");
 #endif
+    }
 }
 
 bool TemperatureSinricCloud::onSinricDHTPowerState(const String &deviceId, bool &state)
@@ -104,53 +120,100 @@ bool TemperatureSinricCloud::onSinricDHTPowerState(const String &deviceId, bool 
 
 void TemperatureSinricCloud::setup()
 {
-    sensorIndex = sinricInstanceCount++;
-    getInstanceOfProtocol()->debug("Ativando DHT11");
-    SinricProTemperaturesensor &mySensor = SinricPro[sensorId];
-    mySensor.onPowerState(onSinricDHTPowerState);
+    SinricCloud::setup();
+    if (sensorId)
+    {
+        sensorIndex = sinricInstanceCount++;
+        getInstanceOfProtocol()->debug("Ativando DHT11");
+        SinricProTemperaturesensor &mySensor = SinricPro[sensorId];
+        mySensor.onPowerState(onSinricDHTPowerState);
+#ifdef DEBUG_SINRIC
+        Serial.println("Sinric Temperature setup() OK");
+#endif
+    }
 }
 
 void DoorbellSinricCloud::setup()
 {
-    sensorIndex = sinricInstanceCount++;
-    getInstanceOfProtocol()->debug("Ativando Doorbell");
-    SinricProDoorbell &myDoorbell = SinricPro[sensorId];
-    myDoorbell.onPowerState(onSinricPowerState);
+    SinricCloud::setup();
+    if (sensorId)
+    {
+        sensorIndex = sinricInstanceCount++;
+        getInstanceOfProtocol()->debug("Ativando Doorbell");
+        SinricProDoorbell &myDoorbell = SinricPro[sensorId];
+        myDoorbell.onPowerState(onSinricPowerState);
+#ifdef DEBUG_SINRIC
+        Serial.println("Sinric Doorbell setup() OK");
+#endif
+    }
 }
 
 float ultimaTemperaturaAferida = 0;
 void TemperatureSinricCloud::changed(const int pin, const long value)
 {
-    auto *drv = getDrivers()->findByPin(pin);
-    if (!drv)
-        return;
-
-    JsonObject r = drv->readStatus();
-    float t = r["temperature"];
-    float h = r["humidity"];
-    if (ultimaTemperaturaAferida != t)
+    if (sensorId)
     {
-        ultimaTemperaturaAferida = t;
-        SinricProTemperaturesensor &mySensor = SinricPro[sensorId]; // get temperaturesensor device
-        mySensor.sendTemperatureEvent(t, h);                        // send event
-        String result;
-        serializeJson(r, result);
-        Serial.println(result);
+#ifdef DEBUG_SINRIC
+        Serial.print("Sinric temperature changed ");
+#endif
+
+        auto *drv = getDrivers()->findByPin(pin);
+        if (!drv)
+            return;
+
+        JsonObject r = drv->readStatus();
+        float t = r["temperature"];
+        float h = r["humidity"];
+        if (ultimaTemperaturaAferida != t)
+        {
+            ultimaTemperaturaAferida = t;
+            SinricProTemperaturesensor &mySensor = SinricPro[sensorId]; // get temperaturesensor device
+            mySensor.sendTemperatureEvent(t, h);                        // send event
+            String result;
+            serializeJson(r, result);
+            Serial.println(result);
+        }
+#ifdef DEBUG_SINRIC
+        Serial.println(" OK");
+#endif
     }
 }
 
 void DoorbellSinricCloud::changed(const int pin, const long value)
 {
-    bool bValue = value > 0;
-    Serial.printf("Doorbell %s\r\n", bValue ? "detected" : "not detected");
-    SinricProDoorbell &myDoorbell = SinricPro[sensorId];
-    myDoorbell.sendPowerStateEvent(bValue);
-    if (bValue)
-        myDoorbell.sendDoorbellEvent();
+    if (sensorId)
+    {
+#ifdef DEBUG_SINRIC
+        Serial.print("Sinric Doorbell changed ");
+#endif
+
+        bool bValue = value > 0;
+        Serial.printf("Doorbell %s\r\n", bValue ? "detected" : "not detected");
+        SinricProDoorbell &myDoorbell = SinricPro[sensorId];
+        myDoorbell.sendPowerStateEvent(bValue);
+        if (bValue)
+            myDoorbell.sendDoorbellEvent();
+#ifdef DEBUG_SINRIC
+        Serial.println("OK");
+#endif
+    }
 }
 
 void SinricCloud::loop()
 {
-    if (sensorIndex == 0)
-      SinricPro.handle();
+    if (sensorIndex == 0 && sinricLoaded && WiFi.isConnected())
+    {
+#ifdef DEBUG_SINRIC
+        Serial.println("BEGIN: Sinric loop() ");
+#endif
+try{
+        SinricPro.handle();
+} catch(char *e){
+    //
+    Serial.println("ERRO SINRIC Handle()");
+}
+#ifdef DEBUG_SINRIC
+        Serial.println("END: Sinric loop() ");
+#endif
+    }
 }

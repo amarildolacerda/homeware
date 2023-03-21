@@ -47,7 +47,7 @@ void Alexa::loop()
 #ifdef DEBUG_ALEXA
         Serial.println("AlexaLight loop()");
 #endif
-       // alexa.loop();  // passado para o main
+        // alexa.loop();  // passado para o main
     }
 }
 
@@ -98,12 +98,18 @@ void AlexaLight::beforeSetup()
 }
 void AlexaLight::changed(const int pin, const long value)
 {
+#ifdef DEBUG_API
+    Serial.printf("BEGIN: AlexaLigh.changed(%i)\r\n", value);
+#endif
     EspalexaDevice *d = localalexa.getDevice(sensorId);
-    d->setState(true); // indica se esta ligado
-    d->setValue(value);
-    d->setPercent((value > 0) ? 100 : 0);
-#ifdef DEBUG_ON
-    Serial.printf("AlexaLigh.changed(%i)\r\n", value);
+    if (d)
+    {
+        d->setState(true); // indica se esta ligado
+        d->setValue(value);
+        d->setPercent((value > 0) ? 100 : 0);
+    }
+#ifdef DEBUG_API
+    Serial.printf("END: AlexaLigh.changed(%i)\r\n", value);
 #endif
 }
 

@@ -45,7 +45,7 @@ ApiDriver *ApiDrivers::getItem(int index)
 void ApiDrivers::loop()
 {
 #ifdef DEBUG_API
-    Serial.printf("apidrivers.loop(%i) \r\n", apiDriversCount);
+    Serial.printf("BEGIN: apidrivers.loop(%i) \r\n", apiDriversCount);
 #endif
     for (int i = 0; i < apiDriversCount; i++)
     {
@@ -53,7 +53,7 @@ void ApiDrivers::loop()
         if (drv && drv->isLoop())
         {
 #ifdef DEBUG_API
-            Serial.printf("%s.loop()", drv->sensorType);
+            Serial.printf("%s.loop()\r\n", drv->sensorType);
 #endif
             drv->loop();
         }
@@ -65,6 +65,9 @@ void ApiDrivers::loop()
 #endif
         }
     }
+#ifdef DEBUG_API
+    Serial.printf("END: apidrivers.loop(%i) \r\n", apiDriversCount);
+#endif
 }
 
 void ApiDrivers::add(ApiDriver *driver)
@@ -95,11 +98,19 @@ ApiDriver *ApiDrivers::initPinSensor(const int pin, const String sensorType)
 
 ApiDriver *ApiDrivers::findByPin(const int pin)
 {
+#ifdef DEBUG_API
+    Serial.printf("BEGIN: ApiDrivers::findByPin(%i)", pin);
+#endif
+
     for (auto *drv : apiDriverItems)
         if (drv)
         {
             if (drv->pin == pin)
             {
+#ifdef DEBUG_API
+                Serial.printf("END: ApiDrivers::findByPin\r\n");
+#endif
+
                 return drv;
             }
         }
@@ -108,29 +119,48 @@ ApiDriver *ApiDrivers::findByPin(const int pin)
 
 ApiDriver *ApiDrivers::findByType(const String sensorType)
 {
+#ifdef DEBUG_API
+    Serial.printf("BEGIN: ApiDrivers::findByType(%s)", sensorType);
+#endif
     for (auto *drv : apiDriverItems)
         if (drv)
         {
             if (drv->sensorType == sensorType)
             {
+#ifdef DEBUG_API
+                Serial.printf("END: ApiDrivers::findByType\r\n");
+#endif
                 return drv;
             }
         }
+
     return nullptr;
 }
 
 void ApiDrivers::changed(const int pin, const long value)
 {
+#ifdef DEBUG_API
+    Serial.printf("BEGIN: ApiDrivers::changed(%i,%i)", pin, value);
+#endif
     auto *drv = findByPin(pin);
     if (drv)
         drv->changed(pin, value);
+#ifdef DEBUG_API
+    Serial.printf("END: ApiDrivers::changed(%i,%i)\r\n", pin, value);
+#endif
 }
 
 void ApiDrivers::afterSetup()
 {
+#ifdef DEBUG_API
+    Serial.printf("BEGIN: afterSetup()");
+#endif
     for (auto *drv : apiDriverItems)
         if (drv)
         {
             drv->afterSetup();
         }
+#ifdef DEBUG_API
+    Serial.printf("END: ApiDrivers::afterSetup()\r\n");
+#endif
 }

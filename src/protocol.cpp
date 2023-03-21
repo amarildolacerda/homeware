@@ -17,8 +17,10 @@ unsigned int timeoutDeepSleep = 1000;
 #include "drivers.h"
 #include "drivers/drivers_setup.h"
 
+#ifndef NO_API
 #include "api/api_setup.h"
 #include <api.h>
+#endif
 
 Protocol *protocol;
 
@@ -158,7 +160,9 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
+#ifndef NO_API
         getApiDrivers().changed(pin, newValue);
+#endif
 #ifndef ARDUINO_AVR
         afterChanged(pin, newValue, getPinMode(pin));
 #endif
@@ -386,6 +390,7 @@ void Protocol::setupPins()
     }
 
     /// APIs externas
+#ifndef NO_API
     register_Api_setup();
     JsonObject sensores = getDevices();
     for (JsonPair k : sensores)
@@ -394,6 +399,7 @@ void Protocol::setupPins()
         getApiDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
     }
     getApiDrivers().afterSetup();
+#endif
     debugln("OK");
 
 #endif
@@ -1183,8 +1189,9 @@ void Protocol::loop()
     eventLoop();
 
     getDrivers()->loop();
+#ifndef NO_API
     getApiDrivers().loop();
-
+#endif
 #ifndef ARDUINO_AVR
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0 && millis() > sleeptmp)
