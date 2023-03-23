@@ -30,7 +30,6 @@
 //=================================fim enabled
 #endif
 
-
 bool drivers_loaded = false;
 void drivers_register()
 {
@@ -41,7 +40,6 @@ void drivers_register()
     ADCDriver::registerMode();
     InDriver::registerMode();
     OutDriver::registerMode();
-
 
 #if defined(DRIVERS_EX)
     LedDriver::registerMode();
@@ -54,6 +52,7 @@ void drivers_register()
     DHTDriver::registerMode();
 #endif
 
+
 #ifdef GROOVE_ULTRASONIC
     GrooverUltrasonicDriver::registerMode();
 #endif // GROOVER
@@ -65,5 +64,10 @@ void drivers_register()
     ResetButtonDriver::registerMode();
 #endif // DRIVER_ENABLED
 #endif
+
+#ifdef LCTECHRELAY
+    LCTechRelayDriver::registerMode();
+#endif
+
     drivers_loaded = true;
 }
