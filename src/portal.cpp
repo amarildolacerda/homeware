@@ -451,7 +451,7 @@ void Portal::setupServer()
 #ifdef ALEXA
     server->onNotFound([]()
                        {
-	if (!getAlexa().handleAlexaApiCall(homeware.server->uri(),homeware.server->arg(0)))
+	if (!Alexa::getAlexa()->handleAlexaApiCall(homeware.server->uri(),homeware.server->arg(0)))
 	{
         homeware.server->send(404, "text/plain", "Not found");
     } });

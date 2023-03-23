@@ -17,6 +17,6 @@ void register_Api_setup()
 #endif
 #ifdef ALEXA
     AlexaLight::registerApi();
-    AlexaDimmable::registerApi();
+    //AlexaDimmable::registerApi();
 #endif
 }

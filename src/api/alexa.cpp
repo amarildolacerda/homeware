@@ -4,10 +4,11 @@
 #include "ArduinoJson.h"
 #include "homeware.h"
 #include <Espalexa.h>
+#include "ESP8266HTTPClient.h"
 
-Espalexa localalexa;
+Espalexa *localalexa; //= new Espalexa();
 
-Espalexa getAlexa()
+Espalexa *Alexa::getAlexa()
 {
     return localalexa;
 }
@@ -15,15 +16,15 @@ Espalexa getAlexa()
 int localSensorId = 0;
 bool localAlexaInited = false;
 
-void Alexa::begin(Espalexa server)
+void Alexa::init( Espalexa *alx)
 {
     if (localAlexaInited)
         return;
-    localalexa = server;
+    localalexa = alx;
+  //  Alexa::server = externalServer;
     getInstanceOfProtocol()
         ->resources += "alexa,";
-    localalexa.setFriendlyName(getInstanceOfProtocol()->config["label"]);
-    localAlexaInited = true;
+    localalexa->setFriendlyName(getInstanceOfProtocol()->config["label"]);
 
 #ifdef DEBUG_ALEXA
     Serial.println("Alexa::init()");
@@ -32,6 +33,10 @@ void Alexa::begin(Espalexa server)
 
 void Alexa::afterSetup()
 {
+    //if (localAlexaInited)
+    //    return;
+    //localalexa->begin(&server);
+    localAlexaInited = true;
 }
 void Alexa::beforeSetup()
 {
@@ -42,13 +47,13 @@ void Alexa::loop()
 #ifdef DEBUG_ALEXA
     Serial.printf("Alexa sensorId: %i \r\n ", sensorId);
 #endif
-    if (sensorId == 0)
-    {
+    // if (sensorId == 0 && WiFi.isConnected())
+    // {
 #ifdef DEBUG_ALEXA
-        Serial.println("AlexaLight loop()");
+    Serial.println("AlexaLight loop()");
 #endif
-        // alexa.loop();  // passado para o main
-    }
+    localalexa->loop(); // passado para o main
+                        // }
 }
 
 int Alexa::findAlexaPin(EspalexaDevice *d)
@@ -91,17 +96,23 @@ void AlexaLight::beforeSetup()
 {
     Alexa::beforeSetup();
     sensorId = localSensorId++;
-    localalexa.addDevice(getName(), onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
+    getAlexa()->addDevice(getName(), AlexaLight::onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
 #ifdef DEBUG_ALEXA
     Serial.println("AlexaLight.addDevice(..)");
 #endif
+}
+void AlexaLight::onoffChanged(EspalexaDevice *d)
+{
+    bool value = d->getState();
+    int pin = findAlexaPin(d);
+    getInstanceOfProtocol()->writePin(pin, (value) ? HIGH : LOW);
 }
 void AlexaLight::changed(const int pin, const long value)
 {
 #ifdef DEBUG_API
     Serial.printf("BEGIN: AlexaLigh.changed(%i)\r\n", value);
 #endif
-    EspalexaDevice *d = localalexa.getDevice(sensorId);
+    EspalexaDevice *d = getAlexa()->getDevice(sensorId);
     if (d)
     {
         d->setState(true); // indica se esta ligado
@@ -113,11 +124,12 @@ void AlexaLight::changed(const int pin, const long value)
 #endif
 }
 
+/*
 void AlexaDimmable::beforeSetup()
 {
     Alexa::beforeSetup();
     sensorId = localSensorId++;
-    localalexa.addDevice(getName(), dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
+    getAlexa()->addDevice(getName(), dimmableChanged, EspalexaDeviceType::dimmable); // non-dimmable device
 #ifdef DEBUG_ALEXA
     Serial.println("AlexaDimmable.addDevice(..)");
 #endif
@@ -125,8 +137,9 @@ void AlexaDimmable::beforeSetup()
 
 void AlexaDimmable::changed(const int pin, const long value)
 {
-    EspalexaDevice *d = localalexa.getDevice(sensorId);
+    EspalexaDevice *d = getAlexa()->getDevice(sensorId);
     d->setState(true); // indica se esta ligado
     d->setValue(value);
     d->setPercent((value / 1024) * 100);
 }
+*/
