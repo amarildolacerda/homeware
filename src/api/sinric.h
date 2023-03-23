@@ -1,4 +1,5 @@
 #pragma once
+#ifdef SINRICPRO
 
 #include <options.h>
 #include <api.h>
@@ -71,3 +72,5 @@ public:
 };
 
 void registerSinricApi();
+
+#endif

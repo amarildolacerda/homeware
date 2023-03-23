@@ -61,6 +61,10 @@
 #undef TELNET
 #undef LITTLEFS
 #undef USE_PIN_NAMES
+#undef SINRICPRO
+#undef ALEXA
+#undef LITTLEFs
+
 #endif
 
 //*****************************************

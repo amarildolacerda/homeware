@@ -15,7 +15,9 @@ void registerDriverMode(String mode, Driver *(*create)())
 {
     modeDriverList[numModes] = {mode, create};
     numModes++;
+#ifndef ARDUINO_AVR
     drivers->getProtocol()->resources += mode + ",";
+#endif
 }
 
 Driver *createByDriverMode(const String mode, const int pin)
@@ -33,7 +35,7 @@ Driver *createByDriverMode(const String mode, const int pin)
     return nullptr;
 }
 
-Driver * Drivers::initPinMode(const String mode, const int pin)
+Driver *Drivers::initPinMode(const String mode, const int pin)
 {
     Driver *old = findByPin(pin);
     if (old && old->getMode() == mode)
@@ -54,7 +56,7 @@ Driver * Drivers::initPinMode(const String mode, const int pin)
                 if (s != "")
                     s += ",";
                 s += "'" + String(i++) + "':";
-                s += "'"+d->getMode()+"'";
+                s += "'" + d->getMode() + "'";
             }
         }
         s = "{" + s + "}";

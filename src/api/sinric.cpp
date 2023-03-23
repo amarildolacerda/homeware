@@ -1,3 +1,5 @@
+
+#ifdef SINRICPRO
 #include <api/sinric.h>
 #include "SinricPro.h"
 #include "ArduinoJson.h"
@@ -217,3 +219,4 @@ try{
 #endif
     }
 }
+#endif

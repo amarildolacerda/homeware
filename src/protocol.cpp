@@ -6,12 +6,12 @@
 #ifdef SPIFFs
 #include <SPIFFS.h>
 #endif
-#ifdef LITTLEFs
-#include <LittleFS.h>
-#endif
 
 #ifndef ARDUINO_AVR
 unsigned int timeoutDeepSleep = 1000;
+#ifdef LITTLEFs
+#include <LittleFS.h>
+#endif
 #endif
 
 #include "drivers.h"
@@ -85,8 +85,10 @@ void Protocol::initPinMode(int pin, const String m)
     Driver *drv = getDrivers()->initPinMode(m, pin);
     if (drv)
     {
+#ifndef ARDUINO_AVR
         drv->setTriggerEvent(driverCallbackEvent);
         drv->setTriggerOkState(driverOkCallbackEvent);
+#endif
     }
 #ifdef DEBUG_DRV
     Serial.print("DRV: ");
@@ -836,12 +838,12 @@ String Protocol::doCommand(String command)
         }
         else
 #endif
+#ifndef ARDUINO_AVR
             if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
         {
             doSleep(String(cmd[1]).toInt());
             return "OK";
         }
-#ifndef ARDUINO_AVR
         if (cmd[0] == "open")
         {
             char json[1024];

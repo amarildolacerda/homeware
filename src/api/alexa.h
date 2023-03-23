@@ -1,5 +1,6 @@
 #pragma once
 
+#ifdef ALEXA
 #include <api.h>
 #include <Espalexa.h>
 #include <ESP8266WebServer.h>
@@ -66,3 +67,5 @@ public:
     void changed(const int pin, const long value) override;
 };
 */
+
+#endif

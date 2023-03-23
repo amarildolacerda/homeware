@@ -1,4 +1,6 @@
 
+#ifdef ALEXA
+
 #include <api/alexa.h>
 #include <protocol.h>
 #include "ArduinoJson.h"
@@ -16,12 +18,12 @@ Espalexa *Alexa::getAlexa()
 int localSensorId = 0;
 bool localAlexaInited = false;
 
-void Alexa::init( Espalexa *alx)
+void Alexa::init(Espalexa *alx)
 {
     if (localAlexaInited)
         return;
     localalexa = alx;
-  //  Alexa::server = externalServer;
+    //  Alexa::server = externalServer;
     getInstanceOfProtocol()
         ->resources += "alexa,";
     localalexa->setFriendlyName(getInstanceOfProtocol()->config["label"]);
@@ -33,9 +35,9 @@ void Alexa::init( Espalexa *alx)
 
 void Alexa::afterSetup()
 {
-    //if (localAlexaInited)
-    //    return;
-    //localalexa->begin(&server);
+    // if (localAlexaInited)
+    //     return;
+    // localalexa->begin(&server);
     localAlexaInited = true;
 }
 void Alexa::beforeSetup()
@@ -143,3 +145,4 @@ void AlexaDimmable::changed(const int pin, const long value)
     d->setPercent((value / 1024) * 100);
 }
 */
+#endif
