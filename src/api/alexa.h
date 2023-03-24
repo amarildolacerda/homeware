@@ -19,6 +19,7 @@ public:
     static int findAlexaPin(EspalexaDevice *d);
 
     static void init(Espalexa *alx = nullptr);
+    static void handle();
     String getName();
     bool isLoop() override { return true; }
 };

@@ -73,6 +73,21 @@
 
 #endif
 
+
+#if defined(SONOFF_BASIC)
+#undef DRIVERS_ENABLED
+#define BOARD_MIN
+#undef DRIVERS_EX
+#define WIFI_ENABLED
+#undef TELNET
+#define NO_DRV_ADC
+#endif
+
+#ifdef DRIVERS_ENABLED
+#define DHT_SENSOR
+#define GROOVE_ULTRASONIC
+#endif
+
 //*****************************************
 #ifdef WIFI_ENABLED
 #define PORTAL
@@ -86,17 +101,7 @@
 #undef USE_PIN_NAMES
 #endif
 
-#ifdef DRIVERS_ENABLED
-#define DHT_SENSOR
-#define GROOVE_ULTRASONIC
-#endif
 
-#if defined(SONOFF_BASIC)
-#undef USE_PIN_NAMES
-#undef DRIVERS_EX
-#undef DHT_SENSOR
-#undef GROOVE_ULTRASONIC
-#endif
 
 #if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC)
 #define WIFI_ENABLED
@@ -115,5 +120,6 @@
 #define LITTLEFs
 #define TELNET
 #define WEBSOCKET
+#define NO_DRV_ADC
 
 #endif

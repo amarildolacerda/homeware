@@ -4,7 +4,9 @@
 #include "drivers.h"
 
 //=================drivers
+#ifndef NO_DRV_ADC
 #include "drivers/drv_adc.h"
+#endif
 #include "drivers/drv_in_out.h"
 
 #ifdef LCTECHRELAY
@@ -37,7 +39,9 @@ void drivers_register()
         return;
 
     //  defaults
+#ifndef NO_DRV_ADC
     ADCDriver::registerMode();
+#endif    
     InDriver::registerMode();
     OutDriver::registerMode();
 

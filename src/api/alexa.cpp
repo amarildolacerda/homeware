@@ -45,18 +45,22 @@ void Alexa::beforeSetup()
 {
     productName = "Alexa"; // dont change - nao alterar, usado para checar qual drive na busca do pin
 }
+
+void Alexa::handle()
+{
+    localalexa->loop(); // passado para o main
+}
+
 void Alexa::loop()
 {
 #ifdef DEBUG_ALEXA
     Serial.printf("Alexa sensorId: %i \r\n ", sensorId);
 #endif
-    // if (sensorId == 0 && WiFi.isConnected())
-    // {
+    if (sensorId == 0)
+        Alexa::handle();
 #ifdef DEBUG_ALEXA
     Serial.println("AlexaLight loop()");
 #endif
-    localalexa->loop(); // passado para o main
-                        // }
 }
 
 int Alexa::findAlexaPin(EspalexaDevice *d)
