@@ -1,4 +1,5 @@
 
+#include <options.h>
 #ifdef ALEXA
 
 #include <api/alexa.h>

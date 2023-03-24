@@ -1,3 +1,4 @@
+#include <options.h>
 
 #ifdef SINRICPRO
 #include <api/sinric.h>
