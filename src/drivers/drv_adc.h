@@ -5,7 +5,7 @@
 class ADCDriver : public Driver
 {
 private:
-    size_t interval = 30000;
+    size_t interval = 500;
     int eventState = 0;
 
     long ultimoLoop = 0;
@@ -79,9 +79,9 @@ public:
         if (eventState != st)
         {
             eventState = st;
-//#ifdef DEBUG_DRV
+            // #ifdef DEBUG_DRV
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, st, min, max);
-//#endif
+            // #endif
             if (triggerCallback)
                 triggerCallback(_mode, _pin, eventState);
             trgOkState = true;
@@ -102,7 +102,9 @@ public:
         Serial.println("BEGIN: ADC genStatus()");
 #endif
         int rt = eventState;
-        if (max > 0 && tmpAdc >= max)
+        if (max == 0 && min == 0)
+            rt = tmpAdc;
+        else if (max > 0 && tmpAdc >= max)
             rt = HIGH;
         else if (min > 0 && tmpAdc < min)
             rt = HIGH;

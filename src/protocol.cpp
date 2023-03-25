@@ -284,7 +284,7 @@ void Protocol::checkTrigger(int pin, int value)
             }
             else if (pinTo.toInt() != pin)
             {
-                // debugf("{'trigger':%i, 'to':%i}", pin, value);
+                debugf("{'trigger':%i, 'to':%i}", pin, value);
                 writePin(pinTo.toInt(), v);
             }
         }

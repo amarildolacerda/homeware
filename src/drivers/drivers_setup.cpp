@@ -32,16 +32,21 @@
 //=================================fim enabled
 #endif
 
+#ifdef BUZZER
+#include "drivers/drv_buzzer.h"
+#include "drivers/drv_ledbar.h"
+#endif
+
 bool drivers_loaded = false;
 void drivers_register()
 {
     if (drivers_loaded)
         return;
 
-    //  defaults
+        //  defaults
 #ifndef NO_DRV_ADC
     ADCDriver::registerMode();
-#endif    
+#endif
     InDriver::registerMode();
     OutDriver::registerMode();
 
@@ -55,7 +60,6 @@ void drivers_register()
 #ifdef DHT_SENSOR
     DHTDriver::registerMode();
 #endif
-
 
 #ifdef GROOVE_ULTRASONIC
     GrooverUltrasonicDriver::registerMode();
@@ -71,6 +75,10 @@ void drivers_register()
 
 #ifdef LCTECHRELAY
     LCTechRelayDriver::registerMode();
+#endif
+#ifdef BUZZER
+    BuzzerDriver::registerMode();
+    LedBarDriver::registerMode();
 #endif
 
     drivers_loaded = true;

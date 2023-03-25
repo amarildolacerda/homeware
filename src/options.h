@@ -22,6 +22,7 @@
 #define TELNET
 #define DRIVERS_EX
 #define USE_PIN_NAMES
+#define BUZZER
 #endif
 
 #ifdef ESP32

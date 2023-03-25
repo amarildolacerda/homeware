@@ -30,6 +30,7 @@ Driver *createByDriverMode(const String mode, const int pin)
             drv->setMode(mode);
             drv->setPinMode(pin);
             drv->beforeSetup();
+            getInstanceOfProtocol()->debugf("DRV: %s at %i\r\n", drv->getMode(), drv->getPin());
             return drv;
         }
     return nullptr;
