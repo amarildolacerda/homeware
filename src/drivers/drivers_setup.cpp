@@ -8,6 +8,7 @@
 #include "drivers/drv_adc.h"
 #endif
 #include "drivers/drv_in_out.h"
+#include "drivers/drv_v1.h"
 
 #ifdef LCTECHRELAY
 #include "drivers/drv_lctech.h"
@@ -86,7 +87,9 @@ void drivers_register()
 #endif
 
 #if defined(ESP8266) || defined(ESP32)
-   VccDriver::registerMode();
+    VccDriver::registerMode();
 #endif
+
+    V1Driver::registerMode();
     drivers_loaded = true;
 }
