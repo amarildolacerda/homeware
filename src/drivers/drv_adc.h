@@ -5,7 +5,6 @@
 class ADCDriver : public Driver
 {
 private:
-    size_t interval = 500;
     int eventState = 0;
 
     long ultimoLoop = 0;
@@ -34,9 +33,8 @@ public:
     {
         Driver::setMode("adc");
         Driver::setup();
+        interval = 500;
         Protocol *prot = getProtocol();
-        if (prot->containsKey(adc_interval))
-            interval = prot->getKey(adc_interval).toInt();
         if (prot->containsKey(sMin))
             min = prot->getKey(sMin).toInt();
         if (prot->containsKey(sMax))
@@ -79,9 +77,10 @@ public:
         if (eventState != st)
         {
             eventState = st;
-            // #ifdef DEBUG_DRV
+#ifdef DEBUG_DRV
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, st, min, max);
-            // #endif
+#endif
+            debug(tmpAdc);
             if (triggerCallback)
                 triggerCallback(_mode, _pin, eventState);
             trgOkState = true;

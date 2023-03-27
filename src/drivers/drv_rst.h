@@ -31,6 +31,7 @@ public:
     }
     int writePin( const int value) override
     {
+        debug(value);
         digitalWrite(_pin, value);
         return value;
     }

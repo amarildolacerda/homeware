@@ -35,6 +35,8 @@
 
 #ifdef BUZZER
 #include "drivers/drv_buzzer.h"
+#endif
+#ifdef LEDBAR
 #include "drivers/drv_ledbar.h"
 #endif
 
@@ -61,7 +63,6 @@ void drivers_register()
     DownDriver::registerMode();
     UpDriver::registerMode();
     SireneDriver::registerMode();
-    PulseDriver::registerMode();
 #ifdef DHT_SENSOR
     DHTDriver::registerMode();
 #endif
@@ -83,6 +84,8 @@ void drivers_register()
 #endif
 #ifdef BUZZER
     BuzzerDriver::registerMode();
+#endif
+#ifdef LEDBAR
     LedBarDriver::registerMode();
 #endif
 

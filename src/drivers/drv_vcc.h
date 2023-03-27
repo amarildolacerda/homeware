@@ -1,3 +1,4 @@
+#pragma once
 #include "drivers.h"
 
 class VccDriver : public Driver
@@ -36,11 +37,14 @@ public:
             float v_max = 65536.0;
             power = ((vcc - v_min) / (v_max - v_min)) * 1024;
             lastOne = millis();
+            debug(power);
         }
         return power;
     }
     void loop() override
     {
+#ifdef DEBUG_ON
         Serial.printf("vcc: %i", (int)getVcc());
+#endif
     }
 };

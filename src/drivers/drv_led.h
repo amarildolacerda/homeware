@@ -8,13 +8,14 @@ protected:
     int curPin = -1;
     bool curStatus = false;
     unsigned long ultimoChanged = 0;
-    unsigned long interval = 1000;
     bool stateOn = true;
 
 public:
     AlternateDriver()
     {
         v1 = 5000;
+        timeout = 60000;
+        interval = 5000;
     }
     void setV1(long v) override
     {

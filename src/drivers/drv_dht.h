@@ -51,8 +51,7 @@ public:
             min = getProtocol()->getKey("dht_min").toInt();
         if (getProtocol()->containsKey("dht_max"))
             min = getProtocol()->getKey("dht_max").toInt();
-        if (getProtocol()->containsKey("dht_interval"))
-            interval = getProtocol()->getKey("dht_interval").toInt();
+        
         triggerEnabled = true;
     }
     void setPinMode(int pin) override
@@ -112,6 +111,7 @@ public:
         if (getStatus() != lastStatus)
         {
             lastStatus = getStatus();
+            debug(lastStatus);
             triggerCallback(_mode, _pin, lastStatus);
         }
     }

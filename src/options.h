@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.03.22.16"
+#define VERSION "23.03.27.17"
 
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
@@ -18,11 +18,12 @@
 //----------------------
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
-#define SINRICPRO
+//#define SINRICPRO
 #define TELNET
 #define DRIVERS_EX
 #define USE_PIN_NAMES
-#define BUZZER
+// #define BUZZER
+// #define LEDBAR
 #endif
 
 #ifdef ESP32
@@ -85,8 +86,8 @@
 #endif
 
 #ifdef DRIVERS_ENABLED
-#define DHT_SENSOR
-#define GROOVE_ULTRASONIC
+//#define DHT_SENSOR
+//#define GROOVE_ULTRASONIC
 #endif
 
 //*****************************************

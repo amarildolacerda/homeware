@@ -32,6 +32,7 @@ public:
             count = 0;
             //   playSirene();
         }
+        debug(value);
         return playing;
     }
     int readPin() override

@@ -56,7 +56,10 @@ public:
     JsonObject getDevices();
     JsonObject getSensors();
     JsonObject getDefaults();
-    virtual void resetDeepSleep(const unsigned int t = 10);
+    JsonObject getTimers();
+    JsonObject getIntervals();
+
+        virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
 
     virtual String doCommand(String command);

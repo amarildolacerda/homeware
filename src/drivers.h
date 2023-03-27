@@ -1,84 +1,10 @@
 
-/*
-
-Sim, é possível modificar o código para permitir que as classes filhas de Driver se auto-registrem na lista `modeDriverList`. Aqui está um exemplo de como isso pode ser feito:
-
-```c++
-class Driver {
-  public:
-    virtual void run() = 0;
-};
-
-
-class DriverA : public Driver {
-  public:
-    static void registerMode() {
-      ::registerMode("A", create);
-    }
-
-    static Driver* create() {
-      return new DriverA();
-    }
-
-    void run() {
-      // código para executar o driver A
-    }
-};
-
-class DriverB : public Driver {
-  public:
-    static void registerMode() {
-      ::registerMode("B", create);
-    }
-
-    static Driver* create() {
-      return new DriverB();
-    }
-
-    void run() {
-      // código para executar o driver B
-    }
-};
-
-Driver* drivers[10];
-int numDrivers = 0;
-
-void createDriver(String mode) {
-  for (int i = 0; i < numModes; i++) {
-    if (mode == modeDriverList[i].mode) {
-      drivers[numDrivers] = modeDriverList[i].create();
-      numDrivers++;
-      break;
-    }
-  }
-}
-
-void setup() {
-  DriverA::registerMode();
-  DriverB::registerMode();
-
-  createDriver("A");
-  createDriver("B");
-}
-
-void loop() {
-  for (int i = 0; i < numDrivers; i++) {
-    drivers[i]->run();
-  }
-}
-```
-
-Neste exemplo, cada classe filha de `Driver` possui um método estático `registerMode` que chama a função global `registerMode` para registrar a classe na lista `modeDriverList`. O método `setup` chama os métodos `registerMode` de cada classe filha para registrar todas as classes disponíveis.
-
-Espero que isso ajude! 😊
-
-*/
-
 #ifndef drivers_h
 #define drivers_h
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include "timer.h"
 
 #include "protocol.h"
 #include "functions.h"
@@ -92,6 +18,8 @@ protected:
     callbackFunction triggerOkState;
     String _mode;
     int _pin = -1;
+    long timeout = 0;
+    long interval = 0;
 
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
@@ -99,9 +27,28 @@ public:
 
     bool active = false;
     virtual void setV1(long x) { v1 = x; }
+    virtual void updateTimeout(const int pin)
+    {
+        // le timer count
+        Protocol *prot = getInstanceOfProtocol();
+        String sPin = (String)pin;
+        if (prot->getTimers().containsKey(sPin))
+        {
+            timeout = (long)prot->getTimers()[sPin];
+        }
+        if (prot->getIntervals().containsKey(sPin))
+        {
+            interval = (long)prot->getIntervals()[sPin];
+        }
+    }
+    void debug(const float value)
+    {
+        getProtocol()->debugf("{'at':'%s','pin':'%s','action':'%s','value':%g}\r\n", timer.getNow().c_str(), ((String)_pin).c_str(), _mode.c_str(), value);
+    }
     virtual void setPinMode(int pin)
     {
         active = true;
+        updateTimeout(pin);
     }
 
     virtual void setup()

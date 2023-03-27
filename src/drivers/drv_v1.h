@@ -1,3 +1,4 @@
+#pragma once
 #include "drivers.h"
 
 class V1Driver : public Driver
@@ -30,6 +31,7 @@ public:
     int writePin(const int value)
     {
         v1 = value;
+        debug(value);
         return v1;
     }
 };

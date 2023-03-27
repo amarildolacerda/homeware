@@ -65,6 +65,7 @@ public:
         {
             tmpValue = analogRead(_pin);
             ultimoLoop = millis();
+            debug(tmpValue);
         }
         return genStatus();
     }

@@ -10,9 +10,10 @@ public:
         active = true;
         return digitalRead(_pin);
     }
-    int writePin( const int value) override
+    int writePin(const int value) override
     {
         digitalWrite(_pin, value);
+        debug(value);
         return value;
     }
     bool isGet() override { return true; }
@@ -83,6 +84,9 @@ public:
 };
 class OutDriver : public InOutDriver
 {
+private:
+    long lastOne = 0;
+
 public:
     static void registerMode()
     {
@@ -97,5 +101,28 @@ public:
     {
         InOutDriver::setPinMode(pin);
         pinMode(pin, OUTPUT);
+    }
+    bool isLoop() override
+    {
+        return timeout > 0;
+    }
+    void loop() override
+    {
+        if (timeout > 0 && millis() - lastOne > timeout && readPin() > 0)
+        {
+#ifdef DEBUG_ON
+            Serial.println("desligando...");
+#endif
+            InOutDriver::writePin(0);
+            lastOne = millis();
+        }
+    }
+    int writePin(const int value) override
+    {
+        if (timeout > 0 && value == 0)
+            return readPin(); // controlado pelo timer;
+        updateTimeout(_pin);
+        lastOne = millis();
+        return InOutDriver::writePin(value);
     }
 };

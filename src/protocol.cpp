@@ -78,6 +78,14 @@ JsonObject Protocol::getDefaults()
     return config["default"];
 }
 #endif
+JsonObject Protocol::getTimers()
+{
+    return config["timers"];
+}
+JsonObject Protocol::getIntervals()
+{
+    return config["intervals"];
+}
 
 void Protocol::initPinMode(int pin, const String m)
 {
@@ -112,7 +120,9 @@ int Protocol::writePin(const int pin, const int value)
 
     if (mode != NULL)
     {
+#ifdef DEBUG_ON
         debugf("write %s pin: %i set %i\r\n", mode, pin, value);
+#endif
         Driver *drv = getDrivers()->findByPin(pin);
         if (drv && drv->isSet())
         {
@@ -215,12 +225,12 @@ void Protocol::debugln(String txt)
     debug(txt);
     Serial.println("");
 }
-void Protocol::debug(String txt)
+void Protocol::debug(String msg)
 {
-    const bool erro = txt.indexOf("ERRO") > -1;
+    const bool erro = msg.indexOf("ERRO") > -1;
     if (config["debug"] == "on" || erro)
     {
-        print(txt);
+        print(msg);
     }
 #ifndef ARDUINO_AVR
     else
@@ -229,12 +239,12 @@ void Protocol::debug(String txt)
     {
 
         if (debugCallback)
-            debugCallback("INF: " + txt);
-        Serial.print(txt);
+            debugCallback(msg.startsWith("{") ? msg : "INF: " + msg);
+        Serial.print(msg);
     }
 #endif
     else
-        Serial.print(txt);
+        Serial.print(msg);
 }
 int Protocol::findPinByMode(String mode)
 {
@@ -248,14 +258,14 @@ int Protocol::findPinByMode(String mode)
 
 String Protocol::print(String msg)
 {
-    Serial.print("INF: ");
-    Serial.println(msg);
+    String info = msg.startsWith("{") ? msg : "INF: " + msg;
+    Serial.print(info);
 #ifdef TELNET
-    telnet.println("INF: " + msg);
+    telnet.print(info);
 #endif
 #ifdef WEBSOCKET
     if (debugCallback)
-        debugCallback("INF: " + msg);
+        debugCallback(info);
 #endif
     return msg;
 }
@@ -277,14 +287,21 @@ void Protocol::checkTrigger(int pin, int value)
             int bistable = getStable()[p];
             int v = value;
 
-            if ((bistable == 2 || bistable == 3))
+            if ((bistable == 2))
             {
                 if (v == 1)
                     switchPin(pinTo.toInt());
             }
+            if ((bistable == 3))
+            {
+                if (v == 0)
+                    switchPin(pinTo.toInt());
+            }
             else if (pinTo.toInt() != pin)
             {
+#ifdef DEBUG_ON
                 debugf("{'trigger':%i, 'to':%i}", pin, value);
+#endif
                 writePin(pinTo.toInt(), v);
             }
         }
@@ -302,7 +319,9 @@ int Protocol::switchPin(const int pin)
     if (drv)
     {
         int r = drv->readPin();
+#ifdef DEBUG_ON
         debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+#endif
         return drv->writePin((r > 0) ? LOW : HIGH);
     }
     return -1;
@@ -357,6 +376,12 @@ String Protocol::showGpio()
         int value = readPin(sPin.toInt(), k.value().as<String>());
         s += ", 'value': ";
         s += String(value);
+
+        if (getTimers().containsKey(sPin))
+        {
+            s += ", 'timer': ";
+            s += (String)getTimers()[sPin];
+        }
 
         s = "{" + s + "}";
         if (r.length() > 1)
@@ -620,6 +645,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("mode");
     config.createNestedObject("trigger");
     config.createNestedObject("stable");
+    config.createNestedObject("timers");
 #ifdef BOARD_NAME
     config["board"] = "ESP";
 #endif
@@ -757,7 +783,7 @@ void telnetOnInputReceive(String str)
     else
     {
         protocol->resetDeepSleep();
-        protocol->print(protocol->doCommand(str));
+        protocol->print(protocol->doCommand(str) + "\r\n");
     }
     yield();
 }
@@ -945,7 +971,7 @@ String Protocol::doCommand(String command)
         {
             return restoreConfig();
         }
-        else if (cmd[0] == "debug")
+        else if (cmd[0] == "debug" || cmd[0] == "term")
         {
             config["debug"] = cmd[1];
             return "OK";
@@ -995,7 +1021,10 @@ String Protocol::doCommand(String command)
         {
             int pin = getPinByName(cmd[1]);
             String spin = String(pin);
-
+            if (cmd[1] == "show")
+            {
+                return showGpio();
+            }
             if (cmd[2] == "get" || cmd[2] == "set")
             {
                 Driver *drv = getDrivers()->findByPin(pin);
@@ -1049,6 +1078,33 @@ String Protocol::doCommand(String command)
                 writePin(pin, v);
                 return String(v);
             }
+            else if (cmd[2] == "timer")
+            {
+                if (cmd[3] == "none")
+                {
+                    getTimers().remove(spin);
+                    return "OK";
+                }
+                else
+                {
+                    getTimers()[spin] = String(cmd[3]).toInt();
+                    return "OK";
+                }
+            }
+            else if (cmd[2] == "interval")
+            {
+                if (cmd[3] == "none")
+                {
+                    getIntervals().remove(spin);
+                    return "OK";
+                }
+                else
+                {
+                    getIntervals()[spin] = String(cmd[3]).toInt();
+                    return "OK";
+                }
+            }
+
             else if (cmd[2] == "mode")
             {
 #ifndef ARDUINO_AVR

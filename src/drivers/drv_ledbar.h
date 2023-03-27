@@ -1,3 +1,4 @@
+#pragma once
 #include "drivers.h"
 #include <Grove_LED_Bar.h>
 class LedBarDriver : public Driver
@@ -38,6 +39,7 @@ public:
             Serial.println(barValue);
             bar->setLevel(barValue);
             oldNumBars = barValue;
+            debug(barValue);
         }
         return barValue;
     }

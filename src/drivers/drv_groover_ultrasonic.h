@@ -81,6 +81,7 @@ public:
             eventState = getStatus();
             triggerCallback(getMode(), getPin(), eventState);
             trgOkState = true;
+            debug(eventState);
         }
         if (trgOkState)
         {
