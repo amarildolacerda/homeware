@@ -37,6 +37,10 @@
 #include "drivers/drv_ledbar.h"
 #endif
 
+#if defined(ESP8266) || defined(ESP32)
+#include <drivers/drv_vcc.h>
+#endif
+
 bool drivers_loaded = false;
 void drivers_register()
 {
@@ -81,5 +85,8 @@ void drivers_register()
     LedBarDriver::registerMode();
 #endif
 
+#if defined(ESP8266) || defined(ESP32)
+   VccDriver::registerMode();
+#endif
     drivers_loaded = true;
 }
