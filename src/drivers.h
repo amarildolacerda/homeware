@@ -43,7 +43,7 @@ public:
     }
     void debug(const float value)
     {
-        getProtocol()->debugf("{'at':'%s','pin':'%s','action':'%s','value':%g}\r\n", timer.getNow().c_str(), ((String)_pin).c_str(), _mode.c_str(), value);
+        getProtocol()->debugf("{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
     }
     virtual void setPinMode(int pin)
     {
