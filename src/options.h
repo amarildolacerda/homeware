@@ -29,12 +29,10 @@
 #ifdef ESP32
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
-#define SINRICPRO
+//#define SINRICPRO
 #define TELNET
 #define DRIVERS_EX
-
-// -------------------------------------
-#define TELEGRAM
+//#define TELEGRAM
 // #undef LITTLEFs
 #undef USE_PIN_NAMES
 // #define SPIFFs
