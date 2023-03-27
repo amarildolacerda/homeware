@@ -380,7 +380,7 @@ String Protocol::showGpio()
         if (getTimers().containsKey(sPin))
         {
             s += ", 'timer': ";
-            s += (String)getTimers()[sPin];
+            s += getTimers()[sPin].as<String>();
         }
 
         s = "{" + s + "}";

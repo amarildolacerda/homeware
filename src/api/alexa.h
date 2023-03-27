@@ -3,14 +3,18 @@
 #ifdef ALEXA
 #include <api.h>
 #include <Espalexa.h>
-#include <ESP8266WebServer.h>
+
+#ifdef ESP32
+#//include "WiFi.h"
+#else
+//#include <ESP8266WiFi.h>
+#endif
 
 /// @brief Alexa é classe base para o driver de comunicação com a alexa, é um driver virtual a ser herdado;
 class Alexa : public ApiDriver
 {
 private:
 public:
-
     static Espalexa *getAlexa();
     int sensorId = -1;
     void beforeSetup() override;

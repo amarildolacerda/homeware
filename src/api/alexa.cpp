@@ -7,7 +7,7 @@
 #include "ArduinoJson.h"
 #include "homeware.h"
 #include <Espalexa.h>
-#include "ESP8266HTTPClient.h"
+//#include "ESP8266HTTPClient.h"
 
 Espalexa *localalexa; //= new Espalexa();
 

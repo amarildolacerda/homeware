@@ -14,9 +14,7 @@ ativar o WM_MDNS do WiFiManager.
     class HomewareWiFiManager : public WiFiManager
 {
 private:
-
 public:
- 
     String pageMake(const String stitle, const String body)
     {
         String page = getHTTPHead(stitle);  // @token options @todo replace options with title
