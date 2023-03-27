@@ -9,14 +9,14 @@ class TimerClass
 private:
     WiFiUDP ntpUDP;
     NTPClient timeClient = NTPClient(ntpUDP, "pool.ntp.org");
+    float timezone = -3;
 
 public:
     TimerClass()
     {
         timeClient.begin();
-       
-        
-        // timeClient.setTimeOffset(-3600*3);
+
+        timeClient.setTimeOffset(3600 * timezone);
     }
 
     void update()
@@ -34,9 +34,9 @@ public:
         char buffer[20];
         struct tm *timeinfo;
         timeinfo = localtime(&epochTime);
-        strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
+        strftime(buffer, 20, "%Y-%m-%dT%H:%M:%S%z", timeinfo);
         return String(buffer);
     }
 };
 
-extern TimerClass timer ;
+extern TimerClass timer;

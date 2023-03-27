@@ -8,7 +8,7 @@ public:
     int readPin() override
     {
         active = true;
-        return digitalRead(_pin);
+        return debug(digitalRead(_pin));
     }
     int writePin(const int value) override
     {
@@ -22,6 +22,9 @@ public:
 
 class InDriver : public InOutDriver
 {
+private:
+    int oldValue = 0;
+
 public:
     static void registerMode()
     {
@@ -39,7 +42,7 @@ public:
     }
 };
 
-class DownDriver : public InOutDriver
+class DownDriver : public InDriver
 {
 public:
     static void registerMode()
@@ -64,7 +67,7 @@ public:
 #endif
     }
 };
-class UpDriver : public InOutDriver
+class UpDriver : public InDriver
 {
 public:
     static void registerMode()

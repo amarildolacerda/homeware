@@ -20,7 +20,7 @@ protected:
     int _pin = -1;
     long timeout = 0;
     long interval = 0;
-
+    float oldValue = 0;
 public:
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
     bool triggerEnabled = false;
@@ -41,9 +41,14 @@ public:
             interval = (long)prot->getIntervals()[sPin];
         }
     }
-    void debug(const float value)
+    float debug(const float value)
     {
-        getProtocol()->debugf("{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
+        if (value != oldValue)
+        {
+            getProtocol()->debugf("{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
+            oldValue = value;
+        }
+        return value;
     }
     virtual void setPinMode(int pin)
     {
