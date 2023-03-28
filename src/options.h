@@ -33,9 +33,13 @@
 #define TELNET
 #define DRIVERS_EX
 //#define TELEGRAM
-// #undef LITTLEFs
+#undef LITTLEFs
 #undef USE_PIN_NAMES
-// #define SPIFFs
+#define SPIFFs
+#endif
+
+#ifdef SPIFFs
+#undef LITTLEFs
 #endif
 
 #if defined(BOARD_ESP12S)
@@ -121,5 +125,16 @@
 #define TELNET
 #define WEBSOCKET
 #define NO_DRV_ADC
+#endif
 
+#ifdef ESP32CAM
+#undef PORTAL
+#undef WEBSOCKET
+#endif
+
+#ifdef NO_PORTAL
+#undef PORTAL
+#endif
+#ifdef NO_WEBSOCKET
+#undef WEBSOCKET
 #endif
