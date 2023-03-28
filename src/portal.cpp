@@ -213,7 +213,7 @@ String inputH(const String name, const String value)
 
 void setManager(HomewareWiFiManager *wf)
 {
-    String hostname = stringf("%s.local", portal.label);
+    String hostname =  portal.label;
 #ifdef WIFI_NEW
     // wf->setHostname(hostname);
     // wf->setTitle("Homeware");
