@@ -4,11 +4,31 @@
 #include <uMqttBroker.h>
 #include "timer.h"
 
+class HMqttBroker : public uMQTTBroker
+{
+
+public:
+    bool onConnect(IPAddress addr, uint16_t client_count) override
+    {
+        bool rt = uMQTTBroker::onConnect(addr, client_count);
+        if (rt)
+        {
+            publish("broker/on", timer.getNow());
+        }
+        return rt;
+    }
+   // void onDisconnect(IPAddress addr, String client_id) override
+   // {
+   //     publish("broker/off", timer.getNow());
+   //     return uMQTTBroker::onDisconnect(addr, client_id);
+   // }
+};
 class MqttBrokerApi : public ApiDriver
 {
 private:
-    uMQTTBroker *broker;
+    HMqttBroker *broker;
     unsigned long lastOne = 0;
+    unsigned long interval = 30000;
 
 public:
     static void registerApi()
@@ -19,13 +39,10 @@ public:
     {
         return new MqttBrokerApi();
     }
-    MqttBrokerApi(){
-        interval = 30000;
-    }
     void setup() override
     {
         Serial.print("MQTT Broker: ");
-        broker = new uMQTTBroker();
+        broker = new HMqttBroker();
 
         broker->init();
         Serial.println("OK");

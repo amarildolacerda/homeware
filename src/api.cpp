@@ -158,10 +158,17 @@ void ApiDrivers::afterSetup()
 #endif
     int id = 0;
     // criar instancia que requer autocreate
-    for (ApiDriverPair drv : apiDriverList)
+    for (ApiDriverPair drvPair : apiDriverList)
     {
-        if (drv.autoCreate)
-            createApiDriver(drv.sensorType, --id, true);
+        if (drvPair.autoCreate)
+        {
+            ApiDriver *drv = createApiDriver(drvPair.sensorType, --id, true);
+            if (drv)
+            {
+                drv->setup();
+                add(drv);
+            }
+        }
     }
 
     for (auto *drv : apiDriverItems)
