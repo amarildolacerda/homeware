@@ -34,13 +34,13 @@ public:
 
 struct ApiDriverPair
 {
-    bool autoInit;
+    bool autoCreate;
     String sensorType;
     ApiDriver *(*create)();
 };
 
 void registerApiDriver(const String sensorType, ApiDriver *(*create)(),const bool autoInit = false);
-ApiDriver *createApiDriver(const String sensorType, const int pin);
+ApiDriver *createApiDriver(const String sensorType, const int pin, const bool autoCreate = false);
 
 class ApiDrivers
 {

@@ -9,16 +9,16 @@ ApiDrivers getApiDrivers()
     return apiDrivers;
 }
 
-void registerApiDriver(const String sensorType, ApiDriver *(*create)(),const bool autoInit)
+void registerApiDriver(const String sensorType, ApiDriver *(*create)(), const bool autoInit)
 {
     apiDriverList[numClouds] = {autoInit, sensorType, create};
     numClouds++;
     getInstanceOfProtocol()->apis += sensorType + ",";
 }
-ApiDriver *createApiDriver(const String sensorType, const int pin)
+ApiDriver *createApiDriver(const String sensorType, const int pin, const bool autoCreate)
 {
     for (ApiDriverPair drvCloud : apiDriverList)
-        if (drvCloud.sensorType == sensorType)
+        if (drvCloud.sensorType == sensorType && drvCloud.autoCreate == autoCreate)
         {
             ApiDriver *drv = drvCloud.create();
             if (drv)
@@ -81,7 +81,7 @@ void ApiDrivers::add(ApiDriver *driver)
 
 ApiDriver *ApiDrivers::initPinSensor(const int pin, const String sensorType)
 {
-    ApiDriver *drv = createApiDriver(sensorType, pin);
+    ApiDriver *drv = createApiDriver(sensorType, pin, false);
     if (drv)
     {
         drv->setup();
@@ -157,10 +157,11 @@ void ApiDrivers::afterSetup()
     Serial.printf("BEGIN: afterSetup()");
 #endif
     int id = 0;
+    // criar instancia que requer autocreate
     for (ApiDriverPair drv : apiDriverList)
     {
-        if (drv.autoInit && findByType(drv.sensorType) == nullptr)
-            createApiDriver(drv.sensorType, --id);
+        if (drv.autoCreate)
+            createApiDriver(drv.sensorType, --id, true);
     }
 
     for (auto *drv : apiDriverItems)
