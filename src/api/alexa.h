@@ -35,7 +35,7 @@ class AlexaLight : public Alexa
 public:
     static void registerApi()
     {
-        registerApiDriver("alexa", create);
+        registerApiDriver("onoff", create);
     }
     static ApiDriver *create()
     {

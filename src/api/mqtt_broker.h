@@ -13,7 +13,7 @@ private:
 public:
     static void registerApi()
     {
-        registerApiDriver("mqttb", create);
+        registerApiDriver("mqttb", create, true);
     }
     static ApiDriver *create()
     {
@@ -22,8 +22,11 @@ public:
 
     void setup() override
     {
+        Serial.print("MQTT Broker: ");
         broker = new uMQTTBroker();
+
         broker->init();
+        Serial.println("OK");
     }
 
     void loop() override

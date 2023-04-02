@@ -9,11 +9,11 @@ ApiDrivers getApiDrivers()
     return apiDrivers;
 }
 
-void registerApiDriver(String sensorType, ApiDriver *(*create)())
+void registerApiDriver(const String sensorType, ApiDriver *(*create)(),const bool autoInit)
 {
-    apiDriverList[numClouds] = {sensorType, create};
+    apiDriverList[numClouds] = {autoInit, sensorType, create};
     numClouds++;
-    getInstanceOfProtocol()->apis += sensorType+",";
+    getInstanceOfProtocol()->apis += sensorType + ",";
 }
 ApiDriver *createApiDriver(const String sensorType, const int pin)
 {
@@ -156,6 +156,13 @@ void ApiDrivers::afterSetup()
 #ifdef DEBUG_API
     Serial.printf("BEGIN: afterSetup()");
 #endif
+    int id = 0;
+    for (ApiDriverPair drv : apiDriverList)
+    {
+        if (drv.autoInit && findByType(drv.sensorType) == nullptr)
+            createApiDriver(drv.sensorType, --id);
+    }
+
     for (auto *drv : apiDriverItems)
         if (drv)
         {
