@@ -19,7 +19,9 @@ public:
     {
         return new MqttBrokerApi();
     }
-
+    MqttBrokerApi(){
+        interval = 30000;
+    }
     void setup() override
     {
         Serial.print("MQTT Broker: ");
@@ -31,9 +33,10 @@ public:
 
     void loop() override
     {
-        if (millis() - lastOne > 60000)
+        if (millis() - lastOne > interval)
         {
             broker->publish("broker/datetime", timer.getNow());
+            lastOne = millis();
         }
     }
 };
