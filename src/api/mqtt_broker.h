@@ -10,18 +10,10 @@ class HMqttBroker : public uMQTTBroker
 public:
     bool onConnect(IPAddress addr, uint16_t client_count) override
     {
-        bool rt = uMQTTBroker::onConnect(addr, client_count);
-        if (rt)
-        {
-            publish("broker/on", timer.getNow());
-        }
-        return rt;
+        getInstanceOfProtocol()->debugf("Mqtt Client: %s", addr.toString().c_str());
+        publish("broker/on", timer.getNow());
+        return true;
     }
-   // void onDisconnect(IPAddress addr, String client_id) override
-   // {
-   //     publish("broker/off", timer.getNow());
-   //     return uMQTTBroker::onDisconnect(addr, client_id);
-   // }
 };
 class MqttBrokerApi : public ApiDriver
 {

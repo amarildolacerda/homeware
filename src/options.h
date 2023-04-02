@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.03.27.17"
+#define VERSION "23.04.02.18"
 
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
@@ -17,23 +17,27 @@
 #if defined(WEMO_D1)
 //----------------------
 #define WIFI_ENABLED
+
+#ifndef NO_DRIVERS_ENABLED
 #define DRIVERS_ENABLED
-//#define SINRICPRO
-#define TELNET
 #define DRIVERS_EX
+#endif
+
+// #define SINRICPRO
+#define TELNET
 #define USE_PIN_NAMES
 // #define BUZZER
 // #define LEDBAR
-//#define MQTTBroker
+// #define MQTTBroker
 #endif
 
 #ifdef ESP32
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
-//#define SINRICPRO
+// #define SINRICPRO
 #define TELNET
 #define DRIVERS_EX
-//#define TELEGRAM
+// #define TELEGRAM
 #undef LITTLEFs
 #undef USE_PIN_NAMES
 #define SPIFFs
@@ -78,7 +82,6 @@
 
 #endif
 
-
 #if defined(SONOFF_BASIC)
 #undef DRIVERS_ENABLED
 #define BOARD_MIN
@@ -89,8 +92,8 @@
 #endif
 
 #ifdef DRIVERS_ENABLED
-//#define DHT_SENSOR
-//#define GROOVE_ULTRASONIC
+// #define DHT_SENSOR
+// #define GROOVE_ULTRASONIC
 #endif
 
 //*****************************************
@@ -105,8 +108,6 @@
 #undef SINRICPRO
 #undef USE_PIN_NAMES
 #endif
-
-
 
 #if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC)
 #define WIFI_ENABLED
@@ -138,4 +139,12 @@
 #endif
 #ifdef NO_WEBSOCKET
 #undef WEBSOCKET
+#endif
+
+#ifdef NO_MQTT
+#undef MQTT
+#endif
+
+#ifdef NO_TELNET
+#undef TELNET
 #endif
