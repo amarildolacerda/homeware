@@ -1,10 +1,10 @@
-#include "Arduino.h"
+#include <Arduino.h>
 #include "options.h"
 
 #ifndef ARDUINO_AVR
 
 #ifdef LITTLEFS
-#include "LittleFS.h"
+#include <LittleFS.h>
 #endif
 
 #ifdef ESP32

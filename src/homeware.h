@@ -1,26 +1,26 @@
 #pragma once
-#include <options.h>
+#include "options.h"
 
 #ifdef ARDUINO_AVR
 // nada aqui para AVR
 #else
 
 #ifdef ESP32
-#include "WiFi.h"
-#include "WebServer.h"
+#include <WiFi.h>
+#include <WebServer.h>
 #else
-#include "ESP8266WiFi.h"
-#include "ESP8266WebServer.h"
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 #endif
 
-#include <homewareWiFiManager.h>
+#include "homewareWiFiManager.h"
 
-#include "ArduinoJson.h"
+#include <ArduinoJson.h>
 
 
-#include <functions.h>
+#include "functions.h"
 
-#include <protocol.h>
+#include "protocol.h"
 
 void linha();
 String IPAddressToString(const IPAddress x);

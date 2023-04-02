@@ -1,13 +1,13 @@
 
 #pragma once
 
-#include <api.h>
+#include "api.h"
 
 #ifdef SINRICPRO
-#include <api/sinric.h>
+#include "api/sinric.h"
 #endif
 #ifdef ALEXA
-#include <api/alexa.h>
+#include "api/alexa.h"
 #endif
 
 #ifdef MQTTBroker

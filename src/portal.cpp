@@ -5,21 +5,21 @@
 #else
 
 #include <Arduino.h>
-#include <portal.h>
-#include <functions.h>
+#include "portal.h"
+#include "functions.h"
 // #include <wm_strings_pt_BR.h>
-#include <homeware.h>
+#include "homeware.h"
 
 #ifdef ALEXA
-#include <api/alexa.h>
+#include "api/alexa.h"
 #endif
 
 #ifdef ESP32
-#include "WiFi.h"
+#include <WiFi.h>
 #else
 #include <ESP8266WiFi.h>
 #endif
-#include <chart.h>
+#include "chart.h"
 
 #ifdef TIMMED
 #include <SimpleTimer.h>

@@ -1,7 +1,7 @@
-#include "Arduino.h"
+#include <Arduino.h>
 
 #include "protocol.h"
-#include <functions.h>
+#include "functions.h"
 
 #ifdef SPIFFs
 #include <SPIFFS.h>
@@ -19,7 +19,7 @@ unsigned int timeoutDeepSleep = 1000;
 
 #ifndef NO_API
 #include "api/api_setup.h"
-#include <api.h>
+#include "api.h"
 #endif
 
 Protocol *protocol;

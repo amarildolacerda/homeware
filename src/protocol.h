@@ -9,15 +9,15 @@
 
 */
 
-#include "ArduinoJson.h"
-#include <options.h>
+#include <ArduinoJson.h>
+#include "options.h"
 
 #ifdef TELEGRAM
-#include "telegram.h"
+#include <telegram.h>
 #endif
 
 #ifdef TELNET
-#include "ESPTelnet.h"
+#include <ESPTelnet.h>
 #endif
 
 #ifndef ARDUINO_AVR
