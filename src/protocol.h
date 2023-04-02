@@ -33,6 +33,7 @@ public:
     int ledPin = 255;
     unsigned int ledTimeChanged = 5000;
     String resources = "";
+    String apis = "";
     bool inDebug = false;
     bool inTelnet = false;
 #endif

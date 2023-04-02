@@ -9,6 +9,7 @@ protected:
     bool curStatus = false;
     unsigned long ultimoChanged = 0;
     bool stateOn = true;
+    unsigned long v1 = 0;
 
 public:
     AlternateDriver()
@@ -17,12 +18,7 @@ public:
         timeout = 60000;
         interval = 5000;
     }
-    void setV1(long v) override
-    {
-        if (v < 100)
-            return;
-        v1 = v;
-    }
+    
     virtual void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
@@ -88,7 +84,7 @@ public:
     }
     OkDriver()
     {
-        Driver::setV1(5000);
+        interval = 5000;
     }
     int writePin(const int value) override
     {
@@ -115,7 +111,7 @@ public:
     }
     LedDriver()
     {
-        Driver::setV1(5000);
+        interval = 5000;
     }
     int writePin(const int value) override
     {

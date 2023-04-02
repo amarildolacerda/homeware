@@ -37,7 +37,7 @@ public:
         }
         else
         {
-            int timeout = v1;
+            //int timeout = v1;
             analogWrite(_pin, value);
             if (value > 0 && timeout > 0)
             {

@@ -24,7 +24,7 @@ public:
     void setup() override
     {
         AlternateDriver::setup();
-        setV1(interval);
+        
     }
     void loop() override
     {

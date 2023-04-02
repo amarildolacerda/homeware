@@ -171,7 +171,7 @@ void Portal::autoConnect(const String slabel)
             homeware.debugln(homeware.localIP());
 #ifdef WEBSOCKET
             homeware.debug("WebSocket: ");
-            homeware.resources += "ws,";
+            homeware.apis += "ws,";
             homeware.debugCallback = debugCallbackFunc;
             webSocket.begin();
             webSocket.onEvent(webSocketEvent);

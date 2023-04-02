@@ -7,7 +7,7 @@ class ADCDriver : public Driver
 private:
     int eventState = 0;
 
-    long ultimoLoop = 0;
+    unsigned long ultimoLoop = 0;
     const String adc_interval = "adc_interval";
     const String sMin = "adc_min";
     const String sMax = "adc_max";

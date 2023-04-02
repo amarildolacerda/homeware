@@ -13,20 +13,20 @@ class Driver
 private:
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
-    long v1 = 0;
+    //long v1 = 0;
     callbackFunction triggerCallback;
     callbackFunction triggerOkState;
     String _mode;
     int _pin = -1;
-    long timeout = 0;
-    long interval = 0;
     float oldValue = 0;
 public:
+    unsigned long timeout = 0;
+    unsigned long interval = 0;
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
     bool triggerEnabled = false;
 
     bool active = false;
-    virtual void setV1(long x) { v1 = x; }
+    //virtual void setV1(long x) { v1 = x; }
     virtual void updateTimeout(const int pin)
     {
         // le timer count
@@ -154,10 +154,10 @@ public:
 
     // template <class T>
     void add(Driver *driver);
-    Protocol *getProtocol()
-    {
-        return getInstanceOfProtocol();
-    }
+   // Protocol *getProtocol()
+   // {
+   //     return getInstanceOfProtocol();
+   // }
 
     void setup()
     {

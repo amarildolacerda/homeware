@@ -16,7 +16,7 @@ void registerDriverMode(String mode, Driver *(*create)())
     modeDriverList[numModes] = {mode, create};
     numModes++;
 #ifndef ARDUINO_AVR
-    drivers->getProtocol()->resources += mode + ",";
+    getInstanceOfProtocol()->resources += mode + ",";
 #endif
 }
 

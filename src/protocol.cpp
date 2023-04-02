@@ -143,7 +143,7 @@ int Protocol::writePWM(const int pin, const int value, const int timeout)
     Driver *drv = getDrivers()->findByPin(pin);
     if (drv && drv->active)
     {
-        drv->setV1(timeout);
+        drv->timeout = timeout;
         return drv->writePin(value);
     }
     return 0;
@@ -333,7 +333,7 @@ void Protocol::setLedMode(const int mode)
 {
     Driver *drv = getDrivers()->findByMode("led");
     if (drv && drv->active)
-        drv->setV1(5 - ((mode <= 5) ? mode : 4) * 1000);
+        drv->interval = (5 - ((mode <= 5) ? mode : 4) * 1000);
 }
 #endif
 String Protocol::getStatus()
@@ -468,7 +468,7 @@ const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
     "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
-    "gpio <pin> defult <n>(usado no setup)\r\n"
+    "gpio <pin> default <n>(usado no setup)\r\n"
 #ifdef GOOVER_ULTRASONIC
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
 #endif
@@ -741,13 +741,15 @@ void Protocol::begin()
 {
 
 #ifdef TELNET
-    resources += "telnet,";
+    apis += "telnet,";
     setupTelnet();
 #endif
 #ifndef ARDUINO_AVR
     afterBegin();
     debug("Resources: ");
-    debugln(resources);
+    debug(resources);
+    debug(" APIs: ");
+    debugln(apis);
 #endif
     inited = true;
 }
@@ -923,7 +925,7 @@ String Protocol::doCommand(String command)
             Serial.println("show: " + command);
 
             if (cmd[1] == "resources")
-                return resources;
+                return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
             else if (cmd[1] == "status")
             {
                 return getStatus();
@@ -1025,7 +1027,7 @@ String Protocol::doCommand(String command)
             {
                 return showGpio();
             }
-            if (cmd[2] == "get" || cmd[2] == "set" || cmd[2]=="status")
+            if (cmd[2] == "get" || cmd[2] == "set" || cmd[2] == "status")
             {
                 Driver *drv = getDrivers()->findByPin(pin);
                 if (drv)
@@ -1052,12 +1054,12 @@ String Protocol::doCommand(String command)
                         serializeJson(sts, rsp);
                         return rsp;
                     }
-                   /* else if (drv->isCommand())
-                    {
-                        String rst = drv->doCommand(command);
-                        if (rst != "NAK")
-                            return rst;
-                    }*/
+                    /* else if (drv->isCommand())
+                     {
+                         String rst = drv->doCommand(command);
+                         if (rst != "NAK")
+                             return rst;
+                     }*/
                 }
             }
 

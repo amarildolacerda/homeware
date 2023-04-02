@@ -26,7 +26,7 @@ void Alexa::init(Espalexa *alx)
     localalexa = alx;
     //  Alexa::server = externalServer;
     getInstanceOfProtocol()
-        ->resources += "alexa,";
+        ->apis += "alexa,";
     localalexa->setFriendlyName(getInstanceOfProtocol()->config["label"]);
 
 #ifdef DEBUG_ALEXA
