@@ -13,12 +13,13 @@ class Driver
 private:
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
-    //long v1 = 0;
+    // long v1 = 0;
     callbackFunction triggerCallback;
     callbackFunction triggerOkState;
     String _mode;
     int _pin = -1;
     float oldValue = 0;
+
 public:
     unsigned long timeout = 0;
     unsigned long interval = 0;
@@ -26,7 +27,7 @@ public:
     bool triggerEnabled = false;
 
     bool active = false;
-    //virtual void setV1(long x) { v1 = x; }
+    // virtual void setV1(long x) { v1 = x; }
     virtual void updateTimeout(const int pin)
     {
         // le timer count
@@ -45,7 +46,10 @@ public:
     {
         if (value != oldValue)
         {
-            getProtocol()->debugf("{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
+            char buf[512];
+            sprintf(buf,
+                    "{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
+            getProtocol()->actionEvent(buf);
             oldValue = value;
         }
         return value;
@@ -95,10 +99,10 @@ public:
     }
     virtual bool isGet() { return true; }
     virtual bool isSet() { return false; }
-   // virtual String doCommand(const String command)
-   // {
-   //     return "NAK";
-   // }
+    // virtual String doCommand(const String command)
+    // {
+    //     return "NAK";
+    // }
     virtual JsonObject readStatus()
     {
         int rsp = readPin();
@@ -107,7 +111,7 @@ public:
         return json.as<JsonObject>();
     }
     virtual bool isStatus() { return false; }
-   // virtual bool isCommand() { return false; }
+    // virtual bool isCommand() { return false; }
     virtual bool isLoop() { return false; }
 
     virtual void changed(const int value){};
@@ -154,10 +158,10 @@ public:
 
     // template <class T>
     void add(Driver *driver);
-   // Protocol *getProtocol()
-   // {
-   //     return getInstanceOfProtocol();
-   // }
+    // Protocol *getProtocol()
+    // {
+    //     return getInstanceOfProtocol();
+    // }
 
     void setup()
     {
@@ -243,6 +247,11 @@ public:
             {
                 drv->loop();
             }
+    }
+    void reload()
+    {
+        // TODO: separar um metodo para individualizar
+        setup();
     }
 };
 

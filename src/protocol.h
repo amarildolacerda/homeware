@@ -71,7 +71,6 @@ public:
     virtual int findPinByMode(String mode);
     virtual void debug(String txt);
     void debugf(const char *format, ...);
-
     void debugln(String txt);
 
     virtual int switchPin(const int pin);
@@ -85,6 +84,7 @@ public:
     callbackDebugFunction debugCallback;
     static void driverCallbackEvent(String mode, int pin, int value);
     static void driverOkCallbackEvent(String mode, int pin, int value);
+    void actionEvent(const char * txt);
 
 #endif
         String getKey(String name)

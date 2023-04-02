@@ -13,6 +13,9 @@
 #ifdef MQTTBroker
 #include "api/mqtt_broker.h"
 #endif
+#ifdef MQTTClient
+#include "api/mqtt_client.h"
+#endif
 
 void register_Api_setup()
 {
@@ -26,5 +29,9 @@ void register_Api_setup()
 
 #ifdef MQTTBroker
     MqttBrokerApi::registerApi();
+#endif
+
+#ifdef MQTTClient
+    MqttClientDriver::registerApi();
 #endif
 }

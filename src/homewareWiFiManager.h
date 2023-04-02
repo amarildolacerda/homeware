@@ -7,8 +7,8 @@
 #error This code is intended to run on the ESP8266 or ESP32 platform! Please check your Tools->Board setting.
 #endif
 
-#ifndef WM_MDNS
-ativar o WM_MDNS do WiFiManager.
+#ifdef WM_MDNS
+desativar o WM_MDNS do WiFiManager.
 #endif
 
     class HomewareWiFiManager : public WiFiManager

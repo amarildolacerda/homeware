@@ -24,6 +24,18 @@ unsigned int timeoutDeepSleep = 1000;
 
 Protocol *protocol;
 
+void Protocol::actionEvent(const char *txt)
+{
+#ifdef MQTTClient
+    ApiDriver *drv = getApiDrivers().findByType("mqtt");
+    if (drv)
+    {
+        drv->changed(txt);
+    }
+#endif
+    debug(txt);
+}
+
 void Protocol::debugf(const char *format, ...)
 {
     static char buffer[512];
@@ -395,6 +407,10 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
+#ifndef NO_API
+    register_Api_setup();
+    getApiDrivers().beforeSetup();
+#endif
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
     {
@@ -418,7 +434,6 @@ void Protocol::setupPins()
 
     /// APIs externas
 #ifndef NO_API
-    register_Api_setup();
     JsonObject sensores = getDevices();
     for (JsonPair k : sensores)
     {
@@ -585,7 +600,8 @@ void Protocol::setup()
 
 void Protocol::afterConfigChanged()
 {
-    getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
+    getDrivers()->reload(); // mudou as configurações, recarregar os parametros;
+    getApiDrivers().reload();
 }
 
 String Protocol::restoreConfig()
@@ -649,7 +665,7 @@ DynamicJsonDocument Protocol::baseConfig()
 #ifdef BOARD_NAME
     config["board"] = String(BOARD_NAME);
 #else
-    config["board"] = "ESP";   
+    config["board"] = "ESP";
 #endif
 #ifndef ARDUINO_AVR
     config.createNestedObject("device");
@@ -681,13 +697,13 @@ DynamicJsonDocument Protocol::baseConfig()
 #endif
     config["interval"] = "500";
 
-#ifdef MQTT
+#ifdef MQTTClient
     config["mqtt_host"] = "none"; //"test.mosquitto.org";
     config["mqtt_port"] = 1883;
     config["mqtt_user"] = "homeware";
     config["mqtt_password"] = "123456780";
-    config["mqtt_interval"] = 1;
-    config["mqtt_prefix"] = "mesh";
+    config["mqtt_interval"] = 30;
+    config["mqtt_prefix"] = "homeware";
 #endif
 #ifdef SINRICPRO
     config["app_key"] = "";
@@ -924,7 +940,7 @@ String Protocol::doCommand(String command)
         {
 #ifndef ARDUINO_AVR
 
-            Serial.println("show: " + command);
+            Serial.println("cmd: " + command);
 
             if (cmd[1] == "resources")
                 return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";

@@ -118,7 +118,7 @@
 #undef LCTECHRELAY
 #undef SINRICPRO
 #undef GROOVE_ULTRASONIC
-#undef MQTT
+#undef MQTTClient
 #endif
 
 #if defined(BOARD_ESP12S)
@@ -141,8 +141,8 @@
 #undef WEBSOCKET
 #endif
 
-#ifdef NO_MQTT
-#undef MQTT
+#ifdef NO_MQTTClient
+#undef MQTTClient
 #endif
 
 #ifdef NO_TELNET

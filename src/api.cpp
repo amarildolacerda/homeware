@@ -151,11 +151,32 @@ void ApiDrivers::changed(const int pin, const long value)
 #endif
 }
 
+void ApiDrivers::reload()
+{
+    for (auto *drv : apiDriverItems)
+        if (drv)
+        {
+            drv->reload();
+        }
+}
+
 void ApiDrivers::afterSetup()
 {
 #ifdef DEBUG_API
     Serial.printf("BEGIN: afterSetup()");
 #endif
+    for (auto *drv : apiDriverItems)
+        if (drv)
+        {
+            drv->afterSetup();
+        }
+#ifdef DEBUG_API
+    Serial.printf("END: ApiDrivers::afterSetup()\r\n");
+#endif
+}
+
+void ApiDrivers::beforeSetup()
+{
     int id = 0;
     // criar instancia que requer autocreate
     for (ApiDriverPair drvPair : apiDriverList)
@@ -170,13 +191,4 @@ void ApiDrivers::afterSetup()
             }
         }
     }
-
-    for (auto *drv : apiDriverItems)
-        if (drv)
-        {
-            drv->afterSetup();
-        }
-#ifdef DEBUG_API
-    Serial.printf("END: ApiDrivers::afterSetup()\r\n");
-#endif
 }

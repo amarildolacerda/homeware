@@ -1,0 +1,47 @@
+#pragma once
+
+#include "api.h"
+#include "functions.h"
+
+class MqttClientDriver : public ApiDriver
+{
+protected:
+    int port = 1883;
+    String host = "none";
+    String clientId;
+    String user;
+    String password;
+    String prefix;
+    String name;
+    unsigned long lastOne = 0;
+    unsigned long lastAlive = 0;
+    unsigned long interval = 10000;
+
+    void init();
+
+public:
+    static void
+    registerApi()
+    {
+        registerApiDriver("mqtt", create, true);
+    }
+    static ApiDriver *create()
+    {
+        return new MqttClientDriver();
+    }
+    MqttClientDriver()
+    {
+        clientId = String(getChipId(), HEX);
+    }
+    bool isConnected();
+    void setup() override;
+    void loop() override;
+    bool send(const char *subtopic, const char *payload);
+    bool isEnabled();
+    void sendAlive();
+    void subscribes();
+    void changed(const String value)override;
+    void reload()override;
+};
+
+MqttClientDriver *getMqtt();

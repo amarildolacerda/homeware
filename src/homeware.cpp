@@ -29,9 +29,6 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#ifdef MQTT
-#include "mqtt.h"
-#endif
 
 #include "api.h"
 
@@ -76,11 +73,6 @@ void Homeware::afterBegin()
     ElegantOTA.begin(server);
 #endif
     server->begin();
-#ifdef MQTT
-    apis += "MQTT,";
-    mqtt.setup(config["mqtt_host"], config["mqtt_port"], config["mqtt_prefix"], (config["mqtt_name"] != NULL) ? config["mqtt_name"] : config["label"]);
-    mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
-#endif
     resetDeepSleep();
     Protocol::afterBegin();
 }
@@ -113,9 +105,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 unsigned int ultimaTemperatura = 0;
 void Homeware::afterLoop()
 {
-#ifdef MQTT
-    mqtt.loop();
-#endif
 
     Protocol::afterLoop();
 }
