@@ -1025,7 +1025,7 @@ String Protocol::doCommand(String command)
             {
                 return showGpio();
             }
-            if (cmd[2] == "get" || cmd[2] == "set")
+            if (cmd[2] == "get" || cmd[2] == "set" || cmd[2]=="status")
             {
                 Driver *drv = getDrivers()->findByPin(pin);
                 if (drv)
@@ -1052,12 +1052,12 @@ String Protocol::doCommand(String command)
                         serializeJson(sts, rsp);
                         return rsp;
                     }
-                    else if (drv->isCommand())
+                   /* else if (drv->isCommand())
                     {
                         String rst = drv->doCommand(command);
                         if (rst != "NAK")
                             return rst;
-                    }
+                    }*/
                 }
             }
 

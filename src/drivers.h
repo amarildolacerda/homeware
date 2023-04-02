@@ -95,10 +95,10 @@ public:
     }
     virtual bool isGet() { return true; }
     virtual bool isSet() { return false; }
-    virtual String doCommand(const String command)
-    {
-        return "NAK";
-    }
+   // virtual String doCommand(const String command)
+   // {
+   //     return "NAK";
+   // }
     virtual JsonObject readStatus()
     {
         int rsp = readPin();
@@ -107,7 +107,7 @@ public:
         return json.as<JsonObject>();
     }
     virtual bool isStatus() { return false; }
-    virtual bool isCommand() { return false; }
+   // virtual bool isCommand() { return false; }
     virtual bool isLoop() { return false; }
 
     virtual void changed(const int value){};
