@@ -7,7 +7,6 @@
 #include "ArduinoJson.h"
 #include "homeware.h"
 #include <Espalexa.h>
-//#include "ESP8266HTTPClient.h"
 
 Espalexa *localalexa; //= new Espalexa();
 
@@ -24,9 +23,6 @@ void Alexa::init(Espalexa *alx)
     if (localAlexaInited)
         return;
     localalexa = alx;
-    //  Alexa::server = externalServer;
-    getInstanceOfProtocol()
-        ->apis += "alexa,";
     localalexa->setFriendlyName(getInstanceOfProtocol()->config["label"]);
 
 #ifdef DEBUG_ALEXA

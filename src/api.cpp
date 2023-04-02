@@ -13,6 +13,7 @@ void registerApiDriver(String sensorType, ApiDriver *(*create)())
 {
     apiDriverList[numClouds] = {sensorType, create};
     numClouds++;
+    getInstanceOfProtocol()->apis += sensorType+",";
 }
 ApiDriver *createApiDriver(const String sensorType, const int pin)
 {

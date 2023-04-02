@@ -52,7 +52,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
 
 void Homeware::setupServer()
 {
-    resources += "cmd,";
+    apis += "cmd,";
     server->on("/cmd", []()
                {
         if (homeware.server->hasArg("q"))
@@ -71,13 +71,13 @@ void Homeware::afterBegin()
     setupServer();
 
 #ifdef OTA
-    resources += "OTA,";
+    apis += "OTA,";
     ElegantOTA.setID(hostname.c_str());
     ElegantOTA.begin(server);
 #endif
     server->begin();
 #ifdef MQTT
-    resources += "MQTT,";
+    apis += "MQTT,";
     mqtt.setup(config["mqtt_host"], config["mqtt_port"], config["mqtt_prefix"], (config["mqtt_name"] != NULL) ? config["mqtt_name"] : config["label"]);
     mqtt.setUser(config["mqtt_user"], config["mqtt_password"]);
 #endif

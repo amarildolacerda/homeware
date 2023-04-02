@@ -10,6 +10,10 @@
 #include <api/alexa.h>
 #endif
 
+#ifdef MQTTBroker
+#include "api/mqtt_broker.h"
+#endif
+
 void register_Api_setup()
 {
 #ifdef SINRICPRO
@@ -17,6 +21,10 @@ void register_Api_setup()
 #endif
 #ifdef ALEXA
     AlexaLight::registerApi();
-    //AlexaDimmable::registerApi();
+    // AlexaDimmable::registerApi();
+#endif
+
+#ifdef MQTTBroker
+    MqttBrokerApi::registerApi();
 #endif
 }
