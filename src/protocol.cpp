@@ -647,7 +647,9 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("stable");
     config.createNestedObject("timers");
 #ifdef BOARD_NAME
-    config["board"] = "ESP";
+    config["board"] = String(BOARD_NAME);
+#else
+    config["board"] = "ESP";   
 #endif
 #ifndef ARDUINO_AVR
     config.createNestedObject("device");

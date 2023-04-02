@@ -24,7 +24,7 @@
 #define USE_PIN_NAMES
 // #define BUZZER
 // #define LEDBAR
-#define MQTTBroker
+//#define MQTTBroker
 #endif
 
 #ifdef ESP32
