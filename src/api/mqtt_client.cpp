@@ -92,14 +92,10 @@ bool MqttClientDriver::isConnected()
         return false;
     if (!client.connected() && (millis() - lastOne > 10000))
     {
-#ifdef MQTT_DEBUG_ON
         Serial.print("MQT: Conectando ...");
-#endif
         if (client.connect(clientId.c_str(), user.c_str(), password.c_str()))
         {
-#ifdef MQTT_DEBUG_ON
             Serial.println("connected");
-#endif
            // sendAlive();
             subscribes();
             lastOne = millis();
