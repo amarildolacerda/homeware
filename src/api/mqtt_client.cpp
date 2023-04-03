@@ -30,7 +30,16 @@ void callback(char *topic, byte *payload, unsigned int length)
 #ifdef MQTT_DEBUG_ON
     Serial.printf("%i. %s\r\n", length, cmd.c_str());
 #endif
-    String result = getInstanceOfProtocol()->doCommand(cmd);
+    String *spl = split(cmd, '/');
+    String command = cmd;
+    if (spl[1] == "scene")
+    {
+        command = "scene ";
+        command += spl[2];
+        command += " set ";
+        command += cmd;
+    }
+    String result = getInstanceOfProtocol()->doCommand(command);
     mqtt->send("/response", result.c_str());
 #ifdef MQTT_DEBUG_ON
     Serial.println(result);
@@ -51,7 +60,7 @@ void MqttClientDriver::init()
     interval = (config["mqtt_interval"].as<String>().toInt()) * 1000;
     // Serial.println(interval);
     if (interval < 100)
-        interval = 10000;
+        interval = 60000;
     if (isEnabled())
     {
         client.setServer(host.c_str(), port);
@@ -72,14 +81,16 @@ void MqttClientDriver::subscribes()
     char topic[132];
     sprintf(topic, "%s/%s%s", prefix.c_str(), name.c_str(), "/in");
     client.subscribe(topic);
+    char scene[132];
+    sprintf(topic, "%s/%s/%s", prefix.c_str(), "scene", "+");
+    client.subscribe(scene);
 }
 
 bool MqttClientDriver::isConnected()
 {
     if (!isEnabled())
         return false;
-
-    if (!client.connected() && (millis() - lastOne > 5000))
+    if (!client.connected() && (millis() - lastOne > 10000))
     {
 #ifdef MQTT_DEBUG_ON
         Serial.print("MQT: Conectando ...");
@@ -89,16 +100,17 @@ bool MqttClientDriver::isConnected()
 #ifdef MQTT_DEBUG_ON
             Serial.println("connected");
 #endif
-            sendAlive();
+           // sendAlive();
             subscribes();
-            //            client.subscribe("inTopic");
-            lastOne = 0;
+            lastOne = millis();
         }
         else
         {
+#ifdef MQTT_DEBUG_ON
             Serial.print("MQT: failed, rc=");
             Serial.print(client.state());
-            Serial.println("MQT: try again in 5 seconds");
+            Serial.println("MQT: try again in 10 seconds");
+#endif
             lastOne = millis();
         }
     }
@@ -123,13 +135,13 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
     {
         if (isConnected())
         {
+            lastAlive = millis();
             char topic[128];
             sprintf(topic, "%s/%s%s\0", prefix.c_str(), name.c_str(), subtopic);
             char msg[1024];
             sprintf(msg, "%s", payload);
             int n = strnlen(msg, 1024);
             client.publish(topic, msg, n);
-            lastAlive = millis();
         }
     }
 
@@ -161,5 +173,14 @@ void MqttClientDriver::setup()
 {
     init();
     mqtt = this;
-    isConnected();
+    Serial.println("MQT: <" + host + "> ");
+    /*for (int i = 0; i < 5; i++)
+    {
+        Serial.print(".");
+        if (isConnected())
+            break;
+        delay(5000);
+    }
+    Serial.println("");
+    */
 }

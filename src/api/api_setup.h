@@ -3,6 +3,8 @@
 
 #include "api.h"
 
+#include "mdns_pub.h"
+
 #ifdef SINRICPRO
 #include "api/sinric.h"
 #endif
@@ -19,6 +21,7 @@
 
 void register_Api_setup()
 {
+    mDNSPubDriver::registerApi();
 #ifdef SINRICPRO
     registerSinricApi();
 #endif
