@@ -825,15 +825,8 @@ DynamicJsonDocument Protocol::baseConfig()
 
 #if defined(DEBUG_ON)
     config["debug"] = "term";
-#elif defined(DEBUG_OFF)
+#else
     config["debug"] = "off";
-#else
-    config["debug"] =
-#ifndef ARDUINO_AVR
-        inDebug ? "on" : "off";
-#else
-        "off";
-#endif
 #endif
     config["interval"] = "500";
 
@@ -866,7 +859,7 @@ String Protocol::saveConfig()
             base[key] = config[key];
     }
 
-    base["debug"] = inDebug ? "on" : "off"; // volta para o default para sempre ligar com debug desabilitado
+    base["debug"] =  "off"; // volta para o default para sempre ligar com debug desabilitado
     // serializeJson(base, Serial);
 #ifdef SPIFFs
     File file = SPIFFS.open("/config.json", "w");

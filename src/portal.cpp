@@ -193,7 +193,9 @@ void Portal::autoConnect(const String slabel)
     }
     else
     {
+#ifdef SEM_USO
         homeware.connected = connected;
+#endif
     }
     setupServer();
 #ifdef TIMMED

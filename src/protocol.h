@@ -29,13 +29,16 @@ private:
 public:
     // size_t driversCount = 0;
 #ifndef ARDUINO_AVR
+
+#ifdef SEM_USO
     bool connected = false;
     int ledPin = 255;
+    bool inDebug = false;
+    bool inTelnet = false;
+#endif
     unsigned int ledTimeChanged = 5000;
     String resources = "";
     String apis = "";
-    bool inDebug = false;
-    bool inTelnet = false;
 #endif
     static constexpr int SIZE_BUFFER = 1024;
     DynamicJsonDocument config = DynamicJsonDocument(SIZE_BUFFER);
