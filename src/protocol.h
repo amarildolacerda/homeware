@@ -69,11 +69,14 @@ public:
 
 #endif
 
+#ifdef SEM_USO
+    virtual int findPinByMode(String mode);
+#endif
+
     virtual String doCommand(String command);
     virtual String print(String msg);
     virtual int writePin(const int pin, const int value);
     virtual int readPin(const int pin, const String mode = "");
-    virtual int findPinByMode(String mode);
     virtual void debug(String txt);
     void debugf(const char *format, ...);
     void debugln(String txt);

@@ -341,6 +341,8 @@ void Protocol::debug(String msg)
     else
         Serial.print(msg);
 }
+
+#ifdef SEM_USO
 int Protocol::findPinByMode(String mode)
 {
     for (JsonPair k : getMode())
@@ -350,6 +352,7 @@ int Protocol::findPinByMode(String mode)
     }
     return -1;
 }
+#endif
 
 String Protocol::print(String msg)
 {
@@ -457,7 +460,9 @@ String Protocol::getStatus()
 }
 
 #ifndef ARDUINO_AVR
+#ifndef BASIC
 const String optionStable[] = {"monostable", "monostableNC", "bistable", "bistableNC"};
+#endif
 String Protocol::showGpio()
 {
     String r = "[";
@@ -478,7 +483,11 @@ String Protocol::showGpio()
             s += ", 'trigmode':'";
             JsonObject stab = getStable();
             String st = stab[sPin].as<String>();
+#ifndef BASIC
             s += optionStable[st.toInt()];
+#else
+            s += st;
+#endif
             s += "'";
         }
         int value = readPin(sPin.toInt(), k.value().as<String>());
@@ -513,7 +522,7 @@ void Protocol::setupPins()
         int pin = String(k.key().c_str()).toInt();
         initPinMode(pin, k.value().as<String>());
     }
-#ifndef ARDUINO_AVR
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
     debug("Registrando os drivers: ");
 #ifdef ESP8266
     analogWriteRange(256);
@@ -542,8 +551,9 @@ void Protocol::setupPins()
     getApiDrivers().afterSetup();
 #endif
 #endif
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
     debugln("OK");
-
+#endif
 #endif
 }
 
@@ -714,9 +724,10 @@ void Protocol::afterConfigChanged()
 String Protocol::restoreConfig()
 {
 
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
     String rt = "nao restaurou config";
     Serial.println("");
-    // linha();
+#endif // linha();
     try
     {
         String old = config.as<String>();
@@ -745,19 +756,23 @@ String Protocol::restoreConfig()
             String key = k.key().c_str();
             config[key] = doc[key]; // pode ter variaveis gravadas que nao tem no default inicial; ex: ssid
         }
-        // serializeJson(config, Serial);
-        // Serial.println("");
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
         rt = "OK";
-        // linha();
+#endif
     }
     catch (const char *e)
     {
         return String(e);
     }
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
     Serial.println("");
+#endif
     afterConfigChanged();
+#ifdef BASIC
+    return "OK";
+#else
     return rt;
-    return "";
+#endif
 }
 #endif
 
@@ -783,9 +798,14 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("scenes");
     config.createNestedObject("scene_triggers");
 #endif
+
+#ifndef NO_DRV_ADC
     config["adc_min"] = "125";
     config["adc_max"] = "126";
+#endif
+#ifndef BASIC
     config["sleep"] = "0";
+#endif
 #ifdef SSID_NAME
     config["ap_ssid"] = SSID_NAME;
     config["ap_password"] = SSID_PASWORD;
@@ -876,10 +896,12 @@ void Protocol::begin()
 #endif
 #ifndef ARDUINO_AVR
     afterBegin();
+#ifndef BASIC
     debug("Resources: ");
     debug(resources);
     debug(" APIs: ");
     debugln(apis);
+#endif
 #endif
     inited = true;
 }
@@ -984,13 +1006,13 @@ String Protocol::doCommand(String command)
     Serial.print("Command: ");
     Serial.println(command);
 #endif
+#ifndef BASIC
     if (command.startsWith("SERIAL "))
     {
         command.replace("SERIAL ", "");
         Serial.print(command);
         return "OK";
     }
-#ifndef BASIC
     resetDeepSleep(60 * 5);
 #endif
     String *cmd = split(command, ' ');
@@ -1111,11 +1133,13 @@ String Protocol::doCommand(String command)
     {
         return restoreConfig();
     }
+#ifndef BASIC
     else if (cmd[0] == "debug" || cmd[0] == "term")
     {
         config["debug"] = cmd[1];
         return "OK";
     }
+#endif    
 #endif
     else if (cmd[0] == "set")
     {
@@ -1341,8 +1365,8 @@ String Protocol::doCommand(String command)
             d[spin] = cmd[3];
             return "OK";
         }
-#endif  // BASIC
-#endif 
+#endif // BASIC
+#endif
 
         else if (cmd[2] == "trigger")
         {
