@@ -17,7 +17,7 @@ MqttClientDriver *getMqtt()
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
-#ifdef MQTT_DEBUG_ON
+#if defined(MQTT_DEBUG_ON) or defined(DEBUG_ON)
     Serial.println("Message arrived [");
     Serial.print(String(topic) + ": ");
 #endif
@@ -30,7 +30,7 @@ void callback(char *topic, byte *payload, unsigned int length)
 #ifdef MQTT_DEBUG_ON
     Serial.printf("%i. %s\r\n", length, cmd.c_str());
 #endif
-    String *spl = split(cmd, '/');
+    String *spl = split(topic, '/');
     String command = cmd;
     if (spl[1] == "scene")
     {
@@ -38,10 +38,20 @@ void callback(char *topic, byte *payload, unsigned int length)
         command += spl[2];
         command += " set ";
         command += cmd;
+        if (spl[3].equals(mqtt->clientId)) // checa se quem enviou foi este dispositivo
+        {
+#if defined(MQTT_DEBUG_ON) or defined(DEBUG_ON)
+            Serial.print("proprio: ");
+            Serial.println(command);
+#endif
+            return;
+        }
     }
     String result = getInstanceOfProtocol()->doCommand(command);
     mqtt->send("/response", result.c_str());
-#ifdef MQTT_DEBUG_ON
+#if defined(MQTT_DEBUG_ON) or defined(DEBUG_ON)
+    Serial.print(command);
+    Serial.print(" rsp: ");
     Serial.println(result);
     Serial.print("] ");
     Serial.println();
@@ -70,7 +80,7 @@ void MqttClientDriver::init()
 
 void MqttClientDriver::sendAlive()
 {
-    String rsp = getInstanceOfProtocol()->doCommand("show");
+    String rsp = getInstanceOfProtocol()->show();
 #ifdef MQTT_DEBUG_ON
     Serial.println(rsp);
 #endif
@@ -79,11 +89,17 @@ void MqttClientDriver::sendAlive()
 void MqttClientDriver::subscribes()
 {
     char topic[132];
-    sprintf(topic, "%s/%s%s", prefix.c_str(), name.c_str(), "/in");
+    sprintf(topic, "%s/scene/#", prefix.c_str());
     client.subscribe(topic);
-    char scene[132];
-    sprintf(topic, "%s/%s/%s", prefix.c_str(), "scene", "+");
-    client.subscribe(scene);
+    sprintf(topic, "%s/%s/in", prefix.c_str(), name.c_str());
+    client.subscribe(topic);
+
+    /* sprintf(topic, "%s/%s%s", prefix.c_str(), name.c_str(), "/in");
+     client.subscribe(topic);
+     char scene[132];
+     sprintf(topic, "%s/scene/#", prefix.c_str());
+     client.subscribe(scene);
+    */
 }
 
 bool MqttClientDriver::isConnected()
@@ -96,7 +112,7 @@ bool MqttClientDriver::isConnected()
         if (client.connect(clientId.c_str(), user.c_str(), password.c_str()))
         {
             Serial.println("connected");
-           // sendAlive();
+            // sendAlive();
             subscribes();
             lastOne = millis();
         }
@@ -123,6 +139,30 @@ void MqttClientDriver::changed(const String value)
     send("/action", value.c_str());
 }
 
+bool MqttClientDriver::sendScene(const char *scene, const int value)
+{
+    if (!isEnabled())
+        return false;
+#ifdef DEBUG_ON
+    Serial.print("MQT: scene/");
+    Serial.print(scene);
+    Serial.print(" payload: ");
+    Serial.println(value);
+#endif
+    if (isConnected())
+    {
+        lastAlive = millis();
+        char topic[128];
+        sprintf(topic, "%s/scene/%s/%s", prefix.c_str(), scene, clientId.c_str());
+        char msg[32];
+        sprintf(msg, "%i", value);
+        int n = strnlen(msg, 32);
+        client.publish(topic, msg, n);
+        return true;
+    }
+    return false;
+}
+
 bool MqttClientDriver::send(const char *subtopic, const char *payload)
 {
     if (!isEnabled())
@@ -138,6 +178,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
             sprintf(msg, "%s", payload);
             int n = strnlen(msg, 1024);
             client.publish(topic, msg, n);
+            return true;
         }
     }
 

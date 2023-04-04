@@ -27,7 +27,7 @@ class Protocol
 {
 private:
 public:
-    //size_t driversCount = 0;
+    // size_t driversCount = 0;
 #ifndef ARDUINO_AVR
     bool connected = false;
     int ledPin = 255;
@@ -59,8 +59,9 @@ public:
     JsonObject getDefaults();
     JsonObject getTimers();
     JsonObject getIntervals();
+    JsonObject getScenes();
 
-        virtual void resetDeepSleep(const unsigned int t = 10);
+    virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
 
     virtual String doCommand(String command);
@@ -78,16 +79,18 @@ public:
     virtual void loop();
     virtual bool pinValueChanged(const int pin, const int value, bool exectrigger = true);
     virtual void setupPins();
+    String show();
+
 #ifndef ARDUINO_AVR
     virtual void setLedMode(const int mode);
     virtual void reset();
     callbackDebugFunction debugCallback;
     static void driverCallbackEvent(String mode, int pin, int value);
     static void driverOkCallbackEvent(String mode, int pin, int value);
-    void actionEvent(const char * txt);
+    void actionEvent(const char *txt);
 
 #endif
-        String getKey(String name)
+    String getKey(String name)
     {
         return config[name];
     }
@@ -111,6 +114,7 @@ protected:
     initPinMode(int pin, const String m);
     int pinValue(const int pin);
     void checkTrigger(int pin, int value);
+    void checkTriggerScene(const int pin, const int value);
     void errorMsg(String msg);
 #ifndef ARDUINO_AVR
     // eventos

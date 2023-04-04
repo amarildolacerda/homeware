@@ -22,6 +22,10 @@ unsigned int timeoutDeepSleep = 1000;
 #include "api.h"
 #endif
 
+#ifdef MQTTClient
+#include "api/mqtt_client.h"
+#endif
+
 Protocol *protocol;
 
 void Protocol::actionEvent(const char *txt)
@@ -97,6 +101,10 @@ JsonObject Protocol::getTimers()
 JsonObject Protocol::getIntervals()
 {
     return config["intervals"];
+}
+JsonObject Protocol::getScenes()
+{
+    return config["scenes"];
 }
 
 void Protocol::initPinMode(int pin, const String m)
@@ -192,9 +200,32 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 #endif
         if (exectrigger)
             checkTrigger(pin, newValue);
+        checkTriggerScene(pin, newValue);
         return true;
     }
     return false;
+}
+
+void Protocol::checkTriggerScene(const int pin, const int value)
+{
+    for (JsonPair p : getScenes())
+    {
+        if (p.value().as<int>() == pin)
+        {
+            String sceneName = String(p.key().c_str());
+            // String cmd = "scene " + sceneName + " set " + String(value);
+            // doCommand(cmd);
+#ifdef MQTTClient
+            ApiDriver *drv = getApiDrivers().findByType("mqtt");
+            if (drv)
+            {
+                MqttClientDriver *mqtt = (MqttClientDriver *)drv;
+                if (mqtt)
+                    mqtt->sendScene(sceneName.c_str(), value);
+            }
+#endif
+        }
+    }
 }
 
 int Protocol::readPin(const int pin, const String mode)
@@ -299,15 +330,25 @@ void Protocol::checkTrigger(int pin, int value)
             int bistable = getStable()[p];
             int v = value;
 
+#ifdef DEBUG_ON
+            debug("bistable: ");
+            debug((String)bistable);
+            debug(" value: ");
+            debug((String)v);
+            debug(" pinTo: ");
+            debugln(pinTo);
+#endif
             if ((bistable == 2))
             {
                 if (v == 1)
                     switchPin(pinTo.toInt());
+                return;
             }
-            if ((bistable == 3))
+            else if ((bistable == 3))
             {
                 if (v == 0)
                     switchPin(pinTo.toInt());
+                return;
             }
             else if (pinTo.toInt() != pin)
             {
@@ -315,6 +356,7 @@ void Protocol::checkTrigger(int pin, int value)
                 debugf("{'trigger':%i, 'to':%i}", pin, value);
 #endif
                 writePin(pinTo.toInt(), v);
+                return;
             }
         }
 #ifndef ARDUINO_AVR
@@ -671,6 +713,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
+    config.createNestedObject("scenes");
     config["adc_min"] = "125";
     config["adc_max"] = "126";
     config["sleep"] = "0";
@@ -858,6 +901,14 @@ int convertOnOff(String pin)
     return pin.toInt();
 }
 
+String Protocol::show()
+{
+    char buffer[128];
+    String ip = localIP();
+    sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+    return (String)buffer;
+}
+
 String Protocol::doCommand(String command)
 {
 #ifdef DEBUG_ON
@@ -955,10 +1006,8 @@ String Protocol::doCommand(String command)
 #ifndef ARDUINO_AVR
             else if (cmd[1] == "gpio")
                 return showGpio();
-            char buffer[128];
-            String ip = localIP();
-            sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
-            return buffer;
+            return show();
+
 #endif
         }
 #ifndef ARDUINO_AVR
@@ -1036,6 +1085,23 @@ String Protocol::doCommand(String command)
         {
             int pin = getPinByName(cmd[1]);
             return String(switchPin(pin));
+        }
+        else if (cmd[0] == "scene" && !cmd[3].isEmpty())
+        {
+            String sceneName = cmd[1];
+            if (cmd[2] == "set" && getScenes().containsKey(sceneName))
+            {
+                int sceneValue = String(cmd[3]).toInt();
+                int trigPin = (getScenes()[sceneName].as<String>()).toInt();
+                writePin(trigPin, sceneValue);
+                return "OK";
+            }
+            else if (cmd[2] == "trigger")
+            {
+                String trigPin = cmd[3];
+                getScenes()[sceneName] = trigPin.toInt();
+                return "OK";
+            }
         }
         else if (cmd[0] == "gpio")
         {

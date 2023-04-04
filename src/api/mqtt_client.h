@@ -8,7 +8,6 @@ class MqttClientDriver : public ApiDriver
 protected:
     int port = 1883;
     String host = "none";
-    String clientId;
     String user;
     String password;
     String prefix;
@@ -20,6 +19,7 @@ protected:
     void init();
 
 public:
+    String clientId;
     static void
     registerApi()
     {
@@ -37,6 +37,7 @@ public:
     void setup() override;
     void loop() override;
     bool send(const char *subtopic, const char *payload);
+    bool sendScene(const char *scene, const int value);
     bool isEnabled();
     void sendAlive();
     void subscribes();
