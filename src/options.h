@@ -41,6 +41,7 @@
 #undef LITTLEFs
 #undef USE_PIN_NAMES
 #define SPIFFs
+#define NO_MDNS
 #endif
 
 #ifdef SPIFFs

@@ -1,5 +1,6 @@
 #pragma once
 
+#ifndef ESP32
 #include "api.h"
 #include "functions.h"
 
@@ -21,3 +22,4 @@ public:
 
     
 };
+#endif
