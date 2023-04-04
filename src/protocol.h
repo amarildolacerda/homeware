@@ -132,6 +132,8 @@ protected:
 #ifndef BASIC
     void doSleep(const int tempo);
     virtual void afterLoop();
+    String getStatus();
+
 #endif
     String restoreConfig();
     void defaultConfig();
@@ -151,7 +153,6 @@ private:
     void setupTelnet();
 #endif
     void eventLoop();
-    String getStatus();
 };
 
 Protocol *getInstanceOfProtocol();

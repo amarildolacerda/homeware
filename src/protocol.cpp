@@ -447,6 +447,8 @@ void Protocol::setLedMode(const int mode)
         drv->interval = (5 - ((mode <= 5) ? mode : 4) * 1000);
 }
 #endif
+
+#ifndef BASIC
 String Protocol::getStatus()
 {
     StaticJsonDocument<256> doc;
@@ -458,6 +460,7 @@ String Protocol::getStatus()
     serializeJson(doc, r);
     return r;
 }
+#endif
 
 #ifndef ARDUINO_AVR
 #ifndef BASIC
@@ -490,6 +493,7 @@ String Protocol::showGpio()
 #endif
             s += "'";
         }
+#ifndef BASIC
         int value = readPin(sPin.toInt(), k.value().as<String>());
         s += ", 'value': ";
         s += String(value);
@@ -499,7 +503,7 @@ String Protocol::showGpio()
             s += ", 'timer': ";
             s += getTimers()[sPin].as<String>();
         }
-
+#endif
         s = "{" + s + "}";
         if (r.length() > 1)
             r += ",";
@@ -592,11 +596,11 @@ void Protocol::doSleep(const int tempo)
 #endif
 
 const char HELP[] =
+#ifndef BASIC
     "set board <esp8266>\r\n"
     "show config\r\n"
     "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
 
-#ifndef BASIC
     "gpio <pin> default <n>(usado no setup)\r\n"
 #endif
 #ifdef GOOVER_ULTRASONIC
@@ -613,16 +617,20 @@ const char HELP[] =
 #endif
     "gpio <pin> get\r\n"
     "gpio <pin> set <n>\r\n"
-    "version\r\n"
-    "switch <pin>\r\n"
-    "show gpio\r\n"
 #ifdef GROOVE_ULTRASONIC
     "set gus_min 50\r\n"
     "set gus_max 150\r\n"
 #endif
-    "set interval 50\r\n"
+#ifndef NO_DRV_ADC
     "set adc_min 511\r\n"
-    "set adc_max 512\r\n";
+    "set adc_max 512\r\n"
+#endif
+#ifndef BASIC
+    "version\r\n"
+    "switch <pin>\r\n"
+    "show gpio\r\n"
+#endif
+    "set interval 50\r\n";
 
 String Protocol::help()
 {
@@ -727,7 +735,7 @@ String Protocol::restoreConfig()
 #if !(defined(ARDUINO_AVR) || defined(BASIC))
     String rt = "nao restaurou config";
     Serial.println("");
-#endif // linha();
+#endif
     try
     {
         String old = config.as<String>();
@@ -1139,7 +1147,7 @@ String Protocol::doCommand(String command)
         config["debug"] = cmd[1];
         return "OK";
     }
-#endif    
+#endif
 #endif
     else if (cmd[0] == "set")
     {
