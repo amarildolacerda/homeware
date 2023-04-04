@@ -7,7 +7,7 @@
 #error This code is intended to run on the ESP8266 or ESP32 platform! Please check your Tools->Board setting.
 #endif
 
-#ifndef ESP32
+#if  !( defined(ESP32) || defined(NO_MDNS))
 #ifdef WM_MDNS
 desativar o WM_MDNS do WiFiManager.
 #endif

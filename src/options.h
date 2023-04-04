@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.04.03.19"
+#define VERSION "23.04.04.20"
 
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
@@ -22,6 +22,7 @@
 #define DRIVERS_ENABLED
 #define DRIVERS_EX
 #endif
+
 
 // #define SINRICPRO
 #define TELNET
@@ -97,20 +98,13 @@
 // #define GROOVE_ULTRASONIC
 #endif
 
-//*****************************************
-#ifdef WIFI_ENABLED
-#define PORTAL
-#define ALEXA
-#define OTA
-#define WEBSOCKET
-#endif
 
 #ifdef BOARD_MIN
 #undef SINRICPRO
 #undef USE_PIN_NAMES
 #endif
 
-#if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC)
+#if defined(BOARD_ESP12S) || defined(ESP8285) || defined(BOARD_MIN) || defined(SONOFF_BASIC) || defined(ESP01)
 #define WIFI_ENABLED
 #define DRIVERS_ENABLED
 #undef SINRICPRO
@@ -122,12 +116,36 @@
 #undef MQTTClient
 #endif
 
+//*****************************************
+#ifdef WIFI_ENABLED
+#define PORTAL
+#define ALEXA
+#define OTA
+#define WEBSOCKET
+#endif
+
 #if defined(BOARD_ESP12S)
 #define LCTECHRELAY
 #define LITTLEFs
 #define TELNET
 #define WEBSOCKET
 #define NO_DRV_ADC
+#endif
+
+#ifdef ESP01
+#undef TELNET
+#undef WEBSOCKET
+#undef OTA
+#undef ALEXA
+#define NO_DRV_ADC
+#define NO_DRV_PWM
+#undef DRIVERS_ENABLED
+#undef DRIVERS_EX
+#define LITTLEFs
+#undef SINRICPRO
+#undef USE_PIN_NAMES
+#define BASIC
+#define NO_MDNS
 #endif
 
 #ifdef ESP32CAM

@@ -751,7 +751,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("stable");
     config.createNestedObject("timers");
 #ifdef BOARD_NAME
-    config["board"] = String(BOARD_NAME);
+    config["board"] = BOARD_NAME;
 #else
     config["board"] = "ESP";
 #endif
