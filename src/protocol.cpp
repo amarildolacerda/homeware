@@ -1096,7 +1096,12 @@ String Protocol::doCommand(String command)
                 writePin(trigPin, sceneValue);
                 return "OK";
             }
-            else if (cmd[2] == "trigger")
+            else if (cmd[2] == "none")
+            {
+                getScenes().remove(sceneName);
+                return "OK";
+            }
+            else if (cmd[2] == "by")
             {
                 String trigPin = cmd[3];
                 getScenes()[sceneName] = trigPin.toInt();
@@ -1111,7 +1116,15 @@ String Protocol::doCommand(String command)
             {
                 return showGpio();
             }
-            if (cmd[2] == "get" || cmd[2] == "set" || cmd[2] == "status")
+            else if (cmd[2] == "scene")
+            {
+
+                String trigPin = cmd[1];
+                getScenes()[cmd[3]] = trigPin.toInt();
+                return "OK";
+            }
+
+            else if (cmd[2] == "get" || cmd[2] == "set" || cmd[2] == "status")
             {
                 Driver *drv = getDrivers()->findByPin(pin);
                 if (drv)
