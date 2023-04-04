@@ -102,11 +102,23 @@ JsonObject Protocol::getIntervals()
 {
     return config["intervals"];
 }
+/// @brief lista as senhas que são alvo de disparo.
+/// @return lista de cenas disponiveis para disparo.
 JsonObject Protocol::getScenes()
 {
     return config["scenes"];
 }
 
+/// @brief lista de triggers a ser disparadas com base em eventos de cenarios
+/// @return lista objetos triggers
+JsonObject Protocol::getTriggerScenes()
+{
+    return config["scene_triggers"];
+}
+
+/// @brief chamada inicial para criar a estrutura de Pins configurados
+/// @param pin -> pin alvo para configuração
+/// @param m  -> mode, indica o comportamento do Pin
 void Protocol::initPinMode(int pin, const String m)
 {
 
@@ -134,6 +146,10 @@ void Protocol::initPinMode(int pin, const String m)
 #endif
 }
 
+/// @brief Escreve uma valores para o Pin
+/// @param pin - Pin alvo
+/// @param value  - valor a escrever
+/// @return valor atribuido
 int Protocol::writePin(const int pin, const int value)
 {
     String mode = getMode()[String(pin)];
@@ -158,6 +174,11 @@ int Protocol::writePin(const int pin, const int value)
     return value;
 }
 
+/// @brief Escreve comportamento PWM para o pin;
+/// @param pin 
+/// @param value 
+/// @param timeout quando tempo o valor deve ficar HIGH antes de voltar para LOW; 0 indica para não desligar
+/// @return valor enviado
 int Protocol::writePWM(const int pin, const int value, const int timeout)
 {
     Driver *drv = getDrivers()->findByPin(pin);
@@ -169,6 +190,9 @@ int Protocol::writePWM(const int pin, const int value, const int timeout)
     return 0;
 }
 
+/// @brief retorna o ultimo valor atribuido ao Pin
+/// @param pin 
+/// @return 
 int Protocol::pinValue(const int pin)
 {
     return docPinValues[String(pin)];
@@ -181,11 +205,21 @@ void Protocol::afterChanged(const int pin, const int value, const String mode)
 }
 #endif
 
+/// @brief busca o Pin Mode para um Pin
+/// @param pin 
+/// @return qual o mode de comportamento do pin
 String Protocol::getPinMode(const int pin)
 {
     return getMode()[String(pin)].as<String>();
 }
 
+
+
+/// @brief gerar evento trigger caso o valor atribuido ao Pin foi alterado
+/// @param pin 
+/// @param newValue 
+/// @param exectrigger 
+/// @return 
 bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigger)
 {
     if (pinValue(pin) != newValue)
@@ -206,15 +240,20 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     return false;
 }
 
+/// @brief gerar trigger de cenario para mudança de estado do pin
+/// @param pin 
+/// @param value 
 void Protocol::checkTriggerScene(const int pin, const int value)
 {
     for (JsonPair p : getScenes())
     {
+        // getScenes -> lista as senhas que são alvo de disparo.
         if (p.value().as<int>() == pin)
         {
+            /// monta scene a ser executada - executa quando existe uma scene_triggers
             String sceneName = String(p.key().c_str());
-            // String cmd = "scene " + sceneName + " set " + String(value);
-            // doCommand(cmd);
+            String cmd = "scene " + sceneName + " set " + String(value);
+            doCommand(cmd);  // executa local se existir uma "scene_triggers" para  "scene" - funciona independente de ter 
 #ifdef MQTTClient
             ApiDriver *drv = getApiDrivers().findByType("mqtt");
             if (drv)
@@ -228,6 +267,11 @@ void Protocol::checkTriggerScene(const int pin, const int value)
     }
 }
 
+
+/// @brief faz a leitura do valor atribuido ao Pin - leitura lógica no Pin
+/// @param pin 
+/// @param mode 
+/// @return 
 int Protocol::readPin(const int pin, const String mode)
 {
     Driver *drv;
@@ -366,7 +410,9 @@ void Protocol::checkTrigger(int pin, int value)
     }
 #endif
 }
-
+/// @brief comutador de estado; se esta em HIGH mudar para LOW; se estiver em LOW mudar para HIGH
+/// @param pin 
+/// @return 
 int Protocol::switchPin(const int pin)
 {
     Driver *drv = getDrivers()->findByPin(pin);
@@ -714,7 +760,8 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("sensor");
     config.createNestedObject("default");
     config.createNestedObject("scenes");
-    config["adc_min"] = "125";
+    config.createNestedObject("scene_triggers");
+        config["adc_min"] = "125";
     config["adc_max"] = "126";
     config["sleep"] = "0";
 #ifdef SSID_NAME
@@ -1088,23 +1135,23 @@ String Protocol::doCommand(String command)
         }
         else if (cmd[0] == "scene" && !cmd[3].isEmpty())
         {
-            String sceneName = cmd[1];
-            if (cmd[2] == "set" && getScenes().containsKey(sceneName))
+            String sceneName = cmd[1]; // JsonObject Protocol::getTriggerScenes()
+            if (cmd[2] == "set" && getTriggerScenes().containsKey(sceneName))
             {
                 int sceneValue = String(cmd[3]).toInt();
-                int trigPin = (getScenes()[sceneName].as<String>()).toInt();
+                int trigPin = (getTriggerScenes()[sceneName].as<String>()).toInt();
                 writePin(trigPin, sceneValue);
                 return "OK";
             }
             else if (cmd[2] == "none")
             {
-                getScenes().remove(sceneName);
+                getTriggerScenes().remove(sceneName);
                 return "OK";
             }
-            else if (cmd[2] == "by")
+            else if (cmd[2] == "trigger")
             {
                 String trigPin = cmd[3];
-                getScenes()[sceneName] = trigPin.toInt();
+                getTriggerScenes()[sceneName] = trigPin.toInt();
                 return "OK";
             }
         }

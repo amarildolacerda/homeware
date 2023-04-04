@@ -60,8 +60,9 @@ public:
     JsonObject getTimers();
     JsonObject getIntervals();
     JsonObject getScenes();
+    JsonObject getTriggerScenes();
 
-    virtual void resetDeepSleep(const unsigned int t = 10);
+        virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
 
     virtual String doCommand(String command);
