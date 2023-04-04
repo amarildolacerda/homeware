@@ -17,7 +17,6 @@
 
 #include <ArduinoJson.h>
 
-
 #include "functions.h"
 
 #include "protocol.h"
@@ -44,14 +43,13 @@ public:
 #else
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
-    
+
     //===================== revisado para ficar aqui mesmo
     void afterChanged(const int pin, const int value, const String mode) override;
     void resetWiFi() override;
-    void afterLoop() override;
     void afterBegin() override;
     void reset() override;
-    void prepare()override;
+    void prepare() override;
 
     //============================= potencial para mudar para Protocol
 
@@ -62,7 +60,9 @@ public:
 #endif
 
 private:
+#ifndef BASIC
     void setupServer();
+#endif
 };
 
 extern Homeware homeware;

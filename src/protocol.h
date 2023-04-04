@@ -54,21 +54,24 @@ public:
     JsonObject getStable();
     JsonObject getMode();
 #ifndef ARDUINO_AVR
+#ifndef BASIC
     JsonObject getDevices();
     JsonObject getSensors();
     JsonObject getDefaults();
-    JsonObject getTimers();
-    JsonObject getIntervals();
     JsonObject getScenes();
     JsonObject getTriggerScenes();
+    virtual int writePWM(const int pin, const int value, const int timeout = 0);
+    void checkTriggerScene(const int pin, const int value);
+    virtual void resetDeepSleep(const unsigned int t = 10);
+#endif
+    JsonObject getTimers();
+    JsonObject getIntervals();
 
-        virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
 
     virtual String doCommand(String command);
     virtual String print(String msg);
     virtual int writePin(const int pin, const int value);
-    virtual int writePWM(const int pin, const int value, const int timeout = 0);
     virtual int readPin(const int pin, const String mode = "");
     virtual int findPinByMode(String mode);
     virtual void debug(String txt);
@@ -115,17 +118,18 @@ protected:
     initPinMode(int pin, const String m);
     int pinValue(const int pin);
     void checkTrigger(int pin, int value);
-    void checkTriggerScene(const int pin, const int value);
     void errorMsg(String msg);
 #ifndef ARDUINO_AVR
     // eventos
     virtual void afterConfigChanged();
     virtual void afterChanged(const int pin, const int value, const String mode);
-    virtual void afterLoop();
     virtual void afterBegin();
     virtual void afterSetup();
     virtual String localIP();
+#ifndef BASIC
     void doSleep(const int tempo);
+    virtual void afterLoop();
+#endif
     String restoreConfig();
     void defaultConfig();
     String saveConfig();

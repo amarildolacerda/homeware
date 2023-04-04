@@ -16,11 +16,11 @@ protected:
     // long v1 = 0;
     callbackFunction triggerCallback;
     callbackFunction triggerOkState;
-    String _mode;
-    int _pin = -1;
     float oldValue = 0;
 
 public:
+    String _mode;
+    int _pin = -1;
     unsigned long timeout = 0;
     unsigned long interval = 0;
     /// @brief triggerEnabled true indica que o driver define o momento para dispara trigger
@@ -73,6 +73,7 @@ public:
     {
         return -1;
     }
+#ifndef BASIC
     virtual int internalRead()
     {
         return readPin();
@@ -85,24 +86,25 @@ public:
     {
         return _mode;
     }
+#endif
     Protocol *getProtocol()
     {
         return getInstanceOfProtocol();
     }
+#ifndef BASIC
     void setPin(const int pin)
     {
         _pin = pin;
     }
+#endif
     virtual int writePin(const int value)
     {
         return value;
     }
     virtual bool isGet() { return true; }
     virtual bool isSet() { return false; }
-    // virtual String doCommand(const String command)
-    // {
-    //     return "NAK";
-    // }
+
+#ifndef BASIC
     virtual JsonObject readStatus()
     {
         int rsp = readPin();
@@ -110,18 +112,21 @@ public:
         json["result"] = rsp;
         return json.as<JsonObject>();
     }
-    virtual bool isStatus() { return false; }
-    // virtual bool isCommand() { return false; }
+#endif
+    virtual bool isStatus()
+    {
+        return false;
+    }
     virtual bool isLoop() { return false; }
-
     virtual void changed(const int value){};
     virtual void beforeSetup() {}
 
+#ifndef BASIC
     int getPin()
     {
         return _pin;
     };
-
+#endif
     void setTriggerEvent(callbackFunction callback)
     {
         triggerCallback = callback;
@@ -200,7 +205,7 @@ public:
         {
             if (drv)
             {
-                if (drv->getPin() == pin)
+                if (drv->_pin == pin)
                 {
                     return idx;
                 }
@@ -215,7 +220,7 @@ public:
         for (auto *drv : items)
             if (drv)
             {
-                if (drv->getMode().equals(mode))
+                if (drv->_mode.equals(mode))
                 {
                     return drv;
                 }
@@ -227,7 +232,7 @@ public:
         for (auto *drv : items)
             if (drv)
             {
-                if (drv->getPin() == pin)
+                if (drv->_pin == pin)
                 {
                     return drv;
                 }

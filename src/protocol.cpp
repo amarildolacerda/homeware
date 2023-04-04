@@ -68,6 +68,7 @@ JsonObject Protocol::getTrigger()
     return config["trigger"].as<JsonObject>();
 }
 #ifndef ARDUINO_AVR
+#ifndef BASIC
 JsonObject Protocol::getDevices()
 {
     return config["device"].as<JsonObject>();
@@ -76,6 +77,7 @@ JsonObject Protocol::getSensors()
 {
     return config["sensor"].as<JsonObject>();
 }
+#endif
 #endif
 
 JsonObject Protocol::getMode()
@@ -89,10 +91,12 @@ JsonObject Protocol::getStable()
 }
 
 #ifndef ARDUINO_AVR
+#ifndef BASIC
 JsonObject Protocol::getDefaults()
 {
     return config["default"];
 }
+#endif
 #endif
 JsonObject Protocol::getTimers()
 {
@@ -104,17 +108,18 @@ JsonObject Protocol::getIntervals()
 }
 /// @brief lista as senhas que são alvo de disparo.
 /// @return lista de cenas disponiveis para disparo.
+#ifndef BASIC
 JsonObject Protocol::getScenes()
 {
     return config["scenes"];
 }
-
 /// @brief lista de triggers a ser disparadas com base em eventos de cenarios
 /// @return lista objetos triggers
 JsonObject Protocol::getTriggerScenes()
 {
     return config["scene_triggers"];
 }
+#endif
 
 /// @brief chamada inicial para criar a estrutura de Pins configurados
 /// @param pin -> pin alvo para configuração
@@ -174,9 +179,10 @@ int Protocol::writePin(const int pin, const int value)
     return value;
 }
 
+#ifndef BASIC
 /// @brief Escreve comportamento PWM para o pin;
-/// @param pin 
-/// @param value 
+/// @param pin
+/// @param value
 /// @param timeout quando tempo o valor deve ficar HIGH antes de voltar para LOW; 0 indica para não desligar
 /// @return valor enviado
 int Protocol::writePWM(const int pin, const int value, const int timeout)
@@ -189,10 +195,11 @@ int Protocol::writePWM(const int pin, const int value, const int timeout)
     }
     return 0;
 }
+#endif
 
 /// @brief retorna o ultimo valor atribuido ao Pin
-/// @param pin 
-/// @return 
+/// @param pin
+/// @return
 int Protocol::pinValue(const int pin)
 {
     return docPinValues[String(pin)];
@@ -206,20 +213,18 @@ void Protocol::afterChanged(const int pin, const int value, const String mode)
 #endif
 
 /// @brief busca o Pin Mode para um Pin
-/// @param pin 
+/// @param pin
 /// @return qual o mode de comportamento do pin
 String Protocol::getPinMode(const int pin)
 {
     return getMode()[String(pin)].as<String>();
 }
 
-
-
 /// @brief gerar evento trigger caso o valor atribuido ao Pin foi alterado
-/// @param pin 
-/// @param newValue 
-/// @param exectrigger 
-/// @return 
+/// @param pin
+/// @param newValue
+/// @param exectrigger
+/// @return
 bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigger)
 {
     if (pinValue(pin) != newValue)
@@ -234,15 +239,18 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 #endif
         if (exectrigger)
             checkTrigger(pin, newValue);
+#ifndef BASIC
         checkTriggerScene(pin, newValue);
+#endif
         return true;
     }
     return false;
 }
 
+#ifndef BASIC
 /// @brief gerar trigger de cenario para mudança de estado do pin
-/// @param pin 
-/// @param value 
+/// @param pin
+/// @param value
 void Protocol::checkTriggerScene(const int pin, const int value)
 {
     for (JsonPair p : getScenes())
@@ -253,7 +261,7 @@ void Protocol::checkTriggerScene(const int pin, const int value)
             /// monta scene a ser executada - executa quando existe uma scene_triggers
             String sceneName = String(p.key().c_str());
             String cmd = "scene " + sceneName + " set " + String(value);
-            doCommand(cmd);  // executa local se existir uma "scene_triggers" para  "scene" - funciona independente de ter 
+            doCommand(cmd); // executa local se existir uma "scene_triggers" para  "scene" - funciona independente de ter
 #ifdef MQTTClient
             ApiDriver *drv = getApiDrivers().findByType("mqtt");
             if (drv)
@@ -266,12 +274,12 @@ void Protocol::checkTriggerScene(const int pin, const int value)
         }
     }
 }
-
+#endif
 
 /// @brief faz a leitura do valor atribuido ao Pin - leitura lógica no Pin
-/// @param pin 
-/// @param mode 
-/// @return 
+/// @param pin
+/// @param mode
+/// @return
 int Protocol::readPin(const int pin, const String mode)
 {
     Driver *drv;
@@ -282,7 +290,7 @@ int Protocol::readPin(const int pin, const String mode)
     {
         drv = getDrivers()->findByPin(pin);
         if (drv)
-            m = drv->getMode();
+            m = drv->_mode;
     }
     else
         drv = getDrivers()->findByPin(pin);
@@ -411,8 +419,8 @@ void Protocol::checkTrigger(int pin, int value)
 #endif
 }
 /// @brief comutador de estado; se esta em HIGH mudar para LOW; se estiver em LOW mudar para HIGH
-/// @param pin 
-/// @return 
+/// @param pin
+/// @return
 int Protocol::switchPin(const int pin)
 {
     Driver *drv = getDrivers()->findByPin(pin);
@@ -515,13 +523,16 @@ void Protocol::setupPins()
 
 #ifndef ARDUINO_AVR
 
+#ifndef BASIC
     for (JsonPair k : getDefaults())
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
     }
+#endif
 
     /// APIs externas
 #ifndef NO_API
+#ifndef BASIC
     JsonObject sensores = getDevices();
     for (JsonPair k : sensores)
     {
@@ -530,12 +541,14 @@ void Protocol::setupPins()
     }
     getApiDrivers().afterSetup();
 #endif
+#endif
     debugln("OK");
 
 #endif
 }
 
 #ifndef ARDUINO_AVR
+#ifndef BASIC
 
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
@@ -566,12 +579,16 @@ void Protocol::doSleep(const int tempo)
     ESP.deepSleep(tempo * 1000 * 1000);
 #endif
 }
+#endif
 
 const char HELP[] =
     "set board <esp8266>\r\n"
     "show config\r\n"
     "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
+
+#ifndef BASIC
     "gpio <pin> default <n>(usado no setup)\r\n"
+#endif
 #ifdef GOOVER_ULTRASONIC
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
 #endif
@@ -689,7 +706,9 @@ void Protocol::setup()
 void Protocol::afterConfigChanged()
 {
     getDrivers()->reload(); // mudou as configurações, recarregar os parametros;
+#ifndef NO_API
     getApiDrivers().reload();
+#endif
 }
 
 String Protocol::restoreConfig()
@@ -756,12 +775,15 @@ DynamicJsonDocument Protocol::baseConfig()
     config["board"] = "ESP";
 #endif
 #ifndef ARDUINO_AVR
+
+#ifndef BASIC
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
     config.createNestedObject("scenes");
     config.createNestedObject("scene_triggers");
-        config["adc_min"] = "125";
+#endif
+    config["adc_min"] = "125";
     config["adc_max"] = "126";
     config["sleep"] = "0";
 #ifdef SSID_NAME
@@ -968,372 +990,379 @@ String Protocol::doCommand(String command)
         Serial.print(command);
         return "OK";
     }
-#ifndef ARDUINO_AVR
-    try
-    {
-        resetDeepSleep(60 * 5);
+#ifndef BASIC
+    resetDeepSleep(60 * 5);
 #endif
-        String *cmd = split(command, ' ');
+    String *cmd = split(command, ' ');
 #ifdef ESP8266
-        if (cmd[0] == "format")
+    if (cmd[0] == "format")
+    {
+        LittleFS.format();
+        return "formated";
+    }
+    else
+#endif
+#ifndef ARDUINO_AVR
+#ifndef BASIC
+        if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
+    {
+        doSleep(String(cmd[1]).toInt());
+        return "OK";
+    }
+    else if (cmd[0] == "open")
+    {
+        char json[1024];
+        readFile(cmd[1], json, 1024);
+        return String(json);
+    }
+    else if (cmd[0] == "test")
+    {
+        config["debug"] = "on";
+        int pin = getPinByName(cmd[1]);
+        if (cmd[1].substring(0, 1) == "A")
         {
-            LittleFS.format();
-            return "formated";
+            for (int i = 0; i < 10; i++)
+            {
+                debugf("%i. %i: %i", i, pin, analogRead(pin));
+                yield();
+                delay(1000);
+            }
+        }
+        else
+        {
+            pinMode(pin, OUTPUT);
+            for (int i = 0; i < 10; i++)
+            {
+                digitalWrite(pin, i % 2);
+                debugf("%i. %i: %i", i, pin, i % 2);
+                yield();
+                delay(1000);
+                yield();
+            }
+            digitalWrite(pin, LOW);
+        }
+        return "OK";
+    }
+    else
+
+        if (cmd[0] == "version")
+    {
+        return VERSION;
+    }
+    else
+
+        if (cmd[0] == "help")
+        return help();
+    else
+#endif
+#endif
+        if (cmd[0] == "show")
+    {
+#if !(defined(ARDUINO_AVR) || defined(BASIC))
+
+        Serial.println("cmd: " + command);
+
+        if (cmd[1] == "resources")
+            return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
+        else if (cmd[1] == "status")
+        {
+            return getStatus();
         }
         else
 #endif
+            if (cmd[1] == "config")
+            return config.as<String>();
 #ifndef ARDUINO_AVR
-            if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
+        else if (cmd[1] == "gpio")
+            return showGpio();
+        return show();
+
+#endif
+    }
+#ifndef ARDUINO_AVR
+
+    else
+
+        if (cmd[0] == "reset")
+    {
+        if (cmd[1] == "wifi")
         {
-            doSleep(String(cmd[1]).toInt());
+            resetWiFi();
             return "OK";
         }
-        if (cmd[0] == "open")
+        else if (cmd[1] == "factory")
         {
-            char json[1024];
-            readFile(cmd[1], json, 1024);
-            return String(json);
+            defaultConfig();
+            return "OK";
         }
-        else if (cmd[0] == "test")
+#ifndef BASIC
+        print("reiniciando...");
+        delay(1000);
+#endif
+        reset();
+        return "OK";
+    }
+
+    else if (cmd[0] == "save")
+    {
+        return saveConfig();
+    }
+    else if (cmd[0] == "restore")
+    {
+        return restoreConfig();
+    }
+    else if (cmd[0] == "debug" || cmd[0] == "term")
+    {
+        config["debug"] = cmd[1];
+        return "OK";
+    }
+#endif
+    else if (cmd[0] == "set")
+    {
+        if (cmd[2] == "none")
         {
-            config["debug"] = "on";
-            int pin = getPinByName(cmd[1]);
-            if (cmd[1].substring(0, 1) == "A")
+            config.remove(cmd[1]);
+        }
+        else
+        {
+            config[cmd[1]] = cmd[2];
+            getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
+        }
+        return "OK";
+    }
+    else if (cmd[0] == "get")
+    {
+        return config[cmd[1]];
+    }
+#ifndef BASIC
+    else if (cmd[0] == "pwm")
+    {
+        int pin = getPinByName(cmd[1]);
+        int timeout = 0;
+        if (cmd[4] == "until" || cmd[4] == "timeout")
+            timeout = cmd[5].toInt();
+        if (cmd[2] == "set")
+        {
+            int value = convertOnOff(cmd[3]);
+            int rsp = writePWM(pin, value, timeout);
+            return String(rsp);
+        }
+        if (cmd[2] == "get")
+        {
+            int rsp = readPin(pin, "pwm");
+            return String(rsp);
+        }
+    }
+#endif
+    else if (cmd[0] == "switch")
+    {
+        int pin = getPinByName(cmd[1]);
+        return String(switchPin(pin));
+    }
+#ifndef BASIC
+    else if (cmd[0] == "scene" && !cmd[3].isEmpty())
+    {
+        String sceneName = cmd[1]; // JsonObject Protocol::getTriggerScenes()
+        if (cmd[2] == "set" && getTriggerScenes().containsKey(sceneName))
+        {
+            int sceneValue = String(cmd[3]).toInt();
+            int trigPin = (getTriggerScenes()[sceneName].as<String>()).toInt();
+            writePin(trigPin, sceneValue);
+            return "OK";
+        }
+        else if (cmd[2] == "none")
+        {
+            getTriggerScenes().remove(sceneName);
+            return "OK";
+        }
+        else if (cmd[2] == "trigger")
+        {
+            String trigPin = cmd[3];
+            getTriggerScenes()[sceneName] = trigPin.toInt();
+            return "OK";
+        }
+    }
+#endif
+    else if (cmd[0] == "gpio")
+    {
+        int pin = getPinByName(cmd[1]);
+        String spin = String(pin);
+        if (cmd[1] == "show")
+        {
+            return showGpio();
+        }
+#ifndef BASIC
+        else if (cmd[2] == "scene")
+        {
+
+            String trigPin = cmd[1];
+            getScenes()[cmd[3]] = trigPin.toInt();
+            return "OK";
+        }
+#endif
+        else if (cmd[2] == "get" || cmd[2] == "set" || cmd[2] == "status")
+        {
+            Driver *drv = getDrivers()->findByPin(pin);
+            if (drv)
             {
-                for (int i = 0; i < 10; i++)
+#ifndef BASIC
+                if (cmd[2] == "status")
                 {
-                    debugf("%i. %i: %i", i, pin, analogRead(pin));
-                    yield();
-                    delay(1000);
+                    JsonObject j = drv->readStatus();
+                    String rsp;
+                    serializeJson(j, rsp);
+                    return rsp;
                 }
+                else
+#endif
+                    if (cmd[2] == "get" && drv->isGet())
+                {
+#ifndef BASIC
+                    return String(drv->internalRead());
+#else
+                    return String(drv->readPin());
+#endif
+                }
+                else if (cmd[2] == "set" && drv->isSet())
+                {
+                    return String(drv->writePin(convertOnOff(cmd[3])));
+                }
+#ifndef BASIC
+                else if (cmd[2] == "get" && drv->isStatus())
+                {
+                    JsonObject sts = drv->readStatus();
+                    String rsp;
+                    serializeJson(sts, rsp);
+                    return rsp;
+                }
+#endif
+            }
+        }
+
+        if (cmd[2] == "none")
+        {
+            getDrivers()->deleteByPin(pin);
+            config["mode"].remove(spin);
+            return "OK";
+        }
+#ifndef BASIC
+        else if (cmd[2] == "get")
+        {
+            int v = readPin(pin, "");
+            return String(v);
+        }
+        else if (cmd[2] == "set")
+        {
+            int v = cmd[3].toInt();
+            writePin(pin, v);
+            return String(v);
+        }
+        else if (cmd[2] == "timer")
+        {
+            if (cmd[3] == "none")
+            {
+                getTimers().remove(spin);
+                return "OK";
             }
             else
             {
-                pinMode(pin, OUTPUT);
-                for (int i = 0; i < 10; i++)
-                {
-                    digitalWrite(pin, i % 2);
-                    debugf("%i. %i: %i", i, pin, i % 2);
-                    yield();
-                    delay(1000);
-                    yield();
-                }
-                digitalWrite(pin, LOW);
-            }
-            return "OK";
-        }
-        else
-
-            if (cmd[0] == "version")
-        {
-            return VERSION;
-        }
-        else
-
-            if (cmd[0] == "help")
-            return help();
-        else
-#endif
-            if (cmd[0] == "show")
-        {
-#ifndef ARDUINO_AVR
-
-            Serial.println("cmd: " + command);
-
-            if (cmd[1] == "resources")
-                return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
-            else if (cmd[1] == "status")
-            {
-                return getStatus();
-            }
-            else
-#endif
-                if (cmd[1] == "config")
-                return config.as<String>();
-#ifndef ARDUINO_AVR
-            else if (cmd[1] == "gpio")
-                return showGpio();
-            return show();
-
-#endif
-        }
-#ifndef ARDUINO_AVR
-
-        else
-
-            if (cmd[0] == "reset")
-        {
-            if (cmd[1] == "wifi")
-            {
-                resetWiFi();
+                getTimers()[spin] = String(cmd[3]).toInt();
                 return "OK";
             }
-            else if (cmd[1] == "factory")
+        }
+        else if (cmd[2] == "interval")
+        {
+            if (cmd[3] == "none")
             {
-                defaultConfig();
+                getIntervals().remove(spin);
                 return "OK";
-            }
-            print("reiniciando...");
-            delay(1000);
-            reset();
-            return "OK";
-        }
-
-        else if (cmd[0] == "save")
-        {
-            return saveConfig();
-        }
-        else if (cmd[0] == "restore")
-        {
-            return restoreConfig();
-        }
-        else if (cmd[0] == "debug" || cmd[0] == "term")
-        {
-            config["debug"] = cmd[1];
-            return "OK";
-        }
-#endif
-        else if (cmd[0] == "set")
-        {
-            if (cmd[2] == "none")
-            {
-                config.remove(cmd[1]);
             }
             else
             {
-                config[cmd[1]] = cmd[2];
-                getDrivers()->setup(); // mudou as configurações, recarregar os parametros;
-            }
-            return "OK";
-        }
-        else if (cmd[0] == "get")
-        {
-            return config[cmd[1]];
-        }
-        else if (cmd[0] == "pwm")
-        {
-            int pin = getPinByName(cmd[1]);
-            int timeout = 0;
-            if (cmd[4] == "until" || cmd[4] == "timeout")
-                timeout = cmd[5].toInt();
-            if (cmd[2] == "set")
-            {
-                int value = convertOnOff(cmd[3]);
-                int rsp = writePWM(pin, value, timeout);
-                return String(rsp);
-            }
-            if (cmd[2] == "get")
-            {
-                int rsp = readPin(pin, "pwm");
-                return String(rsp);
-            }
-        }
-        else if (cmd[0] == "switch")
-        {
-            int pin = getPinByName(cmd[1]);
-            return String(switchPin(pin));
-        }
-        else if (cmd[0] == "scene" && !cmd[3].isEmpty())
-        {
-            String sceneName = cmd[1]; // JsonObject Protocol::getTriggerScenes()
-            if (cmd[2] == "set" && getTriggerScenes().containsKey(sceneName))
-            {
-                int sceneValue = String(cmd[3]).toInt();
-                int trigPin = (getTriggerScenes()[sceneName].as<String>()).toInt();
-                writePin(trigPin, sceneValue);
-                return "OK";
-            }
-            else if (cmd[2] == "none")
-            {
-                getTriggerScenes().remove(sceneName);
-                return "OK";
-            }
-            else if (cmd[2] == "trigger")
-            {
-                String trigPin = cmd[3];
-                getTriggerScenes()[sceneName] = trigPin.toInt();
+                getIntervals()[spin] = String(cmd[3]).toInt();
                 return "OK";
             }
         }
-        else if (cmd[0] == "gpio")
+#endif
+        else if (cmd[2] == "mode")
         {
-            int pin = getPinByName(cmd[1]);
-            String spin = String(pin);
-            if (cmd[1] == "show")
-            {
-                return showGpio();
-            }
-            else if (cmd[2] == "scene")
-            {
-
-                String trigPin = cmd[1];
-                getScenes()[cmd[3]] = trigPin.toInt();
-                return "OK";
-            }
-
-            else if (cmd[2] == "get" || cmd[2] == "set" || cmd[2] == "status")
-            {
-                Driver *drv = getDrivers()->findByPin(pin);
-                if (drv)
-                {
-                    if (cmd[2] == "status")
-                    {
-                        JsonObject j = drv->readStatus();
-                        String rsp;
-                        serializeJson(j, rsp);
-                        return rsp;
-                    }
-                    else if (cmd[2] == "get" && drv->isGet())
-                    {
-                        return String(drv->internalRead());
-                    }
-                    else if (cmd[2] == "set" && drv->isSet())
-                    {
-                        return String(drv->writePin(convertOnOff(cmd[3])));
-                    }
-                    else if (cmd[2] == "get" && drv->isStatus())
-                    {
-                        JsonObject sts = drv->readStatus();
-                        String rsp;
-                        serializeJson(sts, rsp);
-                        return rsp;
-                    }
-                    /* else if (drv->isCommand())
-                     {
-                         String rst = drv->doCommand(command);
-                         if (rst != "NAK")
-                             return rst;
-                     }*/
-                }
-            }
-
-            if (cmd[2] == "none")
-            {
-                getDrivers()->deleteByPin(pin);
-                config["mode"].remove(spin);
-                return "OK";
-            }
-            else if (cmd[2] == "get")
-            {
-                int v = readPin(pin, "");
-                return String(v);
-            }
-            else if (cmd[2] == "set")
-            {
-                int v = cmd[3].toInt();
-                writePin(pin, v);
-                return String(v);
-            }
-            else if (cmd[2] == "timer")
-            {
-                if (cmd[3] == "none")
-                {
-                    getTimers().remove(spin);
-                    return "OK";
-                }
-                else
-                {
-                    getTimers()[spin] = String(cmd[3]).toInt();
-                    return "OK";
-                }
-            }
-            else if (cmd[2] == "interval")
-            {
-                if (cmd[3] == "none")
-                {
-                    getIntervals().remove(spin);
-                    return "OK";
-                }
-                else
-                {
-                    getIntervals()[spin] = String(cmd[3]).toInt();
-                    return "OK";
-                }
-            }
-
-            else if (cmd[2] == "mode")
-            {
 #ifndef ARDUINO_AVR
 
-                if (resources.indexOf(cmd[3]) > -1)
-                {
-                    initPinMode(pin, cmd[3]);
-                    return "OK";
-                }
-                else
-                    return "driver indisponivel";
+            if (resources.indexOf(cmd[3]) > -1)
+            {
+                initPinMode(pin, cmd[3]);
+                return "OK";
+            }
+            else
+                return "driver indisponivel";
 #else
             initPinMode(pin, cmd[3]);
             return "OK";
 
 #endif
-            }
-#ifndef ARDUINO_AVR
-            else if (cmd[2] == "device")
-            {
-
-                JsonObject devices = getDevices();
-                if (cmd[3] == "none")
-                {
-                    devices.remove(spin);
-                    return "OK";
-                }
-                devices[spin] = cmd[3];
-                /*if (String("motion,doorbell").indexOf(cmd[3]) > -1)
-                    getMode()[spin] = "in";
-                if (String("ldr,dht").indexOf(cmd[3]) > -1)
-                    getMode()[spin] = cmd[3];*/
-                return "OK";
-            }
-            else if (cmd[2] == "sensor")
-            {
-                JsonObject sensors = getSensors();
-                if (cmd[3] == "none")
-                {
-                    sensors.remove(spin);
-                    return "OK";
-                }
-                sensors[spin] = cmd[3];
-                return "OK";
-            }
-            else if (cmd[2] == "default")
-            {
-                JsonObject d = getDefaults();
-                if (cmd[3] == "none")
-                {
-                    d.remove(spin);
-                    return "OK";
-                }
-                d[spin] = cmd[3];
-                return "OK";
-            }
-#endif
-            else if (cmd[2] == "trigger")
-            {
-                if (!cmd[4])
-                    return "cmd incompleto";
-                JsonObject trigger = getTrigger();
-                if (cmd[3] == "none")
-                {
-                    trigger.remove(spin);
-                    return "OK";
-                }
-                trigger[spin] = getPinByName(cmd[3]);
-
-                // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
-                getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
-
-                return "OK";
-            }
         }
-        return "invalido";
 #ifndef ARDUINO_AVR
+#ifndef BASIC
+        else if (cmd[2] == "device")
+        {
+
+            JsonObject devices = getDevices();
+            if (cmd[3] == "none")
+            {
+                devices.remove(spin);
+                return "OK";
+            }
+            devices[spin] = cmd[3];
+            /*if (String("motion,doorbell").indexOf(cmd[3]) > -1)
+                getMode()[spin] = "in";
+            if (String("ldr,dht").indexOf(cmd[3]) > -1)
+                getMode()[spin] = cmd[3];*/
+            return "OK";
+        }
+        else if (cmd[2] == "sensor")
+        {
+            JsonObject sensors = getSensors();
+            if (cmd[3] == "none")
+            {
+                sensors.remove(spin);
+                return "OK";
+            }
+            sensors[spin] = cmd[3];
+            return "OK";
+        }
+        else if (cmd[2] == "default")
+        {
+            JsonObject d = getDefaults();
+            if (cmd[3] == "none")
+            {
+                d.remove(spin);
+                return "OK";
+            }
+            d[spin] = cmd[3];
+            return "OK";
+        }
+#endif  // BASIC
+#endif 
+
+        else if (cmd[2] == "trigger")
+        {
+            if (!cmd[4])
+                return "cmd incompleto";
+            JsonObject trigger = getTrigger();
+            if (cmd[3] == "none")
+            {
+                trigger.remove(spin);
+                return "OK";
+            }
+            trigger[spin] = getPinByName(cmd[3]);
+
+            // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
+            getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
+
+            return "OK";
+        }
     }
-    catch (const char *e)
-    {
-        return String(e);
-    }
-#endif
+    return "invalido";
 }
 
 #ifndef ARDUINO_AVR
@@ -1348,6 +1377,7 @@ void Protocol::printConfig()
 }
 #endif
 
+#ifndef BASIC
 void lerSerial()
 {
     if (Serial.available() > 0)
@@ -1376,7 +1406,7 @@ void lerSerial()
 #endif
     }
 }
-
+#endif
 bool inLooping = false;
 void Protocol::loop()
 {
@@ -1386,7 +1416,9 @@ void Protocol::loop()
     inLooping = true;
     if (!inited)
         begin();
+#ifndef BASIC
     lerSerial();
+#endif
 #ifdef TELNET
     telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
@@ -1397,11 +1429,13 @@ void Protocol::loop()
     getApiDrivers().loop();
 #endif
 #ifndef ARDUINO_AVR
+#ifndef BASIC
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0 && millis() > sleeptmp)
     {
         doSleep(sleep);
     }
+#endif
 #endif
     yield();
 
@@ -1415,24 +1449,29 @@ JsonObject Protocol::getValues()
     return docPinValues.as<JsonObject>();
 }
 
+#ifndef BASIC
+
 void Protocol::afterLoop()
 {
     // usado na herança
 }
 #endif
+#endif
 
+unsigned long interval = -1;
 void Protocol::eventLoop()
 {
 
-    unsigned long interval = 500;
 #ifndef ARDUINO_AVR
     try
     {
 #endif
-        if (containsKey("interval"))
+        if (interval < 0 && containsKey("interval"))
         {
             interval = getKey("interval").toInt();
         }
+        else
+            interval = 500;
         if (interval < 50)
             interval = 50;
         if (millis() - eventLoopMillis > interval)
@@ -1440,12 +1479,16 @@ void Protocol::eventLoop()
             JsonObject mode = config["mode"];
             for (JsonPair k : mode)
             {
-                // Serial.printf("readPin(%s, %s)\r\n", k.key().c_str(), k.value().as<String>());
+#ifdef DEBUG_ON
+                Serial.printf("readPin(%s, %s)\r\n", k.key().c_str(), k.value().as<String>());
+#endif
                 readPin(String(k.key().c_str()).toInt(), k.value().as<String>());
             }
             eventLoopMillis = millis();
 #ifndef ARDUINO_AVR
+#ifndef BASIC
             afterLoop();
+#endif
 #endif
         }
 

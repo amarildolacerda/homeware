@@ -146,6 +146,7 @@
 #undef USE_PIN_NAMES
 #define BASIC
 #define NO_MDNS
+#define NO_API
 #endif
 
 #ifdef ESP32CAM

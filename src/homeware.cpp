@@ -47,6 +47,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
     server = externalServer;
 }
 
+#ifndef BASIC
 void Homeware::setupServer()
 {
     apis += "cmd,";
@@ -62,10 +63,13 @@ void Homeware::setupServer()
             return;
         } });
 }
+#endif
 
 void Homeware::afterBegin()
 {
+#ifndef BASIC
     setupServer();
+#endif
 
 #ifdef OTA
     apis += "OTA,";
@@ -73,7 +77,9 @@ void Homeware::afterBegin()
     ElegantOTA.begin(server);
 #endif
     server->begin();
+#ifndef BASIC
     resetDeepSleep();
+#endif
     Protocol::afterBegin();
 }
 
@@ -102,12 +108,6 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     setupPins();
 }
 
-unsigned int ultimaTemperatura = 0;
-void Homeware::afterLoop()
-{
-
-    Protocol::afterLoop();
-}
 
 void Homeware::resetWiFi()
 {

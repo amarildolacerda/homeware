@@ -26,11 +26,11 @@ Driver *createByDriverMode(const String mode, const int pin)
         if (drvMode.mode == mode)
         {
             Driver *drv = drvMode.create();
-            drv->setPin(pin);
-            drv->setMode(mode);
+            drv->_pin = pin;
+            drv->_mode = mode;
             drv->setPinMode(pin);
             drv->beforeSetup();
-            getInstanceOfProtocol()->debugf("DRV: %s at %i\r\n", drv->getMode(), drv->getPin());
+            getInstanceOfProtocol()->debugf("DRV: %s at %i\r\n", drv->_mode, drv->_pin);
             return drv;
         }
     return nullptr;
@@ -39,7 +39,7 @@ Driver *createByDriverMode(const String mode, const int pin)
 Driver *Drivers::initPinMode(const String mode, const int pin)
 {
     Driver *old = findByPin(pin);
-    if (old && old->getMode() == mode)
+    if (old && old->_mode == mode)
         return old;
     Driver *nwer = createByDriverMode(mode, pin);
     if (nwer)

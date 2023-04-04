@@ -134,7 +134,9 @@ void Portal::autoConnect(const String slabel)
     label = slabel;
     if (homeware.config["password"] && homeware.config["ssid"])
     {
+#ifndef BASIC
         homeware.resetDeepSleep();
+#endif
         WiFi.enableSTA(true);
         WiFi.setAutoReconnect(true);
         WiFi.begin(homeware.config["ssid"], homeware.config["password"].as<String>().c_str());
@@ -154,7 +156,9 @@ void Portal::autoConnect(const String slabel)
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
         wifiManager.setConfigPortalTimeout(180);
+#ifndef BASIC
         homeware.resetDeepSleep(5);
+#endif
         wifiManager.setDebugOutput(false);
         wifiManager.setConfigWaitingcallback(wifiCallback);
         wifiManager.setConnectTimeout(30);
@@ -213,7 +217,7 @@ String inputH(const String name, const String value)
 
 void setManager(HomewareWiFiManager *wf)
 {
-    String hostname =  portal.label;
+    String hostname = portal.label;
 #ifdef WIFI_NEW
     // wf->setHostname(hostname);
     // wf->setTitle("Homeware");
@@ -326,8 +330,10 @@ void Portal::setupServer()
 
     server->on("/", []()
                {
-        homeware.resetDeepSleep(5);
 
+#ifndef BASIC
+        homeware.resetDeepSleep(5);
+#endif
         HomewareWiFiManager wf;
         setManager(&wf);
         String head = "";
