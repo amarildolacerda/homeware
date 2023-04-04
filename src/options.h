@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.04.02.18"
+#define VERSION "23.04.03.19"
 
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
