@@ -133,7 +133,7 @@
 #define TELNET
 #undef WEBSOCKET
 #undef OTA
-#define ALEXA
+#undef ALEXA
 #define NO_DRV_ADC
 #define NO_DRV_PWM
 #undef DRIVERS_ENABLED
