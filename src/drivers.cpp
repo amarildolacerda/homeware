@@ -9,7 +9,7 @@ Drivers *getDrivers()
     return drivers;
 }
 
-ModeDriverPair modeDriverList[32];
+ModeDriverPair modeDriverList[DRIVERS_SIZE];
 int numModes = 0;
 void registerDriverMode(String mode, Driver *(*create)())
 {

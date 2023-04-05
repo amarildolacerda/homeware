@@ -4,7 +4,8 @@
 #include "functions.h"
 
 #ifdef SPIFFs
-#include <SPIFFS.h>
+#include <FS.h>
+//#include <SPIFFS.h>
 #endif
 
 #ifndef ARDUINO_AVR
@@ -68,11 +69,11 @@ JsonObject Protocol::getTrigger()
     return config["trigger"].as<JsonObject>();
 }
 #ifndef ARDUINO_AVR
-#ifndef BASIC
 JsonObject Protocol::getDevices()
 {
     return config["device"].as<JsonObject>();
 }
+#ifndef BASIC
 JsonObject Protocol::getSensors()
 {
     return config["sensor"].as<JsonObject>();
@@ -342,7 +343,6 @@ void Protocol::debug(String msg)
         Serial.print(msg);
 }
 
-#ifdef SEM_USO
 int Protocol::findPinByMode(String mode)
 {
     for (JsonPair k : getMode())
@@ -352,7 +352,6 @@ int Protocol::findPinByMode(String mode)
     }
     return -1;
 }
-#endif
 
 String Protocol::print(String msg)
 {
@@ -859,7 +858,7 @@ String Protocol::saveConfig()
             base[key] = config[key];
     }
 
-    base["debug"] =  "off"; // volta para o default para sempre ligar com debug desabilitado
+    base["debug"] = "off"; // volta para o default para sempre ligar com debug desabilitado
     // serializeJson(base, Serial);
 #ifdef SPIFFs
     File file = SPIFFS.open("/config.json", "w");
@@ -897,12 +896,10 @@ void Protocol::begin()
 #endif
 #ifndef ARDUINO_AVR
     afterBegin();
-#ifndef BASIC
     debug("Resources: ");
     debug(resources);
     debug(" APIs: ");
     debugln(apis);
-#endif
 #endif
     inited = true;
 }
@@ -919,9 +916,11 @@ void Protocol::afterSetup()
 #ifdef TELNET
 void telnetOnConnect(String ip)
 {
-    protocol->inTelnet = true;
+//    protocol->inTelnet = true;
+#ifndef BASIC
     protocol->resetDeepSleep(60 * 5);
-    Serial.print("- Telnet: ");
+#endif
+    Serial.print("Telnet: ");
     Serial.print(ip);
     Serial.println(" conectou");
     protocol->telnet.println("\nhello " + protocol->telnet.getIP());
@@ -932,12 +931,14 @@ void telnetOnInputReceive(String str)
     Serial.println("TEL: " + str);
     if (str == "exit")
     {
-        protocol->inTelnet = false;
+        // protocol->inTelnet = false;
         protocol->telnet.disconnectClient();
     }
     else
     {
+#ifndef BASIC
         protocol->resetDeepSleep();
+#endif
         protocol->print(protocol->doCommand(str) + "\r\n");
     }
     yield();
@@ -1017,7 +1018,7 @@ String Protocol::doCommand(String command)
     resetDeepSleep(60 * 5);
 #endif
     String *cmd = split(command, ' ');
-#ifdef ESP8266
+#ifdef LITTLEFs
     if (cmd[0] == "format")
     {
         LittleFS.format();
@@ -1327,7 +1328,6 @@ String Protocol::doCommand(String command)
 #endif
         }
 #ifndef ARDUINO_AVR
-#ifndef BASIC
         else if (cmd[2] == "device")
         {
 
@@ -1338,12 +1338,10 @@ String Protocol::doCommand(String command)
                 return "OK";
             }
             devices[spin] = cmd[3];
-            /*if (String("motion,doorbell").indexOf(cmd[3]) > -1)
-                getMode()[spin] = "in";
-            if (String("ldr,dht").indexOf(cmd[3]) > -1)
-                getMode()[spin] = cmd[3];*/
             return "OK";
         }
+
+#ifndef BASIC
         else if (cmd[2] == "sensor")
         {
             JsonObject sensors = getSensors();

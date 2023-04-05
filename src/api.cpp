@@ -1,6 +1,6 @@
 #include "api.h"
 
-ApiDriverPair apiDriverList[32];
+ApiDriverPair apiDriverList[API_SIZE];
 int numClouds = 0;
 
 ApiDrivers apiDrivers;
@@ -33,7 +33,7 @@ ApiDriver *createApiDriver(const String sensorType, const int pin, const bool au
 }
 
 int apiDriversCount = 0;
-ApiDriver *apiDriverItems[32];
+ApiDriver *apiDriverItems[API_SIZE];
 
 int ApiDrivers::count()
 {

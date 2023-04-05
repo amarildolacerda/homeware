@@ -121,7 +121,6 @@ void sendUptime()
 
 void Portal::autoConnect(const String slabel)
 {
-    homeware.debug("Conectando na rede: ");
     unsigned start = millis();
     unsigned timeLimitMsec = 20000;
 #ifdef TIMMED
@@ -132,8 +131,9 @@ void Portal::autoConnect(const String slabel)
     // Serial.printf("Board: %s \r\n", BOARD_NAME);
 #endif
     label = slabel;
-    if (homeware.config["password"] && homeware.config["ssid"])
+    if (homeware.config.containsKey("password") && homeware.config.containsKey("ssid"))
     {
+        homeware.debug("Conectando na rede: ");
 #ifndef BASIC
         homeware.resetDeepSleep();
 #endif
@@ -149,16 +149,38 @@ void Portal::autoConnect(const String slabel)
         }
     }
 
-    bool connected = (WiFi.status() == WL_CONNECTED);
+#ifdef NO_WM
 
+    if (WiFi.status() != WL_CONNECTED)
+    {
+
+        Serial.printf("Criando ponto de acesso (%s) ", label);
+        WiFi.mode(WIFI_OFF);
+        WiFi.mode(WIFI_AP);
+        if (WiFi.softAP(label, homeware.config["ap_password"].as<String>().c_str()))
+            Serial.println(WiFi.softAPIP());
+        else
+        {
+            Serial.println("falha ao criar o ponto de acesso");
+            delay(1000);
+            homeware.reset();
+        }
+    }
+    else
+    {
+        homeware.debugln(homeware.localIP());
+    }
+
+#else
+    bool connected = (WiFi.status() == WL_CONNECTED);
     if (!connected)
     {
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
-        wifiManager.setConfigPortalTimeout(180);
 #ifndef BASIC
         homeware.resetDeepSleep(5);
 #endif
+        wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(false);
         wifiManager.setConfigWaitingcallback(wifiCallback);
         wifiManager.setConnectTimeout(30);
@@ -197,7 +219,12 @@ void Portal::autoConnect(const String slabel)
         homeware.connected = connected;
 #endif
     }
+#endif
+
+#ifndef NO_WM
     setupServer();
+#endif
+
 #ifdef TIMMED
     timer.deleteTimer(ntimer);
 #endif
@@ -208,6 +235,7 @@ void Portal::reset()
     homeware.resetWiFi();
 }
 
+#ifndef NO_WM
 String button(const String name, const char *link, const String style = "")
 {
     return stringf("<br/><form action='%s' method='get'><button %s>%s</button></form>", link, (style.isEmpty()) ? "" : String(stringf("class='%s'", style)), name);
@@ -466,6 +494,7 @@ void Portal::setupServer()
 #endif
     homeware.debugln("OK");
 }
+#endif
 
 Portal portal;
 #endif

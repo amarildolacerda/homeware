@@ -14,7 +14,9 @@ public:
     WebServer *server;
     void setup(WebServer *externalServer = nullptr);
 #else
+#ifndef NO_WM
     HomewareWiFiManager wifiManager = HomewareWiFiManager();
+#endif
     ESP8266WebServer *server;
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
@@ -24,7 +26,9 @@ public:
     void loop();
 
 private:
+#ifndef NO_WM
     void setupServer();
+#endif
 };
 
 extern Portal portal;

@@ -14,7 +14,7 @@
 #ifdef LITTLEFs
 #include <LittleFS.h>
 #else
-#include <SPIFFS.h>
+//#include <SPIFFS.h>
 #endif
 
 #include <Arduino.h>
@@ -111,7 +111,9 @@ void Homeware::setup(ESP8266WebServer *externalServer)
 
 void Homeware::resetWiFi()
 {
+#ifndef NO_WM
     HomewareWiFiManager wifiManager;
+#endif
     WiFi.mode(WIFI_STA);
     WiFi.persistent(true);
     WiFi.disconnect(true);

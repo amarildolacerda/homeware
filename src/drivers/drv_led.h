@@ -44,7 +44,7 @@ public:
         {
             curPin = pin;
             if (pin == 255 || pin < 0)
-                curPin = getProtocol()->findPinByMode(getMode());
+                curPin = getProtocol()->findPinByMode(_mode);
             if (pin < 0)
             {
                 curStatus = false;

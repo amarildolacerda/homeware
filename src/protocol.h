@@ -57,8 +57,8 @@ public:
     JsonObject getStable();
     JsonObject getMode();
 #ifndef ARDUINO_AVR
-#ifndef BASIC
     JsonObject getDevices();
+#ifndef BASIC
     JsonObject getSensors();
     JsonObject getDefaults();
     JsonObject getScenes();
@@ -73,8 +73,8 @@ public:
 #endif
 
 #ifdef SEM_USO
-    virtual int findPinByMode(String mode);
 #endif
+    virtual int findPinByMode(String mode);
 
     virtual String doCommand(String command);
     virtual String print(String msg);

@@ -3,7 +3,6 @@
 #include <Arduino.h>
 
 #define VERSION "23.04.04.20"
-
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
 // #define BOARD_ESP12S // LCTECHRELAY
@@ -22,7 +21,6 @@
 #define DRIVERS_ENABLED
 #define DRIVERS_EX
 #endif
-
 
 // #define SINRICPRO
 #define TELNET
@@ -98,7 +96,6 @@
 // #define GROOVE_ULTRASONIC
 #endif
 
-
 #ifdef BOARD_MIN
 #undef SINRICPRO
 #undef USE_PIN_NAMES
@@ -133,20 +130,24 @@
 #endif
 
 #ifdef ESP01
-#undef TELNET
+#define TELNET
 #undef WEBSOCKET
 #undef OTA
-#undef ALEXA
+#define ALEXA
 #define NO_DRV_ADC
 #define NO_DRV_PWM
 #undef DRIVERS_ENABLED
-#undef DRIVERS_EX
+#define DRIVERS_EX
 #define LITTLEFs
 #undef SINRICPRO
 #undef USE_PIN_NAMES
 #define BASIC
 #define NO_MDNS
 #define NO_API
+#define NO_WM
+#define DRIVERS_SIZE 8
+#define API_SIZE 4
+
 #endif
 
 #ifdef ESP32CAM
@@ -167,4 +168,9 @@
 
 #ifdef NO_TELNET
 #undef TELNET
+#endif
+
+#ifndef API_SIZE
+#define DRIVERS_SIZE 24
+#define API_SIZE 12
 #endif

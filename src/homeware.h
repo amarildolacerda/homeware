@@ -13,7 +13,9 @@
 #include <ESP8266WebServer.h>
 #endif
 
+#ifndef NO_WM
 #include "homewareWiFiManager.h"
+#endif
 
 #include <ArduinoJson.h>
 

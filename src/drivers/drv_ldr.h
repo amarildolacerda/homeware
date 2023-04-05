@@ -89,8 +89,10 @@ public:
             trgOkState = false;
         }
     }
+    #ifndef BASIC
     int internalRead() override
     {
         return tmpValue;
     }
+    #endif
 };

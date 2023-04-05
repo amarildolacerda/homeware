@@ -156,7 +156,7 @@ class Drivers
 {
 
 public:
-    Driver *items[32];
+    Driver *items[DRIVERS_SIZE];
     int driversCount = 0;
 
     Driver *initPinMode(const String mode, const int pin);
