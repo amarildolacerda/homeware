@@ -7,17 +7,13 @@ class InOutDriver : public Driver
 public:
     int readPin() override
     {
-        active = true;
-        return debug(digitalRead(_pin));
+        return actionEvent(digitalRead(_pin));
     }
     int writePin(const int value) override
     {
         digitalWrite(_pin, value);
-        debug(value);
-        return value;
+        return actionEvent(value);
     }
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
 };
 
 class InDriver : public InOutDriver
@@ -104,10 +100,6 @@ public:
     {
         InOutDriver::setPinMode(pin);
         pinMode(pin, OUTPUT);
-    }
-    bool isLoop() override
-    {
-        return timeout > 0;
     }
     void loop() override
     {

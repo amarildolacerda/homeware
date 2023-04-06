@@ -13,7 +13,6 @@ class Driver
 private:
 protected:
     typedef void (*callbackFunction)(String mode, int pin, int value);
-    // long v1 = 0;
     callbackFunction triggerCallback;
     callbackFunction triggerOkState;
     float oldValue = 0;
@@ -27,7 +26,6 @@ public:
     bool triggerEnabled = false;
 
     bool active = false;
-    // virtual void setV1(long x) { v1 = x; }
     virtual void updateTimeout(const int pin)
     {
         // le timer count
@@ -42,7 +40,7 @@ public:
             interval = (long)prot->getIntervals()[sPin];
         }
     }
-    float debug(const float value)
+    float actionEvent(const float value)
     {
         if (value != oldValue)
         {
@@ -56,6 +54,7 @@ public:
     }
     virtual void setPinMode(int pin)
     {
+        _pin = pin;
         active = true;
         updateTimeout(pin);
     }
@@ -91,19 +90,10 @@ public:
     {
         return getInstanceOfProtocol();
     }
-#ifndef BASIC
-    void setPin(const int pin)
-    {
-        _pin = pin;
-    }
-#endif
     virtual int writePin(const int value)
     {
         return value;
     }
-    virtual bool isGet() { return true; }
-    virtual bool isSet() { return false; }
-
 #ifndef BASIC
     virtual JsonObject readStatus()
     {
@@ -113,20 +103,9 @@ public:
         return json.as<JsonObject>();
     }
 #endif
-    virtual bool isStatus()
-    {
-        return false;
-    }
-    virtual bool isLoop() { return false; }
     virtual void changed(const int value){};
     virtual void beforeSetup() {}
 
-#ifndef BASIC
-    int getPin()
-    {
-        return _pin;
-    };
-#endif
     void setTriggerEvent(callbackFunction callback)
     {
         triggerCallback = callback;
@@ -160,14 +139,7 @@ public:
     int driversCount = 0;
 
     Driver *initPinMode(const String mode, const int pin);
-
-    // template <class T>
     void add(Driver *driver);
-    // Protocol *getProtocol()
-    // {
-    //     return getInstanceOfProtocol();
-    // }
-
     void setup()
     {
         for (auto *drv : items)
@@ -176,28 +148,7 @@ public:
                 drv->setup();
         }
     }
-    void deleteByPin(const int pin)
-    {
-        /*   int idx = indexOf(pin);
-           if (idx > -1)
-           {
-               Driver *drv = items[idx];
-               if (drv)
-               {
-   #ifdef DEBUG_ON
-                   Serial.printf("removeu driver: %s em %i\r\n", drv->getMode(), pin);
-   #endif
-                   delete drv;
-                   drv = NULL;
-                   for (int i = idx; i < count - 1; i++)
-                   {
-                       items[i] = items[i + 1];
-                   }
-                   count--;
-               }
-           }
-           */
-    }
+    virtual bool isStatus() { return false; }
     int indexOf(const int pin)
     {
         int idx = 0;
@@ -248,7 +199,7 @@ public:
     void loop()
     {
         for (auto *drv : items)
-            if (drv && drv->active && drv->isLoop())
+            if (drv && drv->active)
             {
                 drv->loop();
             }

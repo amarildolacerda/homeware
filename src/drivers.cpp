@@ -1,7 +1,6 @@
 
 #include "drivers.h"
 
-// Drivers *drivers = Drivers::getInstance();
 Drivers *drivers = new Drivers();
 
 Drivers *getDrivers()
@@ -26,11 +25,12 @@ Driver *createByDriverMode(const String mode, const int pin)
         if (drvMode.mode == mode)
         {
             Driver *drv = drvMode.create();
-            drv->_pin = pin;
             drv->_mode = mode;
             drv->setPinMode(pin);
             drv->beforeSetup();
+#ifdef DEBUG_ON
             getInstanceOfProtocol()->debugf("DRV: %s at %i\r\n", drv->_mode, drv->_pin);
+#endif
             return drv;
         }
     return nullptr;
@@ -44,32 +44,12 @@ Driver *Drivers::initPinMode(const String mode, const int pin)
     Driver *nwer = createByDriverMode(mode, pin);
     if (nwer)
     {
-        deleteByPin(pin);
         items[driversCount++] = nwer;
-#ifdef DEBUG_DRV
-        // MAP;
-        String s = "";
-        int i = 0;
-        for (Driver *d : items)
-        {
-            if (d)
-            {
-                if (s != "")
-                    s += ",";
-                s += "'" + String(i++) + "':";
-                s += "'" + d->getMode() + "'";
-            }
-        }
-        s = "{" + s + "}";
-        Serial.println(s);
-        Serial.printf("Criou %s em %i, count: %i\r\n", mode.c_str(), pin, driversCount);
-#endif
         return nwer;
     }
     return nullptr;
 }
 
-// template <class T>
 void Drivers::add(Driver *driver)
 {
     items[driversCount++] = driver;

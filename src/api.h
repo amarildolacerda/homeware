@@ -7,14 +7,12 @@ class ApiDriver
 {
 private:
 public:
-    String productName = "local";
     String sensorType;
     int sensorIndex = -1;
     int pin;
     virtual void setup() {}
     virtual void loop() {}
-    virtual bool isLoop() { return true; }
-    virtual void beforeSetup() {}
+    virtual void afterCreate() {}
     virtual void afterSetup() {}
     virtual void changed(const int pin, const long value) {}
     virtual void changed(const String value){};
@@ -57,7 +55,7 @@ public:
     ApiDriver *findByType(const String sensorType);
     void changed(const int pin, const long value);
     void afterSetup();
-    void beforeSetup();
+    void afterCreate();
     int count();
     ApiDriver *getItem(int index);
     void reload();

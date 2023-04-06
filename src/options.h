@@ -143,11 +143,21 @@
 #undef USE_PIN_NAMES
 #define BASIC
 #define NO_MDNS
-//#define NO_API
+// #define NO_API
 #define NO_WM
 #define DRIVERS_SIZE 8
 #define API_SIZE 4
 #define MQTTClient
+#endif
+
+#ifdef MINIMAL
+#undef DRIVERS_EX
+#endif
+
+
+#ifdef NO_MQTT
+#undef MQTTClient
+#undef MQTTBroker
 #endif
 
 #ifdef ESP32CAM

@@ -25,7 +25,7 @@ ApiDriver *createApiDriver(const String sensorType, const int pin, const bool au
             {
                 drv->sensorType = sensorType;
                 drv->pin = pin;
-                drv->beforeSetup();
+                drv->afterCreate();
                 return drv;
             }
         }
@@ -51,19 +51,12 @@ void ApiDrivers::loop()
     for (int i = 0; i < apiDriversCount; i++)
     {
         ApiDriver *drv = apiDriverItems[i];
-        if (drv && drv->isLoop())
+        if (drv )
         {
 #ifdef DEBUG_API
             Serial.printf("%s.loop()\r\n", drv->sensorType);
 #endif
             drv->loop();
-        }
-        else
-        {
-#ifdef DEBUG_API
-            Serial.println("ApiDrivers null");
-            return;
-#endif
         }
     }
 #ifdef DEBUG_API
@@ -175,7 +168,7 @@ void ApiDrivers::afterSetup()
 #endif
 }
 
-void ApiDrivers::beforeSetup()
+void ApiDrivers::afterCreate()
 {
     int id = 0;
     // criar instancia que requer autocreate

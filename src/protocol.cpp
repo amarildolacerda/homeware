@@ -5,7 +5,7 @@
 
 #ifdef SPIFFs
 #include <FS.h>
-//#include <SPIFFS.h>
+// #include <SPIFFS.h>
 #endif
 
 #ifndef ARDUINO_AVR
@@ -166,15 +166,9 @@ int Protocol::writePin(const int pin, const int value)
         debugf("write %s pin: %i set %i\r\n", mode, pin, value);
 #endif
         Driver *drv = getDrivers()->findByPin(pin);
-        if (drv && drv->isSet())
+        if (drv)
         {
             drv->writePin(value);
-        }
-
-        else
-        {
-            if (mode != "adc")
-                digitalWrite(pin, value);
         }
     }
     return value;
@@ -298,7 +292,7 @@ int Protocol::readPin(const int pin, const String mode)
     if (!drv)
         debugf("Pin: %i. Não tem um drive especifico: %s \r\n", pin, m);
 
-    if (drv && drv->isGet())
+    if (drv)
     {
         newValue = drv->readPin();
         // checa quem dispara trigger de alteração do estado
@@ -517,7 +511,7 @@ void Protocol::setupPins()
 {
 #ifndef NO_API
     register_Api_setup();
-    getApiDrivers().beforeSetup();
+    getApiDrivers().afterCreate();
 #endif
     JsonObject mode = config["mode"];
     for (JsonPair k : mode)
@@ -1241,7 +1235,17 @@ String Protocol::doCommand(String command)
                 }
                 else
 #endif
-                    if (cmd[2] == "get" && drv->isGet())
+#ifndef BASIC
+                    if (cmd[2] == "get" && drv->isStatus())
+                {
+                    JsonObject sts = drv->readStatus();
+                    String rsp;
+                    serializeJson(sts, rsp);
+                    return rsp;
+                }
+                else
+#endif
+                    if (cmd[2] == "get")
                 {
 #ifndef BASIC
                     return String(drv->internalRead());
@@ -1249,25 +1253,16 @@ String Protocol::doCommand(String command)
                     return String(drv->readPin());
 #endif
                 }
-                else if (cmd[2] == "set" && drv->isSet())
+                else if (cmd[2] == "set")
                 {
                     return String(drv->writePin(convertOnOff(cmd[3])));
                 }
-#ifndef BASIC
-                else if (cmd[2] == "get" && drv->isStatus())
-                {
-                    JsonObject sts = drv->readStatus();
-                    String rsp;
-                    serializeJson(sts, rsp);
-                    return rsp;
-                }
-#endif
             }
         }
 
         if (cmd[2] == "none")
         {
-            getDrivers()->deleteByPin(pin);
+            // getDrivers()->deleteByPin(pin);
             config["mode"].remove(spin);
             return "OK";
         }
