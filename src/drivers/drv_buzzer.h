@@ -13,7 +13,6 @@ public:
     static void registerMode()
     {
         registerDriverMode("bzz", create);
-        registerDriverMode("bip", create);
     }
     static Driver *create()
     {
@@ -66,6 +65,4 @@ public:
             lastOne = millis();
         }
     }
-    bool isSet() override { return true; }
-    bool isLoop() override { return true; }
 };

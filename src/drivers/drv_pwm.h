@@ -50,6 +50,4 @@ public:
         }
         return 0;
     }
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
 };

@@ -89,5 +89,4 @@ public:
             trgOkState = false;
         }
     }
-    bool isLoop() override { return active; }
 };

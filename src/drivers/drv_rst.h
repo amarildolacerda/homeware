@@ -29,12 +29,10 @@ public:
         }
         return v;
     }
-    int writePin( const int value) override
+    int writePin(const int value) override
     {
-        debug(value);
+        actionEvent(value);
         digitalWrite(_pin, value);
         return value;
     }
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
 };

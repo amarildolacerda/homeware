@@ -65,13 +65,9 @@ public:
         {
             tmpValue = analogRead(_pin);
             ultimoLoop = millis();
-            debug(tmpValue);
+            actionEvent(tmpValue);
         }
         return genStatus();
-    }
-    bool isLoop() override
-    {
-        return active;
     }
     void loop() override
     {

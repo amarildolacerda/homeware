@@ -8,6 +8,7 @@ class ApiDriver
 private:
 public:
     String sensorType;
+    String productName = "none";
     int sensorIndex = -1;
     int pin;
     virtual void setup() {}

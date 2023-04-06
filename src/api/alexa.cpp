@@ -37,7 +37,7 @@ void Alexa::afterSetup()
     // localalexa->begin(&server);
     localAlexaInited = true;
 }
-void Alexa::beforeSetup()
+void Alexa::afterCreate()
 {
     productName = "Alexa"; // dont change - nao alterar, usado para checar qual drive na busca do pin
 }
@@ -95,9 +95,9 @@ String Alexa::getName()
     return sName;
 }
 
-void AlexaLight::beforeSetup()
+void AlexaLight::afterCreate()
 {
-    Alexa::beforeSetup();
+    Alexa::afterCreate();
     sensorId = localSensorId++;
     getAlexa()->addDevice(getName(), AlexaLight::onoffChanged, EspalexaDeviceType::onoff); // non-dimmable device
 #ifdef DEBUG_ALEXA
@@ -128,7 +128,7 @@ void AlexaLight::changed(const int pin, const long value)
 }
 
 /*
-void AlexaDimmable::beforeSetup()
+void AlexaDimmable::afterCreate()
 {
     Alexa::beforeSetup();
     sensorId = localSensorId++;

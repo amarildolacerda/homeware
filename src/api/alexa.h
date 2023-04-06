@@ -17,7 +17,7 @@ private:
 public:
     static Espalexa *getAlexa();
     int sensorId = -1;
-    void beforeSetup() override;
+    void afterCreate() override;
     void afterSetup() override;
     virtual void loop() override;
     static int findAlexaPin(EspalexaDevice *d);
@@ -25,7 +25,6 @@ public:
     static void init(Espalexa *alx = nullptr);
     static void handle();
     String getName();
-    bool isLoop() override { return true; }
 };
 
 /// @brief AlexaLight liga um Sensor onoff controlado pela alexa
@@ -44,7 +43,7 @@ public:
 #endif
         return new AlexaLight();
     }
-    void beforeSetup() override;
+    void afterCreate() override;
 
     static void onoffChanged(EspalexaDevice *d);
     void changed(const int pin, const long value) override;

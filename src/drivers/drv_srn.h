@@ -10,7 +10,7 @@ public:
     static void registerMode()
     {
         registerDriverMode("srn", create);
-//        registerDriverMode("alarm", create);
+        //        registerDriverMode("alarm", create);
     }
     static Driver *create()
     {
@@ -24,7 +24,6 @@ public:
     void setup() override
     {
         AlternateDriver::setup();
-        
     }
     void loop() override
     {
@@ -49,9 +48,7 @@ public:
         ultimoChanged = millis();
         curStatus = stateOn;
         updateTimeout(_pin);
-        debug(value);
+        actionEvent(value);
         return stateOn;
     }
-    bool isSet() override { return true; }
-    bool isLoop() override { return true; }
 };

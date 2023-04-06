@@ -18,7 +18,7 @@ public:
         timeout = 60000;
         interval = 5000;
     }
-    
+
     virtual void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
@@ -66,9 +66,6 @@ public:
         }
         return curStatus;
     }
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
-    bool isLoop() override { return true; }
 };
 
 class OkDriver : public AlternateDriver

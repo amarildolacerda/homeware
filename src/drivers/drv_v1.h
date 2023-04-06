@@ -18,8 +18,6 @@ public:
     {
         return new V1Driver();
     }
-    bool isSet() override { return true; }
-    bool isLoop() override { return false; }
     int readPin()
     {
         return (int)v1;
@@ -27,7 +25,7 @@ public:
     int writePin(const int value)
     {
         v1 = value;
-        debug(value);
+        actionEvent(value);
         return v1;
     }
 };

@@ -35,10 +35,8 @@ public:
         #ifdef DEBUG_ON
         getProtocol()->debugf("LcTech Relay: %i to: %i",_pin,value);
         #endif
-        debug(value);
+        actionEvent(value);
         return value;
     }
 
-    bool isGet() override { return true; }
-    bool isSet() override { return true; }
 };

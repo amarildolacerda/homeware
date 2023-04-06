@@ -12,17 +12,6 @@ DHTesp dht;
 bool dht_inited = false;
 StaticJsonDocument<200> docDHT;
 
-/*
-#ifdef DHT_SENSOR
-            else if (cmd[2] == "get" && getMode()[cmd[1]] == "dht")
-            {
-                JsonObject j = readDht(String(cmd[1]).toInt());
-                String result;
-                serializeJson(j, result);
-                return result;
-            }
-#endif
-*/
 class DHTDriver : public Driver
 {
 private:
@@ -90,7 +79,6 @@ public:
         getProtocol()->debug("Temperatura: " + String(temperature));
         return docDHT.as<JsonObject>();
     }
-    virtual bool isGet() override { return true; }
     virtual bool isStatus() override { return true; }
     virtual int readPin() override
     {
@@ -101,7 +89,6 @@ public:
         }
         return ultimoStatus["temperature"];
     }
-    bool isLoop() override { return active; }
     bool getStatus()
     {
         return (temperature < min) || (temperature > max);
@@ -111,7 +98,7 @@ public:
         if (getStatus() != lastStatus)
         {
             lastStatus = getStatus();
-            debug(lastStatus);
+            actionEvent(lastStatus);
             triggerCallback(_mode, _pin, lastStatus);
         }
     }

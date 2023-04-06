@@ -22,8 +22,6 @@ public:
     {
         // pinMode(pin, OUTPUT);
     }
-    bool isSet() override { return false; }
-    bool isLoop() override { return true; }
     int readPin()
     {
         return (int)getVcc();
@@ -41,7 +39,7 @@ public:
             power = ((vcc - v_min) / (v_max - v_min)) * 1024;
 #endif
             lastOne = millis();
-            debug(power);
+            actionEvent(power);
         }
         return power;
     }

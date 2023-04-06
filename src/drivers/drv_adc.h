@@ -31,7 +31,6 @@ public:
     }
     void setup() override
     {
-        Driver::setMode("adc");
         Driver::setup();
         interval = 500;
         Protocol *prot = getProtocol();
@@ -58,9 +57,6 @@ public:
         analogWrite(_pin, value);
         return value;
     }
-    bool isGet() override { return active; } // executa somente leitura
-    bool isSet() override { return false; }
-    bool isLoop() override { return active; }
     int internalRead() override
     {
         return tmpAdc;
@@ -80,7 +76,7 @@ public:
 #ifdef DEBUG_DRV
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, st, min, max);
 #endif
-            debug(tmpAdc);
+            actionEvent(tmpAdc);
             if (triggerCallback)
                 triggerCallback(_mode, _pin, eventState);
             trgOkState = true;

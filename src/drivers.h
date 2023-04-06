@@ -77,14 +77,6 @@ public:
     {
         return readPin();
     }
-    void setMode(String md)
-    {
-        _mode = md;
-    }
-    String getMode()
-    {
-        return _mode;
-    }
 #endif
     Protocol *getProtocol()
     {
@@ -114,6 +106,7 @@ public:
     {
         triggerOkState = callback;
     }
+    virtual bool isStatus(){ return false;}
 };
 
 /// -----------------------------------------------------
