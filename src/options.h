@@ -127,6 +127,9 @@
 #define TELNET
 #define WEBSOCKET
 #define NO_DRV_ADC
+#define NO_DRV_PWM
+#define DRIVERS_SIZE 8
+#define API_SIZE 4
 #endif
 
 #ifdef ESP01
