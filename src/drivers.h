@@ -8,16 +8,19 @@
 
 #include "protocol.h"
 #include "functions.h"
+
+typedef void (*callbackFunction)(String mode, int pin, int value);
+
 class Driver
 {
 private:
 protected:
-    typedef void (*callbackFunction)(String mode, int pin, int value);
-    callbackFunction triggerCallback;
-    callbackFunction triggerOkState;
     float oldValue = 0;
 
 public:
+    callbackFunction triggerCallback;
+    callbackFunction triggerOkState;
+
     String _mode;
     int _pin = -1;
     unsigned long timeout = 0;

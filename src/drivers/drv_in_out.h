@@ -16,6 +16,8 @@ public:
     }
 };
 
+void IRAM_ATTR triggerChanged(void *arg);
+
 class InDriver : public InOutDriver
 {
 private:
@@ -35,8 +37,22 @@ public:
     {
         InOutDriver::setPinMode(pin);
         pinMode(pin, INPUT);
+        attachInterruptArg(
+            digitalPinToInterrupt(pin), triggerChanged, this,
+            CHANGE);
+    }
+    ~InDriver()
+    {
+        detachInterrupt(digitalPinToInterrupt(_pin));
     }
 };
+
+void triggerChanged(void *arg)
+{
+    InDriver *driver = static_cast<InDriver *>(arg);
+    int v = digitalRead(driver->_pin);
+    driver->triggerCallback(driver->_mode, driver->_pin, v);
+}
 
 class DownDriver : public InDriver
 {
