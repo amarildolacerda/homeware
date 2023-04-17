@@ -88,7 +88,7 @@
 #define BOARD_MIN
 #undef DRIVERS_EX
 #define WIFI_ENABLED
-#undef TELNET
+//#undef TELNET
 #define NO_DRV_ADC
 #endif
 
