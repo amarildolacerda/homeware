@@ -185,6 +185,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
             sprintf(msg, "%s", payload);
             int n = strnlen(msg, 1024);
             client.publish(topic, msg, n);
+            Serial.printf("MQT: %s %s\r\n",topic,msg);
             return true;
         }
     }
