@@ -896,6 +896,11 @@ void Protocol::begin()
     debugln(apis);
 #endif
     inited = true;
+#ifdef WIFI_ENABLED
+    Serial.print("Memória livre: ");
+    Serial.println(ESP.getFreeHeap());
+    Serial.printf("IP: %s\r\n", localIP().c_str());
+#endif
 }
 
 #ifndef ARDUINO_AVR

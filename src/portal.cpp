@@ -119,6 +119,18 @@ void sendUptime()
 }
 #endif
 
+void startWebSocket()
+{
+#ifdef WEBSOCKET
+    homeware.debug("WebSocket: ");
+    homeware.apis += "ws,";
+    homeware.debugCallback = debugCallbackFunc;
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
+    homeware.debugln("OK");
+#endif
+}
+
 void Portal::autoConnect(const String slabel)
 {
     unsigned start = millis();
@@ -147,6 +159,7 @@ void Portal::autoConnect(const String slabel)
 
             Serial.print(".");
         }
+        Serial.println();
     }
 
 #ifdef NO_WM
@@ -190,34 +203,19 @@ void Portal::autoConnect(const String slabel)
         }
         else
             connected = wifiManager.autoConnect(homeware.hostname.c_str());
-        // connected = (WiFi.status() == WL_CONNECTED);
+
         if (connected)
         {
             WiFi.enableAP(false);
-            homeware.debugln(homeware.localIP());
-#ifdef WEBSOCKET
-            homeware.debug("WebSocket: ");
-            homeware.apis += "ws,";
-            homeware.debugCallback = debugCallbackFunc;
-            webSocket.begin();
-            webSocket.onEvent(webSocketEvent);
-            homeware.debugln("OK");
-#endif
-        }
-        else
-        {
-            homeware.debugln(IPAddressToString(WiFi.softAPIP()));
         }
     }
+
+#ifdef SEM_USO
+    homeware.connected = connected;
+#endif
     if (!connected)
     {
         homeware.reset();
-    }
-    else
-    {
-#ifdef SEM_USO
-        homeware.connected = connected;
-#endif
     }
 #endif
 
@@ -228,6 +226,8 @@ void Portal::autoConnect(const String slabel)
 #ifdef TIMMED
     timer.deleteTimer(ntimer);
 #endif
+
+    startWebSocket();
 }
 
 void Portal::reset()
@@ -356,6 +356,7 @@ char HTTP_CUSTOM_HEAD[] PROGMEM =
 #endif
 void Portal::setupServer()
 {
+    Serial.println("");
     homeware.debug("Criando ServerPage: ");
 
     server->on("/", []()

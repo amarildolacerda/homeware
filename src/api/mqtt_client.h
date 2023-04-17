@@ -33,7 +33,7 @@ public:
     {
         clientId = String(getChipId(), HEX);
     }
-    bool isConnected();
+    bool isConnected(bool force=false);
     void setup() override;
     void loop() override;
     bool send(const char *subtopic, const char *payload);

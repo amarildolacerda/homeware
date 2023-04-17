@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.04.04.20"
+#define VERSION "23.04.16.21"
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
 // #define BOARD_ESP12S // LCTECHRELAY
@@ -16,6 +16,7 @@
 #if defined(WEMO_D1)
 //----------------------
 #define WIFI_ENABLED
+#define WEBSOCKET
 
 #ifndef NO_DRIVERS_ENABLED
 #define DRIVERS_ENABLED
