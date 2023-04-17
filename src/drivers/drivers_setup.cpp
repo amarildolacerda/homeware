@@ -16,7 +16,7 @@
 #include "drivers/drv_lctech.h"
 #endif
 
-#if defined(DRIVERS_EX)
+#if defined(DRIVERS_EX) || defined(SONOFF_BASIC)
 #include "drivers/drv_led.h"
 #include "drivers/drv_srn.h"
 #ifdef DHT_SENSOR
@@ -25,6 +25,7 @@
 #ifdef GROOVE_ULTRASONIC
 #include <drivers/drv_groover_ultrasonic.h>
 #endif
+
 #endif
 
 #ifdef DRIVERS_ENABLED
@@ -34,6 +35,7 @@
 #include "drivers/drv_pwm.h"
 //=================================fim enabled
 #endif
+
 
 #ifdef BUZZER
 #include "drivers/drv_buzzer.h"
@@ -81,6 +83,11 @@ void drivers_register()
     PWMDriver::registerMode();
     ResetButtonDriver::registerMode();
 #endif // DRIVER_ENABLED
+#else
+#ifdef SONOFF_BASIC
+    LedDriver::registerMode();
+    SireneDriver::registerMode();
+#endif
 #endif
 
 #ifdef LCTECHRELAY
