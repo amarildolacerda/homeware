@@ -687,18 +687,20 @@ void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 void Protocol::prepare()
 {
 #ifdef SPIFFs
-    if (!SPIFFS.begin())
+    if (!SPIFFS.begin()){
 #else
 #ifdef LITTLEFs
 #ifdef ESP32
-    if (!LITTLEFS.begin(true))
+    if (!LITTLEFS.begin(true)){
 #else
-    if (!LittleFS.begin())
+    if (!LittleFS.begin()){
+        LittleFS.format();
 #endif
 #endif
 #endif
-    {
+    
         Serial.println("FS mount failed");
+        reset();
     }
 
     protocol = this;
