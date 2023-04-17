@@ -694,7 +694,7 @@ void Protocol::prepare()
     if (!LITTLEFS.begin(true)){
 #else
     if (!LittleFS.begin()){
-        LittleFS.format();
+       // LittleFS.format();
 #endif
 #endif
 #endif
