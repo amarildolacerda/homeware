@@ -57,10 +57,12 @@ public:
         analogWrite(_pin, value);
         return value;
     }
+#ifndef BASIC    
     int internalRead() override
     {
         return tmpAdc;
     }
+#endif    
 
     void loop() override
     {

@@ -4,7 +4,10 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+
+#ifndef BASIC
 #include "timer.h"
+#endif
 
 #include "protocol.h"
 #include "functions.h"
@@ -48,8 +51,14 @@ public:
         if (value != oldValue)
         {
             char buf[512];
+#ifndef BASIC            
             sprintf(buf,
                     "{'action':'%s','pin':'%s','value':%g, 'at':'%s'}\r\n", _mode.c_str(), ((String)_pin).c_str(), value, timer.getNow().c_str());
+#else
+            sprintf(buf,
+                    "{'action':'%s','pin':'%s','value':%g}\r\n", _mode.c_str(), ((String)_pin).c_str(), value);
+
+#endif
             getProtocol()->actionEvent(buf);
             oldValue = value;
         }
@@ -75,12 +84,12 @@ public:
     {
         return -1;
     }
-#ifndef BASIC
+#ifndef BASIC    
     virtual int internalRead()
     {
         return readPin();
     }
-#endif
+#endif    
     Protocol *getProtocol()
     {
         return getInstanceOfProtocol();

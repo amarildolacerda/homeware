@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.04.16.21"
+#define VERSION "23.04.18.21"
 //---- opcoes de boards  -- configurado no platformio.ini
 // #define WEMO_D1
 // #define BOARD_ESP12S // LCTECHRELAY

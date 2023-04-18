@@ -106,7 +106,7 @@ bool MqttClientDriver::isConnected(bool force)
 {
     if (!isEnabled())
         return false;
-    if (!client.connected() && (millis() - lastOne > interval || force))
+    if (!client.connected() && (millis() - lastOne > interval + (failCount * 30000) || force))
     {
         Serial.print("MQT: Conectando ...");
         if (client.connect(clientId.c_str(), user.c_str(), password.c_str()))
@@ -114,6 +114,7 @@ bool MqttClientDriver::isConnected(bool force)
             Serial.println("connected");
             subscribes();
             lastOne = millis();
+            failCount = 0;
         }
         else
         {
@@ -123,6 +124,8 @@ bool MqttClientDriver::isConnected(bool force)
             Serial.println("MQT: try again in 10 seconds");
 #endif
             lastOne = millis();
+            if (failCount < 10)
+                failCount++;
         }
     }
     return client.connected();
@@ -177,7 +180,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
             sprintf(msg, "%s", payload);
             int n = strnlen(msg, 1024);
             client.publish(topic, msg, n);
-            Serial.printf("MQT: %s %s\r\n",topic,msg);
+            Serial.printf("MQT: %s %s\r\n", topic, msg);
             return true;
         }
     }
@@ -192,7 +195,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
 
 void MqttClientDriver::loop()
 {
-    if (isConnected( lastOne == 0 ))
+    if (isConnected(lastOne == 0))
     {
         if (millis() - lastAlive > interval)
             sendAlive();

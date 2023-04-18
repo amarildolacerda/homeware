@@ -15,6 +15,7 @@ protected:
     long lastOne = 0;
     unsigned long lastAlive = 0;
     unsigned long interval = 60000;
+    unsigned int failCount = 0;
 
     void init();
 
