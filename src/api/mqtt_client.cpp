@@ -108,7 +108,7 @@ bool MqttClientDriver::isConnected(bool force)
         return false;
     if (!client.connected() && (millis() - lastOne > interval + (failCount * 30000) || force))
     {
-        Serial.print("MQT: Conectando ...");
+        Serial.print("MQT: Conectando: ");
         if (client.connect(clientId.c_str(), user.c_str(), password.c_str()))
         {
             Serial.println("connected");
@@ -118,11 +118,8 @@ bool MqttClientDriver::isConnected(bool force)
         }
         else
         {
-#ifdef MQTT_DEBUG_ON
-            Serial.print("MQT: failed, rc=");
-            Serial.print(client.state());
-            Serial.println("MQT: try again in 10 seconds");
-#endif
+            Serial.print("failed, rc=");
+            Serial.println(client.state());
             lastOne = millis();
             if (failCount < 10)
                 failCount++;
