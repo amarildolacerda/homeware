@@ -176,7 +176,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
         return false;
     try
     {
-        if (isConnected(true))
+        if (isConnected(false)) // se nao estiver conectado, tudo bem, isto leva muito tempo para responder
         {
             lastAlive = millis();
             char topic[128];
