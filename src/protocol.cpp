@@ -220,6 +220,7 @@ String Protocol::getPinMode(const int pin)
 /// @param newValue
 /// @param exectrigger
 /// @return
+bool initedValues = false;
 bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigger)
 {
     if (pinValue(pin) != newValue)
@@ -229,15 +230,19 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 #ifndef NO_API
         getApiDrivers().changed(pin, newValue);
 #endif
+        if (initedValues)
+        { // na primeira carga, não dispara trigger - so pega o estado do PIN
 #ifndef ARDUINO_AVR
-        afterChanged(pin, newValue, getPinMode(pin));
+            afterChanged(pin, newValue, getPinMode(pin));
 #endif
-        if (exectrigger)
-            checkTrigger(pin, newValue);
+            if (exectrigger)
+                checkTrigger(pin, newValue);
 #ifndef BASIC
-        checkTriggerScene(pin, newValue);
+            checkTriggerScene(pin, newValue);
 #endif
-        return true;
+            return true;
+        }
+        initedValues = true;
     }
     return false;
 }
@@ -687,18 +692,21 @@ void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 void Protocol::prepare()
 {
 #ifdef SPIFFs
-    if (!SPIFFS.begin()){
+    if (!SPIFFS.begin())
+    {
 #else
 #ifdef LITTLEFs
 #ifdef ESP32
-    if (!LITTLEFS.begin(true)){
+    if (!LITTLEFS.begin(true))
+    {
 #else
-    if (!LittleFS.begin()){
-       // LittleFS.format();
+    if (!LittleFS.begin())
+    {
+        // LittleFS.format();
 #endif
 #endif
 #endif
-    
+
         Serial.println("FS mount failed");
         reset();
     }
@@ -1382,7 +1390,7 @@ String Protocol::doCommand(String command)
             trigger[spin] = getPinByName(cmd[3]);
 
             // 0-monostable 1-monostableNC 2-bistable 3-bistableNC
-            getStable()[spin] = (cmd[4] == "bistable" ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
+            getStable()[spin] = (cmd[4].startsWith("bistable") ? 2 : 0) + (cmd[4].endsWith("NC") ? 1 : 0);
 
             return "OK";
         }

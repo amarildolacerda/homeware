@@ -106,9 +106,19 @@ public:
     {
         return new LedDriver();
     }
-    LedDriver()
+    virtual void setPinMode(int pin) override
     {
+        pinMode(pin, OUTPUT);
+#ifdef DEBUG_DRV
+        Serial.println("AlternateDriver set OUTPUT mode");
+#endif
+        Driver::setPinMode(pin);
+#ifdef LED_INVERT
         interval = 5000;
+        v1 = 500;
+#else
+        interval = 1000;
+#endif        
     }
     int writePin(const int value) override
     {

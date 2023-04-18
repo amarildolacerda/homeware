@@ -83,14 +83,6 @@
 
 #endif
 
-#if defined(SONOFF_BASIC)
-#undef DRIVERS_ENABLED
-#define BOARD_MIN
-#undef DRIVERS_EX
-#define WIFI_ENABLED
-//#undef TELNET
-#define NO_DRV_ADC
-#endif
 
 #ifdef DRIVERS_ENABLED
 // #define DHT_SENSOR
@@ -120,6 +112,16 @@
 #define ALEXA
 #define OTA
 #define WEBSOCKET
+#endif
+
+#if defined(SONOFF_BASIC)
+#undef DRIVERS_ENABLED
+#undef DRIVERS_EX
+#define WIFI_ENABLED
+#define NO_DRV_ADC
+#define TELNET
+#define MQTTClient
+#define LED_INVERT
 #endif
 
 #if defined(BOARD_ESP12S)
