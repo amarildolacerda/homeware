@@ -16,8 +16,8 @@
 #include "drivers/drv_lctech.h"
 #endif
 
-#if defined(DRIVERS_EX) || defined(SONOFF_BASIC)
 #include "drivers/drv_led.h"
+#if defined(DRIVERS_EX) || defined(SONOFF_BASIC)
 #include "drivers/drv_srn.h"
 #ifdef DHT_SENSOR
 #include <drivers/drv_dht.h>
@@ -35,7 +35,6 @@
 #include "drivers/drv_pwm.h"
 //=================================fim enabled
 #endif
-
 
 #ifdef BUZZER
 #include "drivers/drv_buzzer.h"
@@ -62,6 +61,7 @@ void drivers_register()
 #endif
     InDriver::registerMode();
     OutDriver::registerMode();
+    LedDriver::registerMode();
 
 #if defined(DRIVERS_EX)
     LedDriver::registerMode();
@@ -77,6 +77,7 @@ void drivers_register()
     GrooverUltrasonicDriver::registerMode();
 #endif // GROOVER
 
+
 // enableds
 #ifdef DRIVERS_ENABLED
     LDRDriver::registerMode();
@@ -85,7 +86,6 @@ void drivers_register()
 #endif // DRIVER_ENABLED
 #else
 #ifdef SONOFF_BASIC
-    LedDriver::registerMode();
     SireneDriver::registerMode();
 #endif
 #endif

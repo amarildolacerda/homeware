@@ -65,11 +65,6 @@
 
 //********************************** boards
 
-#if defined(ARDUINO_ESP8266_NODEMCU)
-//-------------------------------------
-#define BOARD_MIN
-#endif
-
 #if defined(ARDUINO_AVR)
 #undef WIFI_ENABLED
 #undef DRIVERS_ENABLED
@@ -82,7 +77,6 @@
 #undef LITTLEFs
 
 #endif
-
 
 #ifdef DRIVERS_ENABLED
 // #define DHT_SENSOR
@@ -160,7 +154,6 @@
 #undef DRIVERS_EX
 #endif
 
-
 #ifdef NO_MQTT
 #undef MQTTClient
 #undef MQTTBroker
@@ -189,4 +182,8 @@
 #ifndef API_SIZE
 #define DRIVERS_SIZE 24
 #define API_SIZE 12
+#endif
+
+#if defined(MQTTClient) || defined(MYSENSORS)
+#define MQTTClientEnabled
 #endif

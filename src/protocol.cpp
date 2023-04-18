@@ -31,7 +31,7 @@ Protocol *protocol;
 
 void Protocol::actionEvent(const char *txt)
 {
-#ifdef MQTTClient
+#if defined(MQTTClientEnabled)
     ApiDriver *drv = getApiDrivers().findByType("mqtt");
     if (drv)
     {
@@ -262,7 +262,7 @@ void Protocol::checkTriggerScene(const int pin, const int value)
             String sceneName = String(p.key().c_str());
             String cmd = "scene " + sceneName + " set " + String(value);
             doCommand(cmd); // executa local se existir uma "scene_triggers" para  "scene" - funciona independente de ter
-#ifdef MQTTClient
+#if defined(MQTTClient)
             ApiDriver *drv = getApiDrivers().findByType("mqtt");
             if (drv)
             {
@@ -1036,19 +1036,7 @@ String Protocol::doCommand(String command)
     else
 #endif
 #ifndef ARDUINO_AVR
-#ifndef BASIC
-        if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
-    {
-        doSleep(String(cmd[1]).toInt());
-        return "OK";
-    }
-    else if (cmd[0] == "open")
-    {
-        char json[1024];
-        readFile(cmd[1], json, 1024);
-        return String(json);
-    }
-    else if (cmd[0] == "test")
+        if (cmd[0] == "test")
     {
         config["debug"] = "on";
         int pin = getPinByName(cmd[1]);
@@ -1075,6 +1063,19 @@ String Protocol::doCommand(String command)
             digitalWrite(pin, LOW);
         }
         return "OK";
+    }
+    else
+#ifndef BASIC
+        if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
+    {
+        doSleep(String(cmd[1]).toInt());
+        return "OK";
+    }
+    else if (cmd[0] == "open")
+    {
+        char json[1024];
+        readFile(cmd[1], json, 1024);
+        return String(json);
     }
     else
 

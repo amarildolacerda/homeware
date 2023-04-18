@@ -21,11 +21,15 @@
 #include "api/mqtt_client.h"
 #endif
 
+#ifdef MYSENSORS
+#include "api/my_sensors.h"
+#endif
+
 void register_Api_setup()
 {
 #ifndef NO_MDNS
     mDNSPubDriver::registerApi();
-#endif    
+#endif
 #ifdef SINRICPRO
     registerSinricApi();
 #endif
@@ -40,5 +44,9 @@ void register_Api_setup()
 
 #ifdef MQTTClient
     MqttClientDriver::registerApi();
+#endif
+
+#ifdef MYSENSORS
+    MySensorsDriver::registerApi();
 #endif
 }
