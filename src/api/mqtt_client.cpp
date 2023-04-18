@@ -192,7 +192,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
 
 void MqttClientDriver::loop()
 {
-    if (isConnected())
+    if (isConnected( lastOne == 0 ))
     {
         if (millis() - lastAlive > interval)
             sendAlive();

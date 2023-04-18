@@ -12,7 +12,7 @@ protected:
     String password;
     String prefix;
     String name;
-    long lastOne = millis()-55000;
+    long lastOne = 0;
     unsigned long lastAlive = 0;
     unsigned long interval = 60000;
 
