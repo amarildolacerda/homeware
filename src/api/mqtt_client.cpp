@@ -100,26 +100,18 @@ void MqttClientDriver::subscribes()
     sprintf(topic, "%s/%s/in", prefix.c_str(), name.c_str());
     client.subscribe(topic);
     Serial.printf("%s \r\n", topic);
-
-    /* sprintf(topic, "%s/%s%s", prefix.c_str(), name.c_str(), "/in");
-     client.subscribe(topic);
-     char scene[132];
-     sprintf(topic, "%s/scene/#", prefix.c_str());
-     client.subscribe(scene);
-    */
 }
 
 bool MqttClientDriver::isConnected(bool force)
 {
     if (!isEnabled())
         return false;
-    if (!client.connected() && (millis() - lastOne > 60000 || force))
+    if (!client.connected() && (millis() - lastOne > interval || force))
     {
         Serial.print("MQT: Conectando ...");
         if (client.connect(clientId.c_str(), user.c_str(), password.c_str()))
         {
             Serial.println("connected");
-            // sendAlive();
             subscribes();
             lastOne = millis();
         }
