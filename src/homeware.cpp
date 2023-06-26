@@ -105,6 +105,11 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["label"].as<String>();
     }
+    if (config["host"])
+    {
+        hostname = config["host"].as<String>();
+    }
+
     setupPins();
 }
 

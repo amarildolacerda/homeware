@@ -1007,7 +1007,7 @@ String Protocol::show()
 {
     char buffer[128];
     String ip = localIP();
-    sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'name': '%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+    sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
     return (String)buffer;
 }
 
