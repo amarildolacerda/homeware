@@ -24,6 +24,7 @@ private:
     int oldValue = 0;
 
 public:
+    unsigned int ultimoCallback = 0;
     static void registerMode()
     {
         registerDriverMode("in", create);
@@ -50,11 +51,18 @@ public:
 
 void triggerChanged(void *arg)
 {
+
     // recebe evento que houve mudanca de estado do PIN
     InDriver *driver = static_cast<InDriver *>(arg);
-    int v = digitalRead(driver->_pin);
-    // chama callback para despachar a mudança de estado PIN
-    driver->triggerCallback(driver->_mode, driver->_pin, v);
+    if (millis() - driver->ultimoCallback > 100) // evitar repetições muito rápidas
+    {
+        driver->ultimoCallback = millis();
+        int v = digitalRead(driver->_pin);
+        // chama callback para despachar a mudança de estado PIN
+        // triggerCallback é definido ao instanciar o driver (protocol.cpp)
+        if (driver->triggerCallback)
+            driver->triggerCallback(driver->_mode, driver->_pin, v);
+    }
 }
 
 class DownDriver : public InDriver
