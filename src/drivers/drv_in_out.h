@@ -36,9 +36,10 @@ public:
     void setPinMode(int pin) override
     {
         InOutDriver::setPinMode(pin);
-        pinMode(pin, INPUT);
+        pinMode(_pin, INPUT);
+        // registra evento quando o PIN muda de estado - auto notify
         attachInterruptArg(
-            digitalPinToInterrupt(pin), triggerChanged, this,
+            digitalPinToInterrupt(_pin), triggerChanged, this,
             CHANGE);
     }
     ~InDriver()
@@ -49,8 +50,10 @@ public:
 
 void triggerChanged(void *arg)
 {
+    // recebe evento que houve mudanca de estado do PIN
     InDriver *driver = static_cast<InDriver *>(arg);
     int v = digitalRead(driver->_pin);
+    // chama callback para despachar a mudança de estado PIN
     driver->triggerCallback(driver->_mode, driver->_pin, v);
 }
 

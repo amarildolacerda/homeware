@@ -36,9 +36,11 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   set sleep 60 (estabele 60s para deepsleep - depende de conectar RST ao D0)
  *   gpio [pin] timer 60000 // duração para a ação antes de desligar de 60000s ( valor==0 - modo não temporizado)
  *   gpio [pin] interval 1000 // entre "timer" para uma ação (ex: led piscando);
- *   scene [nome] set 1/0
- *   gpio [pin] scene noite
-</pre>
+ [scene] // depende do mqtt ativo
+ *   scene [nome] set 1/0; scene [nome] none; 
+ *   scene [nome] trigger [pin] //config: acao quando recebe um evento scene [nome] executa o [pin]
+ *   gpio [pin] scene [noite] //config: gera um evento de scene - quando o pin for alterado enviar scene [nome]
+ </pre>
 
 Uma trigger "bistable" indica que é para funcionar como um switch (troca o estado quando seu acionador estiver ligado-HIGH ). Uma trigger monostable aciona com o mesmo valor do seu acionador, se ligado - liga, se desligado - deliga;
 
