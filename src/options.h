@@ -42,9 +42,6 @@
 // #define TELEGRAM
 #undef LITTLEFs
 #undef USE_PIN_NAMES
-#ifndef SPIFFs
-#define SPIFFs
-#endif
 #define NO_MDNS
 #endif
 
