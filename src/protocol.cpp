@@ -692,7 +692,7 @@ void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 void Protocol::prepare()
 {
 #ifdef SPIFFs
-    if (!SPIFFS.begin())
+    if (!SPIFFS.begin(true))
     {
 #else
 #ifdef LITTLEFs
