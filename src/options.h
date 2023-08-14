@@ -11,7 +11,9 @@
 // #define ARDUINO_AVR
 
 //-------------------------------
+#ifndef SPIFFs
 #define LITTLEFs
+#endif
 
 #if defined(WEMO_D1)
 //----------------------
@@ -40,7 +42,9 @@
 // #define TELEGRAM
 #undef LITTLEFs
 #undef USE_PIN_NAMES
+#ifndef SPIFFs
 #define SPIFFs
+#endif
 #define NO_MDNS
 #endif
 
