@@ -4,13 +4,14 @@
 #include "functions.h"
 
 #ifdef SPIFFs
-//#include <FS.h>
+#include <FS.h>
 #include <SPIFFS.h>
 #endif
 
 #ifndef ARDUINO_AVR
 unsigned int timeoutDeepSleep = 1000;
 #ifdef LITTLEFs
+#include <FS.h>
 #include <LittleFS.h>
 #endif
 #endif
