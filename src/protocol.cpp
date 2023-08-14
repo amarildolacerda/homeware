@@ -4,8 +4,8 @@
 #include "functions.h"
 
 #ifdef SPIFFs
-#include <FS.h>
-// #include <SPIFFS.h>
+//#include <FS.h>
+#include <SPIFFS.h>
 #endif
 
 #ifndef ARDUINO_AVR
