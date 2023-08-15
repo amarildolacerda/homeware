@@ -49,6 +49,11 @@
 #undef LITTLEFs
 #endif
 
+#if NO_WIFI
+#undef WIFI_ENABLED
+#endif
+
+
 #if defined(BOARD_ESP12S)
 //-------------------------
 #define BOARD_MIN
@@ -178,6 +183,14 @@
 
 #ifdef NO_TELNET
 #undef TELNET
+#endif
+
+#ifdef NO_ALEXA
+#undef ALEXA
+#endif
+
+#ifdef NO_OTA
+#undef OTA
 #endif
 
 #ifndef API_SIZE

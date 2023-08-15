@@ -76,7 +76,11 @@ void Homeware::afterBegin()
     ElegantOTA.setID(hostname.c_str());
     ElegantOTA.begin(server);
 #endif
+
+#ifdef WIFI_ENABLED
     server->begin();
+#endif
+
 #ifndef BASIC
     resetDeepSleep();
 #endif
@@ -109,13 +113,16 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["host"].as<String>();
     }
-
+    Serial.printf("ID: %s\r\n",hostname);
     setupPins();
 }
 
 
 void Homeware::resetWiFi()
 {
+#ifdef DEBUG_ON
+   Serial.println("resetWiFi");
+#endif
 #ifndef NO_WM
     HomewareWiFiManager wifiManager;
 #endif

@@ -7,7 +7,7 @@
 #include "timer.h"
 #endif
 
-#ifdef ALEXA
+#if defined(ALEXA) && defined(WIFI_ENABLED)
 #include <Espalexa.h>
 #include "api/alexa.h"
 Espalexa alexa = Espalexa();
@@ -27,7 +27,7 @@ void homeware_setup()
 #else
     Serial.printf("\r\n\r\n");
     homeware.prepare();
-#ifdef ALEXA
+#if defined(ALEXA) && defined(WIFI_ENABLED)
     Alexa::init(&alexa);
 #endif
     homeware.setup(&server);
@@ -50,7 +50,7 @@ void homeware_setup()
 #endif
 #endif
 
-#ifdef ALEXA
+#if defined(ALEXA) && defined(WIFI_ENABLED)
     alexa.begin(&server);
 #endif
 
@@ -69,7 +69,7 @@ void homeware_loop()
 #else
     homeware.loop();
 #endif
-#ifdef ALEXA
+#if defined(ALEXA) && defined(WIFI_ENABLED)
     Alexa::handle();
 #endif
 

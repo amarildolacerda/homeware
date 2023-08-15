@@ -430,7 +430,7 @@ int Protocol::switchPin(const int pin)
     {
         int r = drv->readPin();
 #ifdef DEBUG_ON
-        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->_mode, r, (r > 0) ? LOW : HIGH);
 #endif
         return drv->writePin((r > 0) ? LOW : HIGH);
     }
@@ -1451,6 +1451,9 @@ void Protocol::loop()
     inLooping = true;
     if (!inited)
         begin();
+
+    
+
 #ifndef BASIC
     lerSerial();
 #endif
