@@ -160,6 +160,15 @@
 #undef DRIVERS_EX
 #endif
 
+#ifdef NO_WIFI
+#define NO_MQTT
+#define NO_PORTAL
+#define NO_WEBSOCKET
+#define NO_TELNET
+#define NO_OTA
+#define NO_ALEXA
+#endif
+
 #ifdef NO_MQTT
 #undef MQTTClient
 #undef MQTTBroker
