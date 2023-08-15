@@ -1,5 +1,5 @@
 #include "options.h"
-#ifdef PORTAL
+#ifndef NO_WIFI
 #include "portal.h"
 #endif
 #include "homeware.h"
@@ -34,7 +34,7 @@ void homeware_setup()
     homeware.setup(&server);
 #endif
 
-#ifdef PORTAL
+#ifndef NO_WIFI
     portal.setup(&server);
     portal.autoConnect(homeware.config["label"]);
 #endif
@@ -64,7 +64,7 @@ void homeware_setup()
 void homeware_loop()
 //----------------------------------------------------------------------------------
 {
-#ifdef PORTAL
+#ifndef NO_WIFI
     portal.loop(); // checa reconecta;
 #endif
 #ifdef ARDUINO_AVR
