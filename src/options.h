@@ -84,7 +84,9 @@
 
 #endif
 
-#ifdef NO_DRIVERS_ENABLED
+
+
+#if defined(NO_DRIVERS_ENABLED) || defined(NO_DRIVERS)
 #undef DRIVERS_ENABLED
 #undef DRIVERS_EX
 #endif
