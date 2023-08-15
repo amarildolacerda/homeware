@@ -84,6 +84,11 @@
 
 #endif
 
+#ifdef NO_DRIVERS_ENABLED
+#undef DRIVERS_ENABLED
+#undef DRIVERS_EX
+#endif
+
 #ifdef DRIVERS_ENABLED
 // #define DHT_SENSOR
 // #define GROOVE_ULTRASONIC

@@ -3,7 +3,8 @@
 #include "portal.h"
 #endif
 #include "homeware.h"
-#ifdef WIFI_ENABLED
+
+#ifndef NO_TIMER
 #include "timer.h"
 #endif
 
@@ -39,7 +40,7 @@ void homeware_setup()
 #endif
 
 #ifndef BASIC
-#ifdef WIFI_ENABLED
+#ifndef NO_TIMER
     timer.update();
 #endif
     Serial.printf("Ver: %s \r\n", VERSION);
@@ -75,7 +76,7 @@ void homeware_loop()
     Alexa::handle();
 #endif
 
-#ifdef WIFI_ENABLED
+#ifndef NO_TIMER
     timer.update();
 #endif    
 }

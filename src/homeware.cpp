@@ -77,8 +77,8 @@ void Homeware::afterBegin()
     ElegantOTA.begin(server);
 #endif
 
-#ifdef WIFI_ENABLED
-    server->begin();
+#ifndef NO_PORTAL
+   server->begin();
 #endif
 
 #ifndef BASIC

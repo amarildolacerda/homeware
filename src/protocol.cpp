@@ -1460,9 +1460,14 @@ void Protocol::loop()
 #ifdef TELNET
     telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
-    eventLoop();
 
+#ifndef NO_LOOP
+    eventLoop();
+#endif    
+
+#ifdef DRIVERS_ENABLED
     getDrivers()->loop();
+#endif    
 #ifndef NO_API
     getApiDrivers().loop();
 #endif
