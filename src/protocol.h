@@ -56,15 +56,26 @@ public:
     JsonObject getTrigger();
     JsonObject getStable();
     JsonObject getMode();
+
+#ifdef SCENE
+    JsonObject getScenes();
+    void checkTriggerScene(const int pin, const int value);
+    JsonObject getTriggerScenes();
+#endif
+
 #ifndef ARDUINO_AVR
+
+#ifdef SENSORS
     JsonObject getDevices();
-#ifndef BASIC
     JsonObject getSensors();
     JsonObject getDefaults();
-    JsonObject getScenes();
-    JsonObject getTriggerScenes();
+#endif
+
+#ifdef PWM
     virtual int writePWM(const int pin, const int value, const int timeout = 0);
-    void checkTriggerScene(const int pin, const int value);
+#endif
+
+#ifdef DEEPSLEEP    
     virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
     JsonObject getTimers();
@@ -132,8 +143,10 @@ protected:
     virtual void afterBegin();
     virtual void afterSetup();
     virtual String localIP();
-#ifndef BASIC
+#ifdef DEEPSLEEP
     void doSleep(const int tempo);
+#endif
+#ifndef BASIC
     virtual void afterLoop();
     String getStatus();
 

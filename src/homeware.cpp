@@ -47,7 +47,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
     server = externalServer;
 }
 
-#ifndef BASIC
+#ifdef CMD
 void Homeware::setupServer()
 {
     apis += "cmd,";
@@ -62,12 +62,13 @@ void Homeware::setupServer()
             homeware.server->send(200, "application/json", "{\"result\":" + rt + "}");
             return;
         } });
+
 }
 #endif
 
 void Homeware::afterBegin()
 {
-#ifndef BASIC
+#ifdef CMD
     setupServer();
 #endif
 
@@ -81,7 +82,7 @@ void Homeware::afterBegin()
    server->begin();
 #endif
 
-#ifndef BASIC
+#ifdef DEEPSLEEP
     resetDeepSleep();
 #endif
     Protocol::afterBegin();
