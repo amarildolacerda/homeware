@@ -448,16 +448,15 @@ void Protocol::setLedMode(const int mode)
 #ifndef BASIC
 String Protocol::getStatus()
 {
-    
-        StaticJsonDocument<256> doc;
-        for (size_t i = 0; i < 18; i++)
-        {
-            doc[String(i)] = readPin(i, "");
-        }
-        String r;
-        serializeJson(doc, r);
-        return r;
-    
+
+    StaticJsonDocument<256> doc;
+    for (size_t i = 0; i < 18; i++)
+    {
+        doc[String(i)] = readPin(i, "");
+    }
+    String r;
+    serializeJson(doc, r);
+    return r;
 }
 #endif
 
@@ -1019,12 +1018,11 @@ String Protocol::show()
 {
     char buffer[128];
     String ip = localIP();
-    sprintf(buffer, "{ 'board':'%s', 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }", 
-     config["board"].as<String>().c_str(),  
-     hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+    sprintf(buffer, "{ 'board':'%s', 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }",
+            config["board"].as<String>().c_str(),
+            hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
     return (String)buffer;
 }
-
 
 String Protocol::doCommand(String command)
 {
@@ -1443,32 +1441,31 @@ void Protocol::printConfig()
 #ifdef SERIALCMD
 void lerSerial()
 {
-        if (Serial.available() > 0)
+    if (Serial.available() > 0)
+    {
+        char term = '\n';
+        String cmd = Serial.readStringUntil(term);
+        cmd.replace("\r", "");
+        cmd.replace("\n", "");
+        if (cmd.length() == 0)
+            return;
+        String validos = "gpio,get,show,switch";
+#ifdef ARDUINO_AVR
+        validos += ",set";
+#endif
+        String *r = split(cmd, ' ');
+        if (validos.indexOf(r[0]) > -1)
         {
-            char term = '\n';
-            String cmd = Serial.readStringUntil(term);
-            cmd.replace("\r", "");
-            cmd.replace("\n", "");
-            if (cmd.length() == 0)
-                return;
-            String validos = "gpio,get,show,switch";
-    #ifdef ARDUINO_AVR
-            validos += ",set";
-    #endif
-            String *r = split(cmd, ' ');
-            if (validos.indexOf(r[0]) > -1)
-            {
-                String rsp = protocol->doCommand(cmd);
-                if (!rsp.startsWith("invalid"))
-                    protocol->debug("SER: " + rsp);
-            }
-    #ifndef ARDUINO_AVR
-
-            else if (protocol->debugCallback)
-                protocol->debugCallback(cmd);
-    #endif
+            String rsp = protocol->doCommand(cmd);
+            if (!rsp.startsWith("invalid"))
+                protocol->debug("SER: " + rsp);
         }
-    
+#ifndef ARDUINO_AVR
+
+        else if (protocol->debugCallback)
+            protocol->debugCallback(cmd);
+#endif
+    }
 }
 
 #endif
@@ -1485,7 +1482,6 @@ void Protocol::loop()
 #ifdef SERIALCMD
     lerSerial();
 #endif
-
 
 #ifdef TELNET
     telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
