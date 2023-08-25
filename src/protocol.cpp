@@ -808,7 +808,7 @@ DynamicJsonDocument Protocol::baseConfig()
     char BOARD[16];
     sprintf(BOARD, "%s", BOARD_NAME);
     config["board"] = BOARD;
-    Serial.printf("Board: %s", BOARD); // config["board"]);
+    Serial.printf("Board: %s\r\n", BOARD); // config["board"]);
 #endif
 #ifndef ARDUINO_AVR
 
@@ -1019,7 +1019,9 @@ String Protocol::show()
 {
     char buffer[128];
     String ip = localIP();
-    sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+    sprintf(buffer, "{ 'board':'%s', 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }", 
+     config["board"].as<String>().c_str(),  
+     hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
     return (String)buffer;
 }
 
