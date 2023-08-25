@@ -788,6 +788,9 @@ String Protocol::restoreConfig()
 }
 #endif
 
+#define STRINGIFY(s) STRINGIFY1(s)
+#define STRINGIFY1(s) #s
+
 DynamicJsonDocument Protocol::baseConfig()
 {
     DynamicJsonDocument config = DynamicJsonDocument(1024);
@@ -797,9 +800,10 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("stable");
     config.createNestedObject("timers");
 #ifdef BOARD_NAME
-    config["board"] = BOARD_NAME;
-#else
-    config["board"] = "ESP";
+    char BOARD[16];
+    sprintf(BOARD, "%s", BOARD_NAME);
+    config["board"] = BOARD;
+    Serial.printf("Board: %s", BOARD); // config["board"]);
 #endif
 #ifndef ARDUINO_AVR
 
@@ -1012,6 +1016,7 @@ String Protocol::show()
     return (String)buffer;
 }
 
+
 String Protocol::doCommand(String command)
 {
 #ifdef DEBUG_ON
@@ -1093,26 +1098,35 @@ String Protocol::doCommand(String command)
 #endif
         if (cmd[0] == "show")
     {
+
+        if (cmd[1])
+        {
+
 #if !(defined(ARDUINO_AVR) || defined(BASIC))
 
-        Serial.println("cmd: " + command);
+            Serial.println("cmd: " + command);
 
-        if (cmd[1] == "resources")
-            return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
-        else if (cmd[1] == "status")
-        {
-            return getStatus();
-        }
-        else
+            if (cmd[1] == "resources")
+                return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
+            else if (cmd[1] == "status")
+            {
+                return getStatus();
+            }
+            else
 #endif
-            if (cmd[1] == "config")
-            return config.as<String>();
+                if (cmd[1] == "config")
+            {
+                return config.as<String>();
+            }
 #ifndef ARDUINO_AVR
-        else if (cmd[1] == "gpio")
-            return showGpio();
-        return show();
+            else if (cmd[1] == "gpio")
+            {
+                return showGpio();
+            }
 
 #endif
+        }
+        return show();
     }
 #ifndef ARDUINO_AVR
 
