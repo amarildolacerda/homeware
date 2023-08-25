@@ -49,6 +49,11 @@
 #undef LITTLEFs
 #endif
 
+#if NO_WIFI
+#undef WIFI_ENABLED
+#endif
+
+
 #if defined(BOARD_ESP12S)
 //-------------------------
 #define BOARD_MIN
@@ -77,6 +82,13 @@
 #undef ALEXA
 #undef LITTLEFs
 
+#endif
+
+
+
+#if defined(NO_DRIVERS_ENABLED) || defined(NO_DRIVERS)
+#undef DRIVERS_ENABLED
+#undef DRIVERS_EX
 #endif
 
 #ifdef DRIVERS_ENABLED
@@ -155,6 +167,15 @@
 #undef DRIVERS_EX
 #endif
 
+#ifdef NO_WIFI
+#define NO_MQTT
+#define NO_PORTAL
+#define NO_WEBSOCKET
+#define NO_TELNET
+#define NO_OTA
+#define NO_ALEXA
+#endif
+
 #ifdef NO_MQTT
 #undef MQTTClient
 #undef MQTTBroker
@@ -178,6 +199,14 @@
 
 #ifdef NO_TELNET
 #undef TELNET
+#endif
+
+#ifdef NO_ALEXA
+#undef ALEXA
+#endif
+
+#ifdef NO_OTA
+#undef OTA
 #endif
 
 #ifndef API_SIZE

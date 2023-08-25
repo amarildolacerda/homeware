@@ -47,7 +47,7 @@ void Homeware::setServer(ESP8266WebServer *externalServer)
     server = externalServer;
 }
 
-#ifndef BASIC
+#ifdef CMD
 void Homeware::setupServer()
 {
     apis += "cmd,";
@@ -62,12 +62,13 @@ void Homeware::setupServer()
             homeware.server->send(200, "application/json", "{\"result\":" + rt + "}");
             return;
         } });
+
 }
 #endif
 
 void Homeware::afterBegin()
 {
-#ifndef BASIC
+#ifdef CMD
     setupServer();
 #endif
 
@@ -76,8 +77,12 @@ void Homeware::afterBegin()
     ElegantOTA.setID(hostname.c_str());
     ElegantOTA.begin(server);
 #endif
-    server->begin();
-#ifndef BASIC
+
+#ifndef NO_PORTAL
+   server->begin();
+#endif
+
+#ifdef DEEPSLEEP
     resetDeepSleep();
 #endif
     Protocol::afterBegin();
@@ -109,13 +114,16 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["host"].as<String>();
     }
-
+    Serial.printf("ID: %s\r\n",hostname);
     setupPins();
 }
 
 
 void Homeware::resetWiFi()
 {
+#ifdef DEBUG_ON
+   Serial.println("resetWiFi");
+#endif
 #ifndef NO_WM
     HomewareWiFiManager wifiManager;
 #endif

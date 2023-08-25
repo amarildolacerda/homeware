@@ -73,6 +73,7 @@ void SinricCloud::initSinric()
                                  { Serial.printf("Disconnected from SinricPro\r\n"); });
         SinricPro.begin(prot->config["app_key"], prot->config["app_secret"]);
 
+        SinricPro.restoreDeviceStates(true);        
         sinricLoaded = true;
 #ifdef DEBUG_API
         Serial.println("END: InitSinric() OK ");

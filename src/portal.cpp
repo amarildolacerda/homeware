@@ -61,7 +61,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
         webSocket.sendTXT(num, "Connected ");
         webSocket.sendTXT(num, homeware.resources);
         homeware.config["debug"] = "term";
-#ifndef BASIC
+#ifdef DEEPSLEEP
         homeware.resetDeepSleep(60);
 #endif
 
@@ -148,7 +148,7 @@ void Portal::autoConnect(const String slabel)
     if (homeware.config.containsKey("password") && homeware.config.containsKey("ssid"))
     {
         homeware.debug("Conectando na rede: ");
-#ifndef BASIC
+#ifdef DEEPSLEEP
         homeware.resetDeepSleep();
 #endif
         WiFi.enableSTA(true);
@@ -192,7 +192,7 @@ void Portal::autoConnect(const String slabel)
     {
         WiFi.mode(WIFI_AP_STA);
         WiFi.setHostname(homeware.hostname.c_str());
-#ifndef BASIC
+#ifdef DEEPSLEEP
         homeware.resetDeepSleep(5);
 #endif
         wifiManager.setConfigPortalTimeout(180);
@@ -364,7 +364,7 @@ void Portal::setupServer()
     server->on("/", []()
                {
 
-#ifndef BASIC
+#ifdef DEEPSLEEP
         homeware.resetDeepSleep(5);
 #endif
         HomewareWiFiManager wf;
@@ -409,7 +409,9 @@ void Portal::setupServer()
 
         pg += button("GPIO", "/gs");
         pg += button("Reiniciar","/reset");
+#ifdef WEBSOCKET        
         pg += button("Terminal", "/term");
+#endif        
         pg += "<div style='height:100'></div><a href=\"/update\" class='D'>firmware</a><div class='msg'> Ver: {ver}</div>";
         pg.replace("{ver}",VERSION);
 
