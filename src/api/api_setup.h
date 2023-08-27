@@ -24,6 +24,9 @@
 #ifdef MYSENSORS
 #include "api/my_sensors.h"
 #endif
+#ifdef TTGO
+#include "api/ttgo_lora32_server.h"
+#endif
 
 void register_Api_setup()
 {
@@ -48,5 +51,8 @@ void register_Api_setup()
 
 #ifdef MYSENSORS
     MySensorsDriver::registerApi();
+#endif
+#ifdef TTGO
+ // TTGOLora32Server::registerApi();
 #endif
 }
