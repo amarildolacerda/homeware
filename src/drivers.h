@@ -5,11 +5,16 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#ifndef BASIC
+#if !(defined( BASIC) || defined(NO_TIMER))
 #include "timer.h"
 #endif
 
+#ifdef AVR
+#include "protocol_base.h"
+#else
 #include "protocol.h"
+#endif
+
 #include "functions.h"
 
 typedef void (*callbackFunction)(String mode, int pin, int value);
