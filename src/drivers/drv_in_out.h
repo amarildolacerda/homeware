@@ -54,7 +54,7 @@ void triggerChanged(void *arg)
 
     // recebe evento que houve mudanca de estado do PIN
     InDriver *driver = static_cast<InDriver *>(arg);
-    if (millis() - driver->ultimoCallback > 300) // evitar repetições muito rápidas
+    if (millis() - driver->ultimoCallback > (driver->interval || 500)) // evitar repetições muito rápidas
     {
         int v = digitalRead(driver->_pin);
         // chama callback para despachar a mudança de estado PIN
