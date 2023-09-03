@@ -62,7 +62,7 @@ public:
 #endif
 
 private:
-#ifndef BASIC
+#ifdef CMD
     void setupServer();
 #endif
 };

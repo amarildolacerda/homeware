@@ -70,14 +70,18 @@ JsonObject Protocol::getTrigger()
     return config["trigger"].as<JsonObject>();
 }
 #ifndef ARDUINO_AVR
+#ifdef SENSORS
 JsonObject Protocol::getDevices()
 {
     return config["device"].as<JsonObject>();
 }
-#ifndef BASIC
 JsonObject Protocol::getSensors()
 {
     return config["sensor"].as<JsonObject>();
+}
+JsonObject Protocol::getDefaults()
+{
+    return config["default"].as<JsonObject>();
 }
 #endif
 #endif
@@ -92,14 +96,6 @@ JsonObject Protocol::getStable()
     return config["stable"].as<JsonObject>();
 }
 
-#ifndef ARDUINO_AVR
-#ifndef BASIC
-JsonObject Protocol::getDefaults()
-{
-    return config["default"];
-}
-#endif
-#endif
 JsonObject Protocol::getTimers()
 {
     return config["timers"];
@@ -108,9 +104,9 @@ JsonObject Protocol::getIntervals()
 {
     return config["intervals"];
 }
-/// @brief lista as senhas que são alvo de disparo.
+/// @brief lista as cenas que são alvo de disparo.
 /// @return lista de cenas disponiveis para disparo.
-#ifndef BASIC
+#ifdef SCENE
 JsonObject Protocol::getScenes()
 {
     return config["scenes"];
@@ -175,7 +171,7 @@ int Protocol::writePin(const int pin, const int value)
     return value;
 }
 
-#ifndef BASIC
+#ifdef PWM
 /// @brief Escreve comportamento PWM para o pin;
 /// @param pin
 /// @param value
@@ -238,9 +234,11 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
 #endif
             if (exectrigger)
                 checkTrigger(pin, newValue);
-#ifndef BASIC
+
+#ifdef SCENE
             checkTriggerScene(pin, newValue);
 #endif
+
             return true;
         }
         initedValues = true;
@@ -248,7 +246,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     return false;
 }
 
-#ifndef BASIC
+#ifdef SCENE
 /// @brief gerar trigger de cenario para mudança de estado do pin
 /// @param pin
 /// @param value
@@ -430,7 +428,7 @@ int Protocol::switchPin(const int pin)
     {
         int r = drv->readPin();
 #ifdef DEBUG_ON
-        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->getMode(), r, (r > 0) ? LOW : HIGH);
+        debugf("{'switch':%i,'mode':'%s', 'actual':%i, 'to':%i}", pin, drv->_mode, r, (r > 0) ? LOW : HIGH);
 #endif
         return drv->writePin((r > 0) ? LOW : HIGH);
     }
@@ -450,6 +448,7 @@ void Protocol::setLedMode(const int mode)
 #ifndef BASIC
 String Protocol::getStatus()
 {
+
     StaticJsonDocument<256> doc;
     for (size_t i = 0; i < 18; i++)
     {
@@ -535,7 +534,7 @@ void Protocol::setupPins()
 
 #ifndef ARDUINO_AVR
 
-#ifndef BASIC
+#ifdef SENSORS
     for (JsonPair k : getDefaults())
     {
         writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
@@ -544,7 +543,8 @@ void Protocol::setupPins()
 
     /// APIs externas
 #ifndef NO_API
-#ifndef BASIC
+
+#ifdef SENSORS
     JsonObject sensores = getDevices();
     for (JsonPair k : sensores)
     {
@@ -553,6 +553,7 @@ void Protocol::setupPins()
     }
     getApiDrivers().afterSetup();
 #endif
+
 #endif
 #if !(defined(ARDUINO_AVR) || defined(BASIC))
     debugln("OK");
@@ -561,7 +562,7 @@ void Protocol::setupPins()
 }
 
 #ifndef ARDUINO_AVR
-#ifndef BASIC
+#ifdef DEEPSLEEP
 
 unsigned long sleeptmp = millis() + timeoutDeepSleep;
 void Protocol::resetDeepSleep(const unsigned int t)
@@ -594,14 +595,17 @@ void Protocol::doSleep(const int tempo)
 }
 #endif
 
-const char HELP[] =
+// const char HELP[] =
+char HELP[] PROGMEM =
 #ifndef BASIC
     "set board <esp8266>\r\n"
     "show config\r\n"
     "gpio <pin> mode <in,out,adc,lc,ldr,dht,rst>\r\n"
-
+#endif
+#ifdef SENSORS
     "gpio <pin> default <n>(usado no setup)\r\n"
 #endif
+
 #ifdef GOOVER_ULTRASONIC
     "gpio <pin> mode gus (groove ultrasonic)\r\n"
 #endif
@@ -633,7 +637,7 @@ const char HELP[] =
 
 String Protocol::help()
 {
-    String s = HELP;
+    String s = FPSTR(HELP);
     return s;
 }
 
@@ -788,6 +792,9 @@ String Protocol::restoreConfig()
 }
 #endif
 
+#define STRINGIFY(s) STRINGIFY1(s)
+#define STRINGIFY1(s) #s
+
 DynamicJsonDocument Protocol::baseConfig()
 {
     DynamicJsonDocument config = DynamicJsonDocument(1024);
@@ -797,16 +804,19 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("stable");
     config.createNestedObject("timers");
 #ifdef BOARD_NAME
-    config["board"] = BOARD_NAME;
-#else
-    config["board"] = "ESP";
+    char BOARD[16];
+    sprintf(BOARD, "%s", BOARD_NAME);
+    config["board"] = BOARD;
+    Serial.printf("Board: %s\r\n", BOARD); // config["board"]);
 #endif
 #ifndef ARDUINO_AVR
 
-#ifndef BASIC
+#ifdef SENSORS
     config.createNestedObject("device");
     config.createNestedObject("sensor");
     config.createNestedObject("default");
+#endif
+#ifdef SCENE
     config.createNestedObject("scenes");
     config.createNestedObject("scene_triggers");
 #endif
@@ -815,7 +825,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config["adc_min"] = "125";
     config["adc_max"] = "126";
 #endif
-#ifndef BASIC
+#ifdef DEEPSLEEP
     config["sleep"] = "0";
 #endif
 #ifdef SSID_NAME
@@ -927,7 +937,7 @@ void Protocol::afterSetup()
 void telnetOnConnect(String ip)
 {
 //    protocol->inTelnet = true;
-#ifndef BASIC
+#ifdef DEEPSLEEP
     protocol->resetDeepSleep(60 * 5);
 #endif
     Serial.print("Telnet: ");
@@ -946,7 +956,7 @@ void telnetOnInputReceive(String str)
     }
     else
     {
-#ifndef BASIC
+#ifdef DEEPSLEEP
         protocol->resetDeepSleep();
 #endif
         protocol->print(protocol->doCommand(str) + "\r\n");
@@ -1008,7 +1018,9 @@ String Protocol::show()
 {
     char buffer[128];
     String ip = localIP();
-    sprintf(buffer, "{ 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }", hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
+    sprintf(buffer, "{ 'board':'%s', 'host':'%s' ,'version':'%s', 'label':'%s', 'ip': '%s'  }",
+            config["board"].as<String>().c_str(),
+            hostname.c_str(), VERSION, config["label"].as<String>().c_str(), ip.c_str());
     return (String)buffer;
 }
 
@@ -1018,13 +1030,15 @@ String Protocol::doCommand(String command)
     Serial.print("Command: ");
     Serial.println(command);
 #endif
-#ifndef BASIC
+#ifdef SERIALCMD
     if (command.startsWith("SERIAL "))
     {
         command.replace("SERIAL ", "");
         Serial.print(command);
         return "OK";
     }
+#endif
+#ifdef DEEPSLEEP
     resetDeepSleep(60 * 5);
 #endif
     String *cmd = split(command, ' ');
@@ -1066,13 +1080,16 @@ String Protocol::doCommand(String command)
         return "OK";
     }
     else
-#ifndef BASIC
+#ifdef DEEPSLEEP
         if (cmd[0] == "sleep" && String(cmd[1]).toInt() > 0)
     {
         doSleep(String(cmd[1]).toInt());
         return "OK";
     }
-    else if (cmd[0] == "open")
+    else
+#endif
+#ifndef BASIC
+        if (cmd[0] == "open")
     {
         char json[1024];
         readFile(cmd[1], json, 1024);
@@ -1093,26 +1110,35 @@ String Protocol::doCommand(String command)
 #endif
         if (cmd[0] == "show")
     {
+
+        if (cmd[1])
+        {
+
 #if !(defined(ARDUINO_AVR) || defined(BASIC))
 
-        Serial.println("cmd: " + command);
+            Serial.println("cmd: " + command);
 
-        if (cmd[1] == "resources")
-            return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
-        else if (cmd[1] == "status")
-        {
-            return getStatus();
-        }
-        else
+            if (cmd[1] == "resources")
+                return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
+            else if (cmd[1] == "status")
+            {
+                return getStatus();
+            }
+            else
 #endif
-            if (cmd[1] == "config")
-            return config.as<String>();
+                if (cmd[1] == "config")
+            {
+                return config.as<String>();
+            }
 #ifndef ARDUINO_AVR
-        else if (cmd[1] == "gpio")
-            return showGpio();
-        return show();
+            else if (cmd[1] == "gpio")
+            {
+                return showGpio();
+            }
 
 #endif
+        }
+        return show();
     }
 #ifndef ARDUINO_AVR
 
@@ -1171,7 +1197,7 @@ String Protocol::doCommand(String command)
     {
         return config[cmd[1]];
     }
-#ifndef BASIC
+#ifdef PWM
     else if (cmd[0] == "pwm")
     {
         int pin = getPinByName(cmd[1]);
@@ -1196,7 +1222,7 @@ String Protocol::doCommand(String command)
         int pin = getPinByName(cmd[1]);
         return String(switchPin(pin));
     }
-#ifndef BASIC
+#ifdef SCENE
     else if (cmd[0] == "scene" && !cmd[3].isEmpty())
     {
         String sceneName = cmd[1]; // JsonObject Protocol::getTriggerScenes()
@@ -1228,7 +1254,7 @@ String Protocol::doCommand(String command)
         {
             return showGpio();
         }
-#ifndef BASIC
+#ifdef SCENE
         else if (cmd[2] == "scene")
         {
 
@@ -1340,6 +1366,8 @@ String Protocol::doCommand(String command)
 #endif
         }
 #ifndef ARDUINO_AVR
+
+#ifdef SENSORS
         else if (cmd[2] == "device")
         {
 
@@ -1352,8 +1380,6 @@ String Protocol::doCommand(String command)
             devices[spin] = cmd[3];
             return "OK";
         }
-
-#ifndef BASIC
         else if (cmd[2] == "sensor")
         {
             JsonObject sensors = getSensors();
@@ -1412,7 +1438,7 @@ void Protocol::printConfig()
 }
 #endif
 
-#ifndef BASIC
+#ifdef SERIALCMD
 void lerSerial()
 {
     if (Serial.available() > 0)
@@ -1441,6 +1467,7 @@ void lerSerial()
 #endif
     }
 }
+
 #endif
 bool inLooping = false;
 void Protocol::loop()
@@ -1451,20 +1478,27 @@ void Protocol::loop()
     inLooping = true;
     if (!inited)
         begin();
-#ifndef BASIC
+
+#ifdef SERIALCMD
     lerSerial();
 #endif
+
 #ifdef TELNET
     telnet.loop(); // se estive AP, pode conectar por telnet ou pelo browser.
 #endif
-    eventLoop();
 
+#ifndef NO_LOOP
+    eventLoop();
+#endif
+
+#ifdef DRIVERS_ENABLED
     getDrivers()->loop();
+#endif
 #ifndef NO_API
     getApiDrivers().loop();
 #endif
 #ifndef ARDUINO_AVR
-#ifndef BASIC
+#ifdef DEEPSLEEP
     const int sleep = config["sleep"].as<String>().toInt();
     if (sleep > 0 && millis() > sleeptmp)
     {
