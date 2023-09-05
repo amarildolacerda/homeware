@@ -1458,7 +1458,7 @@ void lerSerial()
         {
             String rsp = protocol->doCommand(cmd);
             if (!rsp.startsWith("invalid"))
-                protocol->debug("SER: " + rsp);
+                protocol->debugf("SER: %s\r\n" , rsp);
         }
 #ifndef ARDUINO_AVR
 
