@@ -31,8 +31,6 @@ Utilizar os comandos TELNET para fazer as configurações inciais do dispositivo
  *   gpio [pin] set [n]
  *   pwm [pin] set [value] timeout [x] // gera um pulso pwm por um tempo>0 (timeout=0, deixa ligado). Value=0: desliga e maior liga/timeout
  *   set interval 500
- *   set adc_min 511
- *   set adc_max 512
  *   set sleep 60 (estabele 60s para deepsleep - depende de conectar RST ao D0)
  *   gpio [pin] timer 60000 // duração para a ação antes de desligar de 60000s ( valor==0 - modo não temporizado)
  *   gpio [pin] interval 1000 // entre "timer" para uma ação (ex: led piscando);
