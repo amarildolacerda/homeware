@@ -1457,8 +1457,8 @@ void lerSerial()
         if (validos.indexOf(r[0]) > -1)
         {
             String rsp = protocol->doCommand(cmd);
-            if (!rsp.startsWith("invalid"))
-                protocol->debugf("SER: %s\r\n" , rsp);
+            // if (!rsp.startsWith("invalid"))
+            protocol->debugf("SER: %s\r\n", rsp);
         }
 #ifndef ARDUINO_AVR
 
@@ -1491,7 +1491,7 @@ void Protocol::loop()
     eventLoop();
 #endif
 
-#ifdef DRIVERS_ENABLED
+#ifndef NO_DRIVERS
     getDrivers()->loop();
 #endif
 #ifndef NO_API
