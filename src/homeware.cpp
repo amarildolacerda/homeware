@@ -74,7 +74,7 @@ void Homeware::afterBegin()
 
 #ifdef OTA
     apis += "OTA,";
-    ElegantOTA.setID(hostname.c_str());
+    ElegantOTA.setID(hostname.c_str(), config["board"].as<String>().c_str() );
     ElegantOTA.begin(server);
 #endif
 
