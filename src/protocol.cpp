@@ -1351,14 +1351,22 @@ String Protocol::doCommand(String command)
         else if (cmd[2] == "mode")
         {
 #ifndef ARDUINO_AVR
-
-            if (resources.indexOf(cmd[3]) > -1)
+            if (cmd[3] == "none")
             {
-                initPinMode(pin, cmd[3]);
+                // getDrivers()->deleteByPin(pin);
+                config["mode"].remove(spin);
                 return "OK";
             }
             else
-                return "driver indisponivel";
+            {
+                if (resources.indexOf(cmd[3]) > -1)
+                {
+                    initPinMode(pin, cmd[3]);
+                    return "OK";
+                }
+                else
+                    return "driver indisponivel";
+            }
 #else
             initPinMode(pin, cmd[3]);
             return "OK";
