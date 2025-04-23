@@ -114,7 +114,7 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["host"].as<String>();
     }
-    Serial.printf("ID: %s\r\n",hostname);
+    Serial.printf("ID: %s\r\n",hostname.c_str());
     setupPins();
 }
 
