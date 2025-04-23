@@ -48,6 +48,7 @@ public:
     bool inited = false;
 
     void setup();
+    void begin();
     virtual void prepare();
 #ifdef TELNET
     ESPTelnet telnet;
@@ -164,7 +165,6 @@ protected:
 
 private:
     DynamicJsonDocument baseConfig();
-    void begin();
 #ifdef TELNET
     void setupTelnet();
 #endif
