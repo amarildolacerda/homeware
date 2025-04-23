@@ -172,7 +172,7 @@ bool MqttClientDriver::send(const char *subtopic, const char *payload)
         {
             lastAlive = millis();
             char topic[128];
-            sprintf(topic, "%s/%s%s\0", prefix.c_str(), name.c_str(), subtopic);
+            sprintf(topic, "%s/%s%s", prefix.c_str(), name.c_str(), subtopic);
             char msg[1024];
             sprintf(msg, "%s", payload);
             int n = strnlen(msg, 1024);
