@@ -2,8 +2,9 @@
 
 #include <Arduino.h>
 
-#define VERSION "23.09.06.23"
+#define VERSION "25.04.23.1"
 //---- opcoes de boards  -- configurado no platformio.ini
+#define MINIMAL
 // #define WEMO_D1
 // #define BOARD_ESP12S // LCTECHRELAY
 // #define ESP8285
@@ -14,6 +15,8 @@
 #ifndef SPIFFs
 #define LITTLEFs
 #endif
+
+
 
 #if defined(WEMO_D1)
 //----------------------
@@ -49,7 +52,7 @@
 #undef LITTLEFs
 #endif
 
-#if NO_WIFI
+#ifdef NO_WIFI
 #undef WIFI_ENABLED
 #endif
 
@@ -163,12 +166,17 @@
 #define MQTTClient
 #endif
 
-#ifdef MINIMAL
+#if defined(MINIMAL) 
+#define NO_WIFI
+#define NO_PORTAL
+#define NO_MQTT
 #undef DRIVERS_EX
+#undef DRIVERS_ENABLED
 #endif
 
 #ifdef NO_WIFI
 #define NO_MQTT
+#define NO_MQTTClient
 #define NO_PORTAL
 #define NO_WEBSOCKET
 #define NO_TELNET
@@ -189,6 +197,7 @@
 #ifdef NO_PORTAL
 #undef PORTAL
 #endif
+
 #ifdef NO_WEBSOCKET
 #undef WEBSOCKET
 #endif
@@ -214,6 +223,6 @@
 #define API_SIZE 12
 #endif
 
-#if defined(MQTTClient) || defined(MYSENSORS)
+#if defined(MQTTClient)
 #define MQTTClientEnabled
 #endif
