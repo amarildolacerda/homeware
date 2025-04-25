@@ -7,7 +7,7 @@
 #ifdef ESP32
 #//include "WiFi.h"
 #else
-//#include <ESP8266WiFi.h>
+// #include <ESP8266WiFi.h>
 #endif
 
 /// @brief Alexa é classe base para o driver de comunicação com a alexa, é um driver virtual a ser herdado;
@@ -34,7 +34,7 @@ class AlexaLight : public Alexa
 public:
     static void registerApi()
     {
-        registerApiDriver("onoff", create);
+        registerDriver("onoff", create);
     }
     static ApiDriver *create()
     {
@@ -57,7 +57,7 @@ public:
     void beforeSetup() override;
     static void registerApi()
     {
-        registerApiDriver("dim", create);
+        registerDriver("dim", create);
     }
     static ApiDriver *create()
     {

@@ -10,7 +10,7 @@ public:
     static void
     registerApi()
     {
-        registerApiDriver("mDNS", create, true);
+        registerDriver("mDNS", create, true);
     }
     static ApiDriver *create()
     {
@@ -18,8 +18,5 @@ public:
     }
     void setup() override;
     void loop() override;
-
-
-    
 };
 #endif

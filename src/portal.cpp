@@ -21,14 +21,17 @@
 #endif
 #include "chart.h"
 
-#ifdef TIMMED
+#ifdef TIME
 #include <SimpleTimer.h>
 SimpleTimer timer;
 #endif
 
 #ifdef WEBSOCKET
+#ifndef WIFI
+erro, WebSocket requer WIFI habilitado
+#endif
 #include <WebSocketsServer.h>
-WebSocketsServer webSocket = WebSocketsServer(81);
+          WebSocketsServer webSocket = WebSocketsServer(81);
 #endif
 
 #ifdef ESP32
@@ -59,7 +62,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     case WStype_CONNECTED:
 
         webSocket.sendTXT(num, "Connected ");
-        webSocket.sendTXT(num, homeware.resources);
+        webSocket.sendTXT(num, homeware.drivers);
         homeware.config["debug"] = "term";
 #ifdef DEEPSLEEP
         homeware.resetDeepSleep(60);
@@ -111,7 +114,7 @@ void Portal::loop()
 
 void wifiCallback()
 {
-    homeware.loop();
+    // homeware.loop();
 }
 
 #ifdef TIMMED
@@ -197,7 +200,7 @@ void Portal::autoConnect(const String slabel)
 #endif
         wifiManager.setConfigPortalTimeout(180);
         wifiManager.setDebugOutput(false);
-        wifiManager.setConfigWaitingcallback(wifiCallback);
+        // wifiManager.setConfigWaitingcallback(wifiCallback);
         wifiManager.setConnectTimeout(30);
         if (homeware.config["ap_ssid"] != "none")
         {

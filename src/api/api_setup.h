@@ -3,7 +3,7 @@
 
 #include "api.h"
 
-#ifndef NO_MDNS
+#ifdef MDNS
 #include "mdns_pub.h"
 #endif
 
@@ -21,16 +21,10 @@
 #include "api/mqtt_client.h"
 #endif
 
-#ifdef MYSENSORS
-#include "api/my_sensors.h"
-#endif
-#ifdef TTGO
-#include "api/ttgo_lora32_server.h"
-#endif
-
-void register_Api_setup()
+void register_ApiSetup()
 {
-#ifndef NO_MDNS
+    DEBUGF("enter register_ApiSetup()\r\n");
+#ifdef MDNS
     mDNSPubDriver::registerApi();
 #endif
 #ifdef SINRICPRO
@@ -49,10 +43,5 @@ void register_Api_setup()
     MqttClientDriver::registerApi();
 #endif
 
-#ifdef MYSENSORS
-    MySensorsDriver::registerApi();
-#endif
-#ifdef TTGO
- // TTGOLora32Server::registerApi();
-#endif
+    DEBUGF("end register_ApiSetup()\r\n---------------------------------\r\n");
 }

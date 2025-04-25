@@ -24,7 +24,7 @@ public:
     }
     static Driver *create()
     {
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("ADCDriver creating");
 #endif
         return new ADCDriver();
@@ -40,7 +40,7 @@ public:
             max = prot->getKey(sMax).toInt();
         triggerEnabled = true;
         active = true;
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("END: ADC setup()");
 #endif
     }
@@ -57,16 +57,16 @@ public:
         analogWrite(_pin, value);
         return value;
     }
-#ifndef BASIC    
+#ifndef BASIC
     int internalRead() override
     {
         return tmpAdc;
     }
-#endif    
+#endif
 
     void loop() override
     {
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("BEGIN: ADC loop()");
 #endif
 
@@ -75,7 +75,7 @@ public:
         if (eventState != st)
         {
             eventState = st;
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
             getProtocol()->debugf("ADC value: %i status: %i Min: %i Max: %i \r\n", tmpAdc, st, min, max);
 #endif
             actionEvent(tmpAdc);
@@ -89,13 +89,13 @@ public:
                 triggerOkState("ok", _pin, eventState == 0 ? HIGH : LOW);
             trgOkState = false;
         }
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("END: ADC loop()");
 #endif
     }
     int genStatus()
     {
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("BEGIN: ADC genStatus()");
 #endif
         int rt = eventState;
@@ -107,14 +107,14 @@ public:
             rt = HIGH;
         else
             rt = LOW;
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.printf("END: genStatus()->%i\r\n", rt);
 #endif
         return rt;
     }
     int getAdcState()
     {
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("BEGIN: getAdcState()");
 #endif
         if (millis() - ultimoLoop > interval)
@@ -122,7 +122,7 @@ public:
             tmpAdc = analogRead(_pin);
             ultimoLoop = millis();
         }
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.printf("END: getAdcState() (%i)\r\n", tmpAdc);
 #endif
         return genStatus();

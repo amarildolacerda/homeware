@@ -1,8 +1,6 @@
 #include "options.h"
-#ifdef ARDUINO_AVR
 
-#else
-
+//----------------------------------------------------
 #include "homeware.h"
 #include "functions.h"
 
@@ -14,8 +12,9 @@
 #ifdef LITTLEFs
 #include <LittleFS.h>
 #else
-//#include <SPIFFS.h>
+// #include <SPIFFS.h>
 #endif
+//----------------------------------------------------
 
 #include <Arduino.h>
 
@@ -29,9 +28,7 @@
 #include <ESP8266WiFi.h>
 #endif
 
-
 #include "api.h"
-
 
 void linha()
 {
@@ -62,7 +59,6 @@ void Homeware::setupServer()
             homeware.server->send(200, "application/json", "{\"result\":" + rt + "}");
             return;
         } });
-
 }
 #endif
 
@@ -74,12 +70,12 @@ void Homeware::afterBegin()
 
 #ifdef OTA
     apis += "OTA,";
-    ElegantOTA.setID(hostname.c_str(), config["board"].as<String>().c_str() );
+    ElegantOTA.setID(hostname.c_str()); //, config["board"].as<String>().c_str() );
     ElegantOTA.begin(server);
 #endif
 
-#ifndef NO_PORTAL
-   server->begin();
+#ifdef PORTAL
+    server->begin();
 #endif
 
 #ifdef DEEPSLEEP
@@ -90,9 +86,11 @@ void Homeware::afterBegin()
 
 void Homeware::prepare()
 {
-    Protocol::prepare();
+    DEBUGF("Homeware::prepare()\r\n");
+    Protocol::instance()->prepare();
     defaultConfig();
     restoreConfig();
+    DEBUGF("Homeware::prepare() end\r\n");
 }
 
 #ifdef ESP32
@@ -102,6 +100,8 @@ void Homeware::setup(WebServer *externalServer)
 void Homeware::setup(ESP8266WebServer *externalServer)
 #endif
 {
+    // register_drivers();
+    DEBUGF("Homeware::setup()\r\n");
     setServer(externalServer);
 
     Protocol::setup();
@@ -114,16 +114,15 @@ void Homeware::setup(ESP8266WebServer *externalServer)
     {
         hostname = config["host"].as<String>();
     }
-    Serial.printf("ID: %s\r\n",hostname.c_str());
     setupPins();
+    DEBUGF("Homeware::setup() end\r\n");
 }
-
 
 void Homeware::resetWiFi()
 {
-#ifdef DEBUG_ON
-   Serial.println("resetWiFi");
-#endif
+
+    DEBUGF("ResetingWiFi");
+
 #ifndef NO_WM
     HomewareWiFiManager wifiManager;
 #endif
@@ -137,6 +136,7 @@ void Homeware::resetWiFi()
     saveConfig();
     reset();
     delay(1000);
+    DEBUGF("WiFi Reseted\r\n");
 }
 
 void Homeware::reset()
@@ -161,7 +161,6 @@ uint32_t Homeware::getChipId()
 }
 #endif
 
-
 String IPAddressToString(const IPAddress x)
 {
     char ip[20];
@@ -185,5 +184,4 @@ Homeware homeware;
 WebServer server;
 #else
 ESP8266WebServer server;
-#endif
 #endif

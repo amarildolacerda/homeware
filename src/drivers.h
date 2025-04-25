@@ -40,7 +40,7 @@ public:
     virtual void updateTimeout(const int pin)
     {
         // le timer count
-        Protocol *prot = getInstanceOfProtocol();
+        Protocol *prot = Protocol::instance();
         String sPin = (String)pin;
         if (prot->getTimers().containsKey(sPin))
         {
@@ -79,8 +79,8 @@ public:
     virtual void setup()
     {
 #ifndef ARDUINO_AVR
-        if (getProtocol()->resources.indexOf(_mode) < 0)
-            getProtocol()->resources += _mode + ",";
+        if (getProtocol()->drivers.indexOf(_mode) < 0)
+            getProtocol()->drivers += _mode + ",";
 #endif
     };
     virtual void loop(){};
@@ -97,7 +97,7 @@ public:
 #endif    
     Protocol *getProtocol()
     {
-        return getInstanceOfProtocol();
+        return Protocol::instance();
     }
     virtual int writePin(const int value)
     {

@@ -19,7 +19,7 @@ void registerSinricApi()
     DoorbellSinricCloud::registerApi();
     TemperatureSinricCloud::registerApi();
 
-    getInstanceOfProtocol()->resources += "SINRIC,";
+    getInstanceOfProtocol()->drivers += "SINRIC,";
 }
 
 int SinricCloud::findSinricPin(String id)
@@ -73,7 +73,7 @@ void SinricCloud::initSinric()
                                  { Serial.printf("Disconnected from SinricPro\r\n"); });
         SinricPro.begin(prot->config["app_key"], prot->config["app_secret"]);
 
-        SinricPro.restoreDeviceStates(true);        
+        SinricPro.restoreDeviceStates(true);
         sinricLoaded = true;
 #ifdef DEBUG_API
         Serial.println("END: InitSinric() OK ");
@@ -210,12 +210,15 @@ void SinricCloud::loop()
 #ifdef DEBUG_API
         Serial.println("BEGIN: Sinric loop() ");
 #endif
-try{
-        SinricPro.handle();
-} catch(char *e){
-    //
-    Serial.println("ERRO SINRIC Handle()");
-}
+        try
+        {
+            SinricPro.handle();
+        }
+        catch (char *e)
+        {
+            //
+            Serial.println("ERRO SINRIC Handle()");
+        }
 #ifdef DEBUG_API
         Serial.println("END: Sinric loop() ");
 #endif

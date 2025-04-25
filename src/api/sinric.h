@@ -27,8 +27,8 @@ class MotionSinricCloud : public SinricCloud
 public:
     static void registerApi()
     {
-        registerApiDriver("motion", create);
-        registerApiDriver("alarm", create);
+        registerDriver("motion", create);
+        registerDriver("alarm", create);
     }
     static ApiDriver *create()
     {
@@ -46,7 +46,7 @@ public:
     void changed(const int pin, const long value) override;
     static void registerApi()
     {
-        registerApiDriver("doorbell", create);
+        registerDriver("doorbell", create);
     }
     static ApiDriver *create()
     {
@@ -62,7 +62,7 @@ public:
     void changed(const int pin, const long value) override;
     static void registerApi()
     {
-        registerApiDriver("dht", create);
+        registerDriver("dht", create);
     }
     static ApiDriver *create()
     {

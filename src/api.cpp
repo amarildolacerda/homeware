@@ -9,14 +9,23 @@ ApiDrivers getApiDrivers()
     return apiDrivers;
 }
 
-void registerApiDriver(const String sensorType, ApiDriver *(*create)(), const bool autoInit)
+void registerDriver(const String sensorType, ApiDriver *(*create)(), const bool autoInit)
 {
+    DEBUGP("registerDriver(%s)\r\n", sensorType.c_str());
+    if (numClouds == API_SIZE)
+    {
+        Protocol::instance()->debugf("Erro: numero maximo de APIs atingido.");
+        DEBUGP("Erro: numero maximo de APIs atingido (%i).", numClouds);
+        return;
+    }
     apiDriverList[numClouds] = {autoInit, sensorType, create};
+    DEBUGP("Adicionado ApiDriverList[%i] = %s\r\n", numClouds, sensorType.c_str());
     numClouds++;
-    getInstanceOfProtocol()->apis += sensorType + ",";
+    Protocol::instance()->apis += sensorType + ",";
 }
 ApiDriver *createApiDriver(const String sensorType, const int pin, const bool autoCreate)
 {
+    DEBUGP("createApiDriver(%s,%i)\r\n", sensorType.c_str(), pin);
     for (ApiDriverPair drvCloud : apiDriverList)
         if (drvCloud.sensorType == sensorType && drvCloud.autoCreate == autoCreate)
         {
@@ -45,13 +54,14 @@ ApiDriver *ApiDrivers::getItem(int index)
 }
 void ApiDrivers::loop()
 {
+    DEBUGP("ApiDrivers::loop(%i)\r\n", apiDriversCount);
 #ifdef DEBUG_API
     Serial.printf("BEGIN: apidrivers.loop(%i) \r\n", apiDriversCount);
 #endif
     for (int i = 0; i < apiDriversCount; i++)
     {
         ApiDriver *drv = apiDriverItems[i];
-        if (drv )
+        if (drv)
         {
 #ifdef DEBUG_API
             Serial.printf("%s.loop()\r\n", drv->sensorType);
@@ -66,6 +76,7 @@ void ApiDrivers::loop()
 
 void ApiDrivers::add(ApiDriver *driver)
 {
+    DEBUGP("ApiDrivers::add(%s)\r\n", driver->sensorType.c_str());
     apiDriverItems[apiDriversCount++] = driver;
 #ifdef DEBUG_API
     Serial.println(apiDriverItems[0]->sensorType);
@@ -74,6 +85,7 @@ void ApiDrivers::add(ApiDriver *driver)
 
 ApiDriver *ApiDrivers::initPinSensor(const int pin, const String sensorType)
 {
+    DEBUGP("ApiDrivers::initPinSensor(%i,%s)\r\n", pin, sensorType.c_str());
     ApiDriver *drv = createApiDriver(sensorType, pin, false);
     if (drv)
     {
@@ -93,7 +105,7 @@ ApiDriver *ApiDrivers::initPinSensor(const int pin, const String sensorType)
 ApiDriver *ApiDrivers::findByPin(const int pin)
 {
 #ifdef DEBUG_API
-    Serial.printf("BEGIN: ApiDrivers::findByPin(%i)", pin);
+    DEBUGP("ApiDrivers::findByPin(%i)\r\n", pin);
 #endif
 
     for (auto *drv : apiDriverItems)
@@ -114,7 +126,7 @@ ApiDriver *ApiDrivers::findByPin(const int pin)
 ApiDriver *ApiDrivers::findByType(const String sensorType)
 {
 #ifdef DEBUG_API
-    Serial.printf("BEGIN: ApiDrivers::findByType(%s)", sensorType);
+    DEBUGP("ApiDrivers::findByType(%s)\r\n", sensorType.c_str());
 #endif
     for (auto *drv : apiDriverItems)
         if (drv)

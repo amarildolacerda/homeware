@@ -9,6 +9,8 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <string.h>
+#include "protocol.h"
+
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -52,7 +54,7 @@ void callback(char *topic, byte *payload, unsigned int length)
             return;
         }
     }
-    String result = getInstanceOfProtocol()->doCommand(command);
+    String result = Protocol::instance()->doCommand(command);
     mqtt->send("/response", result.c_str());
 #if defined(MQTT_DEBUG_ON) or defined(DEBUG_ON)
     Serial.print(command);
@@ -65,7 +67,7 @@ void callback(char *topic, byte *payload, unsigned int length)
 
 void MqttClientDriver::init()
 {
-    DynamicJsonDocument config = getInstanceOfProtocol()->config;
+    DynamicJsonDocument config = Protocol::instance()->config;
     port = config["mqtt_port"].as<String>().toInt();
     host = config["mqtt_host"].as<String>();
     user = config["mqtt_user"].as<String>();
@@ -85,7 +87,7 @@ void MqttClientDriver::init()
 
 void MqttClientDriver::sendAlive()
 {
-    String rsp = getInstanceOfProtocol()->show();
+    String rsp = Protocol::instance()->show();
 #ifdef MQTT_DEBUG_ON
     Serial.println(rsp);
 #endif

@@ -7,10 +7,11 @@
 #else
 #include <ESP8266mDNS.h>
 #endif
+#include "protocol.h"
 
 void mDNSPubDriver::setup()
 {
-    MDNS.begin(getInstanceOfProtocol()->hostname);
+    MDNS.begin(Protocol::instance()->hostname);
     MDNS.addService("http", "tcp", 80);
 }
 void mDNSPubDriver::loop()

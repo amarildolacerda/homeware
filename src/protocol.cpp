@@ -17,9 +17,12 @@ unsigned int timeoutDeepSleep = 1000;
 #endif
 
 #include "drivers.h"
-#include "drivers/drivers_setup.h"
 
-#ifndef NO_API
+#ifdef DRIVERS
+#include "drivers/drivers_setup.h"
+#endif
+
+#ifdef API
 #include "api/api_setup.h"
 #include "api.h"
 #endif
@@ -28,11 +31,20 @@ unsigned int timeoutDeepSleep = 1000;
 #include "api/mqtt_client.h"
 #endif
 
-Protocol *protocol;
+Protocol *protocol = new Protocol();
+Protocol *getProtocol()
+{
+    return protocol;
+}
+
+Protocol *Protocol::instance()
+{
+    return protocol;
+}
 
 void Protocol::actionEvent(const char *txt)
 {
-#if defined(MQTTClientEnabled)
+#if defined(MQTTClient)
     ApiDriver *drv = getApiDrivers().findByType("mqtt");
     if (drv)
     {
@@ -53,11 +65,6 @@ void Protocol::debugf(const char *format, ...)
     debug(buffer);
 }
 
-Protocol *getInstanceOfProtocol()
-{
-    return protocol;
-}
-
 #ifndef ARDUINO_AVR
 void Protocol::reset()
 {
@@ -69,22 +76,6 @@ JsonObject Protocol::getTrigger()
 {
     return config["trigger"].as<JsonObject>();
 }
-#ifndef ARDUINO_AVR
-#ifdef SENSORS
-JsonObject Protocol::getDevices()
-{
-    return config["device"].as<JsonObject>();
-}
-JsonObject Protocol::getSensors()
-{
-    return config["sensor"].as<JsonObject>();
-}
-JsonObject Protocol::getDefaults()
-{
-    return config["default"].as<JsonObject>();
-}
-#endif
-#endif
 
 JsonObject Protocol::getMode()
 {
@@ -133,19 +124,17 @@ void Protocol::initPinMode(int pin, const String m)
         drv->setTriggerOkState(driverOkCallbackEvent);
 #endif
     }
-#ifdef DEBUG_DRV
-    Serial.print("DRV: ");
-    Serial.printf("%i is %s - ", pin, m);
-#endif
+    DEBUGP("DRV: %i", pin);
+    DEBUGP("  is %s", m.c_str());
     JsonObject mode = getMode();
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
     if (!mode)
-        Serial.println("não inicializou o config");
+        DEBUGF("não inicializou o config");
     else
 #endif
         mode[String(pin)] = m;
-#ifdef DEBUG_DRV
-    Serial.println("OK");
+#ifdef DEBUG_API
+    DEBUGF("OK");
 #endif
 }
 
@@ -224,7 +213,7 @@ bool Protocol::pinValueChanged(const int pin, const int newValue, bool exectrigg
     {
         docPinValues[String(pin)] = newValue;
         getDrivers()->changed(pin, newValue);
-#ifndef NO_API
+#ifdef API
         getApiDrivers().changed(pin, newValue);
 #endif
         if (initedValues)
@@ -461,9 +450,7 @@ String Protocol::getStatus()
 #endif
 
 #ifndef ARDUINO_AVR
-#ifndef BASIC
 const String optionStable[] = {"monostable", "monostableNC", "bistable", "bistableNC"};
-#endif
 String Protocol::showGpio()
 {
     String r = "[";
@@ -484,11 +471,7 @@ String Protocol::showGpio()
             s += ", 'trigmode':'";
             JsonObject stab = getStable();
             String st = stab[sPin].as<String>();
-#ifndef BASIC
-            s += optionStable[st.toInt()];
-#else
             s += st;
-#endif
             s += "'";
         }
 #ifndef BASIC
@@ -514,8 +497,11 @@ String Protocol::showGpio()
 
 void Protocol::setupPins()
 {
-#ifndef NO_API
-    register_Api_setup();
+#ifdef DRIVERS
+    drivers_register();
+#endif
+#ifdef API
+    register_ApiSetup();
     getApiDrivers().afterCreate();
 #endif
     JsonObject mode = config["mode"];
@@ -524,7 +510,7 @@ void Protocol::setupPins()
         int pin = String(k.key().c_str()).toInt();
         initPinMode(pin, k.value().as<String>());
     }
-#if !(defined(ARDUINO_AVR) || defined(BASIC))
+#if !(defined(ARDUINO_AVR))
     debug("Registrando os drivers: ");
 #ifdef ESP8266
     analogWriteRange(256);
@@ -534,28 +520,8 @@ void Protocol::setupPins()
 
 #ifndef ARDUINO_AVR
 
-#ifdef SENSORS
-    for (JsonPair k : getDefaults())
-    {
-        writePin(String(k.key().c_str()).toInt(), k.value().as<String>().toInt());
-    }
-#endif
-
     /// APIs externas
-#ifndef NO_API
-
-#ifdef SENSORS
-    JsonObject sensores = getDevices();
-    for (JsonPair k : sensores)
-    {
-        // init sensor, set pins e setup();
-        getApiDrivers().initPinSensor(String(k.key().c_str()).toInt(), k.value().as<String>());
-    }
-    getApiDrivers().afterSetup();
-#endif
-
-#endif
-#if !(defined(ARDUINO_AVR) || defined(BASIC))
+#if !(defined(ARDUINO_AVR))
     debugln("OK");
 #endif
 #endif
@@ -624,7 +590,7 @@ char HELP[] PROGMEM =
     "set gus_min 50\r\n"
     "set gus_max 150\r\n"
 #endif
-#ifndef NO_DRV_ADC
+#ifndef DRV_ADC
     "set adc_min 511\r\n"
     "set adc_max 512\r\n"
 #endif
@@ -669,22 +635,22 @@ bool Protocol::readFile(String filename, char *buffer, size_t maxLen)
 
 void Protocol::driverCallbackEvent(String mode, int pin, int value)
 {
-#ifdef DEBUG_DRV
-    getInstanceOfProtocol()->debugf("callback: %s(%i,%i)\r\n", mode.c_str(), pin, value);
+#ifdef DEBUG_API
+    Protocol::instance()->debugf("callback: %s(%i,%i)\r\n", mode.c_str(), pin, value);
 #endif
-    getInstanceOfProtocol()->checkTrigger(pin, value);
+    protocol->checkTrigger(pin, value);
 }
 void Protocol::driverOkCallbackEvent(String mode, int pin, int value)
 {
     Driver *drv = getDrivers()->findByMode(mode);
     if (drv)
     {
-#if defined(DEBUG_DRV)
-        Serial.printf("driverOkCallback %s: %i set %i\r\n", mode, drv->getPin(), value);
+#if defined(DEBUG_API)
+        // Serial.printf("driverOkCallback %s: %i set %i\r\n", mode, pin, value);
 #endif
         drv->writePin(value);
     }
-#if defined(DEBUG_DRV)
+#if defined(DEBUG_API)
     else
     {
         Serial.println(" nao encotrei.");
@@ -715,26 +681,27 @@ void Protocol::prepare()
         Serial.println("FS mount failed");
         reset();
     }
-
-    protocol = this;
-    drivers_register();
 }
 
 void Protocol::setup()
 {
+    DEBUGF("enter Protocol::setup()\r\n");
 #ifndef ARDUINO_AVR
     afterSetup();
 #endif
+    DEBUGF("end Protocol::setup()\r\n");
 }
 
 #ifndef ARDUINO_AVR
 
 void Protocol::afterConfigChanged()
 {
+    debugf("init afterConfigChanged()");
     getDrivers()->reload(); // mudou as configurações, recarregar os parametros;
-#ifndef NO_API
+#ifdef API
     getApiDrivers().reload();
 #endif
+    debugf("end afterConfigChanged()");
 }
 
 String Protocol::restoreConfig()
@@ -784,6 +751,7 @@ String Protocol::restoreConfig()
     Serial.println("");
 #endif
     afterConfigChanged();
+    DEBUGP("restoreConfig() %s\r\n-------------------\r\n", rt.c_str());
 #ifdef BASIC
     return "OK";
 #else
@@ -821,7 +789,7 @@ DynamicJsonDocument Protocol::baseConfig()
     config.createNestedObject("scene_triggers");
 #endif
 
-#ifndef NO_DRV_ADC
+#ifdef DRV_ADC
     config["adc_min"] = "125";
     config["adc_max"] = "126";
 #endif
@@ -911,13 +879,13 @@ void Protocol::begin()
 #endif
 #ifndef ARDUINO_AVR
     afterBegin();
-    debug("Resources: ");
-    debug(resources);
+    debug("drivers: ");
+    debug(drivers);
     debug(" APIs: ");
     debugln(apis);
 #endif
     inited = true;
-#ifdef WIFI_ENABLED
+#ifdef WIFI
     Serial.print("Memória livre: ");
     Serial.println(ESP.getFreeHeap());
     Serial.printf("IP: %s\r\n", localIP().c_str());
@@ -1118,8 +1086,8 @@ String Protocol::doCommand(String command)
 
             Serial.println("cmd: " + command);
 
-            if (cmd[1] == "resources")
-                return "{'resources':'" + resources + "', 'apis': '" + apis + "'}";
+            if (cmd[1] == "drivers")
+                return "{'Drivers':'" + drivers + "', 'APIs': '" + apis + "'}";
             else if (cmd[1] == "status")
             {
                 return getStatus();
@@ -1359,7 +1327,7 @@ String Protocol::doCommand(String command)
             }
             else
             {
-                if (resources.indexOf(cmd[3]) > -1)
+                if (drivers.indexOf(cmd[3]) > -1)
                 {
                     initPinMode(pin, cmd[3]);
                     return "OK";
@@ -1487,6 +1455,10 @@ void Protocol::loop()
     if (!inited)
         begin();
 
+#ifdef DEBUG_LOOP
+    DEBUGF("Protocol::loop()");
+#endif
+
 #ifdef SERIALCMD
     lerSerial();
 #endif
@@ -1499,10 +1471,10 @@ void Protocol::loop()
     eventLoop();
 #endif
 
-#ifndef NO_DRIVERS
+#ifndef DRIVERS
     getDrivers()->loop();
 #endif
-#ifndef NO_API
+#ifndef API
     getApiDrivers().loop();
 #endif
 #ifndef ARDUINO_AVR

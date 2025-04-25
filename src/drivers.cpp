@@ -12,11 +12,16 @@ ModeDriverPair modeDriverList[DRIVERS_SIZE];
 int numModes = 0;
 void registerDriverMode(String mode, Driver *(*create)())
 {
+    if (numModes == DRIVERS_SIZE)
+    {
+        Protocol::instance()->debugf("Erro: numero maximo de Drivers atingido.");
+        DEBUGP("Erro: numero maximo de Drivers atingido (%i).", numModes);
+        return;
+    }
     modeDriverList[numModes] = {mode, create};
+    DEBUGP("Adicionado DriverModeList[%i] = %s\r\n", numModes, mode.c_str());
     numModes++;
-#ifndef ARDUINO_AVR
-    getInstanceOfProtocol()->resources += mode + ",";
-#endif
+    Protocol::instance()->drivers += mode + ",";
 }
 
 Driver *createByDriverMode(const String mode, const int pin)
@@ -38,6 +43,8 @@ Driver *createByDriverMode(const String mode, const int pin)
 
 Driver *Drivers::initPinMode(const String mode, const int pin)
 {
+    DEBUGP("Drivers::initPinMode(%s,%i)\r\n", mode.c_str(), pin);
+
     Driver *old = findByPin(pin);
     if (old && old->_mode == mode)
         return old;
@@ -52,5 +59,6 @@ Driver *Drivers::initPinMode(const String mode, const int pin)
 
 void Drivers::add(Driver *driver)
 {
+    DEBUGP("Drivers::add(%s)\r\n", driver->_mode.c_str());
     items[driversCount++] = driver;
 }

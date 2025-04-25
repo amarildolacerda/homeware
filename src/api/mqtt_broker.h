@@ -29,7 +29,7 @@ private:
 public:
     static void registerApi()
     {
-        registerApiDriver("mqttd", create, true);
+        registerDriver("mqttd", create, true);
     }
     static ApiDriver *create()
     {

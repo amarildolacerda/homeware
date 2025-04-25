@@ -16,13 +16,13 @@ public:
     virtual void afterCreate() {}
     virtual void afterSetup() {}
     virtual void changed(const int pin, const long value) {}
-    virtual void changed(const String value){};
+    virtual void changed(const String value) {};
 
     static Protocol *getProtocol()
     {
-        return getInstanceOfProtocol();
+        return Protocol::instance();
     }
-    virtual void reload(){};
+    virtual void reload() {};
 
 #ifdef DEBUG_API
     String toString()
@@ -41,7 +41,7 @@ struct ApiDriverPair
     ApiDriver *(*create)();
 };
 
-void registerApiDriver(const String sensorType, ApiDriver *(*create)(), const bool autoInit = false);
+void registerDriver(const String sensorType, ApiDriver *(*create)(), const bool autoInit = false);
 ApiDriver *createApiDriver(const String sensorType, const int pin, const bool autoCreate = false);
 
 class ApiDrivers

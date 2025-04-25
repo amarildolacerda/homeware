@@ -24,7 +24,7 @@ public:
     static void
     registerApi()
     {
-        registerApiDriver("mqtt", create, true);
+        registerDriver("mqtt", create, true);
     }
     static ApiDriver *create()
     {
@@ -34,7 +34,7 @@ public:
     {
         clientId = String(getChipId(), HEX);
     }
-    bool isConnected(bool force=false);
+    bool isConnected(bool force = false);
     void setup() override;
     void loop() override;
     bool send(const char *subtopic, const char *payload);
@@ -42,8 +42,8 @@ public:
     bool isEnabled();
     void sendAlive();
     void subscribes();
-    void changed(const String value)override;
-    void reload()override;
+    void changed(const String value) override;
+    void reload() override;
 };
 
 MqttClientDriver *getMqtt();

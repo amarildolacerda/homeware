@@ -3,8 +3,6 @@
 #include <BLEDevice.h>
 #include "api.h"
 
-
-
 // TODO: nao concluido teste nem implementacao
 
 class BLEServer : public ApiDriver
@@ -19,7 +17,7 @@ private:
 public:
     static void registerApi()
     {
-        registerApiDriver("ble", create);
+        registerDriver("ble", create);
     }
     static ApiDriver *create()
     {

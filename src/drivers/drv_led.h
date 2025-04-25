@@ -22,7 +22,7 @@ public:
     virtual void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("AlternateDriver set OUTPUT mode");
 #endif
         Driver::setPinMode(pin);
@@ -37,9 +37,9 @@ public:
     }
     virtual int internalLoop(const int pin = 255)
     {
-#ifdef DEBUG_DRV
-        Serial.printf(" %s internalLoop %i stateOn %i status %i v1 %i\r\n", _mode, pin, stateOn, curStatus, v1);
-#endif
+        // #ifdef DEBUG_API
+        // Serial.printf(" %s internalLoop %i stateOn %i status %i v1 %i\r\n", _mode, pin, stateOn, curStatus, v1);
+        // #endif
         if (stateOn)
         {
             curPin = pin;
@@ -57,8 +57,8 @@ public:
                 {
                     curStatus = !curStatus;
                     digitalWrite(curPin, curStatus);
-#ifdef DEBUG_DRV
-                    Serial.printf("write %s status %i set %i\r\n", _mode, curPin, curStatus);
+#ifdef DEBUG_API
+                    Serial.printf("write %s status %i set %i\r\n", _mode.c_str(), curPin, curStatus);
 #endif
                     ultimoChanged = millis();
                 }
@@ -86,8 +86,8 @@ public:
     int writePin(const int value) override
     {
         stateOn = value > 0;
-#ifdef DEBUG_DRV
-        Serial.printf("write %s: %i set %i", getMode(), _pin, stateOn);
+#ifdef DEBUG_API
+        Serial.printf("write %i set %i", _pin, stateOn);
 #endif
         digitalWrite(_pin, stateOn);
         return stateOn;
@@ -109,7 +109,7 @@ public:
     virtual void setPinMode(int pin) override
     {
         pinMode(pin, OUTPUT);
-#ifdef DEBUG_DRV
+#ifdef DEBUG_API
         Serial.println("AlternateDriver set OUTPUT mode");
 #endif
         Driver::setPinMode(pin);
@@ -118,7 +118,7 @@ public:
         v1 = 500;
 #else
         interval = 1000;
-#endif        
+#endif
     }
     int writePin(const int value) override
     {

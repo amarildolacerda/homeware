@@ -23,7 +23,7 @@ void Alexa::init(Espalexa *alx)
     if (localAlexaInited)
         return;
     localalexa = alx;
-    localalexa->setFriendlyName(getInstanceOfProtocol()->config["label"]);
+    // localalexa->setFriendlyName(Protocol::instance()->config["label"]);
 
 #ifdef DEBUG_ALEXA
     Serial.println("Alexa::init()");
@@ -86,7 +86,7 @@ int Alexa::findAlexaPin(EspalexaDevice *d)
 
 String Alexa::getName()
 {
-    String sName = getInstanceOfProtocol()->config["label"];
+    String sName = Protocol::instance()->config["label"];
     sName += "-";
     sName += String(pin);
 #ifdef DEBUG_ALEXA
@@ -108,7 +108,7 @@ void AlexaLight::onoffChanged(EspalexaDevice *d)
 {
     bool value = d->getState();
     int pin = findAlexaPin(d);
-    getInstanceOfProtocol()->writePin(pin, (value) ? HIGH : LOW);
+    Protocol::instance()->writePin(pin, (value) ? HIGH : LOW);
 }
 void AlexaLight::changed(const int pin, const long value)
 {

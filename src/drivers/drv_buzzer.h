@@ -59,7 +59,7 @@ public:
             tone(_pin, frequencia, duracao);                          // gera o som
             if (position >= 180)
                 position = 1;
-            // #ifdef DEBUG_DRV
+            // #ifdef DEBUG_API
             Serial.printf("tone %i %i, %i\r\n", position, frequencia, duracao);
             // #endif
             lastOne = millis();

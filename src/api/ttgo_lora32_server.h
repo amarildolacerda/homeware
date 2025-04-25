@@ -46,7 +46,7 @@ public:
     bool active = false;
     static void registerApi()
     {
-        registerApiDriver("lora", create, true);
+        registerDriver("lora", create, true);
     }
     static ApiDriver *create()
     {

@@ -17,7 +17,7 @@ public:
 #ifndef NO_WM
     HomewareWiFiManager wifiManager = HomewareWiFiManager();
 #endif
-    ESP8266WebServer *server;
+    ESP8266WebServer *server = nullptr;
     void setup(ESP8266WebServer *externalServer = nullptr);
 #endif
     String label;

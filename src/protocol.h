@@ -27,6 +27,8 @@ class Protocol
 {
 private:
 public:
+    static Protocol *instance();
+
     // size_t driversCount = 0;
 #ifndef ARDUINO_AVR
 
@@ -37,7 +39,7 @@ public:
     bool inTelnet = false;
 #endif
     unsigned int ledTimeChanged = 5000;
-    String resources = "";
+    String drivers = "";
     String apis = "";
 #endif
     static constexpr int SIZE_BUFFER = 1024;
@@ -66,26 +68,17 @@ public:
 
 #ifndef ARDUINO_AVR
 
-#ifdef SENSORS
-    JsonObject getDevices();
-    JsonObject getSensors();
-    JsonObject getDefaults();
-#endif
-
 #ifdef PWM
     virtual int writePWM(const int pin, const int value, const int timeout = 0);
 #endif
 
-#ifdef DEEPSLEEP    
+#ifdef DEEPSLEEP
     virtual void resetDeepSleep(const unsigned int t = 10);
 #endif
     JsonObject getTimers();
     JsonObject getIntervals();
-
 #endif
 
-#ifdef SEM_USO
-#endif
     virtual int findPinByMode(String mode);
 
     virtual String doCommand(String command);
@@ -147,11 +140,8 @@ protected:
 #ifdef DEEPSLEEP
     void doSleep(const int tempo);
 #endif
-#ifndef BASIC
     virtual void afterLoop();
     String getStatus();
-
-#endif
     String restoreConfig();
     void defaultConfig();
     String saveConfig();
@@ -171,7 +161,7 @@ private:
     void eventLoop();
 };
 
-Protocol *getInstanceOfProtocol();
+Protocol *getProtocol();
 
 //==================== end
 #endif
