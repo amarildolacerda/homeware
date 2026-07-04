@@ -3,9 +3,8 @@ build/
 __pycache__/
 .venv/
 venv/
-homeassistant/config/.storage/
-homeassistant/config/*.db
-homeassistant/config/*.log*
-homeassistant/config/deps/
-homeassistant/config/.cloud/
-homeassistant/config/tts/
+.git_token
+mosquitto/
+data/
+.git_token
+.pio

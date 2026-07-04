@@ -25,8 +25,8 @@ services:
       - /home/kzuca/homeassistant/config:/config
 
   bridge:
-    build: ./bridge
-    container_name: bridge
+    build: ./home_bridge
+    container_name: home-bridge
     restart: unless-stopped
     networks:
       - bridge
@@ -34,7 +34,7 @@ services:
       - "80:80"
       - "5000:5000/udp"
     volumes:
-      - bridge_data:/data/bridge
+      - bridge_data:/data/home_bridge
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: "1883"
