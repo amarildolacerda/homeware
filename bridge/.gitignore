@@ -1,0 +1,5 @@
+data/
+homeassistant/config/
+__pycache__/
+*.pyc
+.git_token
