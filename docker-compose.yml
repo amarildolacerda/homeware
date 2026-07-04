@@ -4,7 +4,7 @@ services:
     container_name: mosquitto
     restart: unless-stopped
     networks:
-      - bridge
+      - homeware_bridge
     ports:
       - "1883:1883"
       - "9001:9001"
@@ -17,7 +17,7 @@ services:
     container_name: homeassistant
     restart: unless-stopped
     networks:
-      - bridge
+      - homeware_bridge
     ports:
       - "8123:8123"
     privileged: true
@@ -29,7 +29,7 @@ services:
     container_name: bridge
     restart: unless-stopped
     networks:
-      - bridge
+      - homeware_bridge
     ports:
       - "80:80"
       - "5000:5000/udp"
@@ -50,5 +50,5 @@ volumes:
   bridge_data:
 
 networks:
-  bridge:
+  homeware_bridge:
     driver: bridge
