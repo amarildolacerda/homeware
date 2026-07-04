@@ -4,12 +4,6 @@ __pycache__/
 .venv/
 venv/
 .git_token
-homeassistant/config/.storage/
-homeassistant/config/*.db
-homeassistant/config/*.log*
-homeassistant/config/deps/
-homeassistant/config/.cloud/
-homeassistant/config/tts/
 mosquitto/
 data/
 .git_token
