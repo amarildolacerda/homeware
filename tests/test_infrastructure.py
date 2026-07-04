@@ -4,16 +4,17 @@ import yaml
 
 
 PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+BRIDGE_DIR = os.path.join(PROJECT_ROOT, "bridge")
 
 
 def test_config_has_watchdog():
-    with open(os.path.join(PROJECT_ROOT, "config.yaml")) as f:
+    with open(os.path.join(BRIDGE_DIR, "config.yaml")) as f:
         cfg = yaml.safe_load(f)
     assert cfg.get("watchdog") is True, "config.yaml must have watchdog: true"
 
 
 def test_config_has_addons_map():
-    with open(os.path.join(PROJECT_ROOT, "config.yaml")) as f:
+    with open(os.path.join(BRIDGE_DIR, "config.yaml")) as f:
         cfg = yaml.safe_load(f)
     assert "map" in cfg, "config.yaml must have a map key"
     assert "addons:rw" in cfg["map"], "config.yaml map must include addons:rw"

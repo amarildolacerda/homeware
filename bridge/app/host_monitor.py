@@ -5,6 +5,8 @@ import logging
 import os
 import time
 
+from app.config import settings
+
 LOG = logging.getLogger(__name__)
 
 DISCOVERY_PREFIX = "homeassistant"
@@ -94,7 +96,7 @@ def _build_device_info() -> dict:
     return {
         "identifiers": [f"bridge_python_{DEVICE_ID}"],
         "name": DEVICE_NAME,
-        "sw_version": "bridge_python_v0.0.11",
+        "sw_version": f"bridge_python_{settings.version}",
         "manufacturer": "ESP-HA Bridge",
         "model": "host",
     }
