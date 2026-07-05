@@ -2,11 +2,13 @@
 set -e
 
 REPO_URL="${REPO_URL:-https://github.com/amarildolacerda/homeware.git}"
-REPO_BRANCH="${REPO_BRANCH:-dev}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/addons/bridge_python}"
-HTTP_PORT="${HTTP_PORT:-8080}"
+HTTP_PORT="${HTTP_PORT:-80}"
 MQTT_HOST="${MQTT_HOST:-localhost}"
 MQTT_PORT="${MQTT_PORT:-1883}"
+MQTT_USER="${MQTT_USER:-}"
+MQTT_PASS="${MQTT_PASS:-}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 
 usage() {
@@ -19,10 +21,12 @@ usage() {
     echo "  HTTP_PORT      Porta HTTP (default: $HTTP_PORT)"
     echo "  MQTT_HOST      Host MQTT (default: $MQTT_HOST)"
     echo "  MQTT_PORT      Porta MQTT (default: $MQTT_PORT)"
+    echo "  MQTT_USER      Usuario MQTT"
+    echo "  MQTT_PASS      Senha MQTT"
     echo ""
     echo "Exemplo:"
     echo "  curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/dev/bridge/install.sh | bash"
-    echo "  curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/dev/bridge/install.sh | MQTT_HOST=core-mosquitto HTTP_PORT=80 bash"
+    echo "  curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/dev/bridge/install.sh | MQTT_HOST=core-mosquitto MQTT_USER=kzuca MQTT_PASS=123 HTTP_PORT=80 bash"
     exit 1
 }
 
@@ -72,7 +76,7 @@ if pgrep -f "app.main" > /dev/null 2>&1; then
     sleep 2
 fi
 
-nohup env MQTT_HOST="$MQTT_HOST" MQTT_PORT="$MQTT_PORT" HTTP_PORT="$HTTP_PORT" LOG_LEVEL="$LOG_LEVEL" \
+nohup env MQTT_HOST="$MQTT_HOST" MQTT_PORT="$MQTT_PORT" MQTT_USER="$MQTT_USER" MQTT_PASS="$MQTT_PASS" HTTP_PORT="$HTTP_PORT" LOG_LEVEL="$LOG_LEVEL" \
     "$INSTALL_DIR/venv/bin/python" -m app.main \
     > "$INSTALL_DIR/bridge.log" 2>&1 &
 

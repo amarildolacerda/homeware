@@ -233,6 +233,19 @@ def create_app(registry: DeviceRegistry, ws_manager: WebSocketManager | None = N
         result = await do_git_pull()
         return JSONResponse(result, status_code=200 if result["success"] else 500)
 
+    @app.get("/api/settings")
+    async def get_settings():
+        from app.config import settings as s
+        return {"mqtt_host": s.mqtt_host, "mqtt_port": s.mqtt_port, "mqtt_user": s.mqtt_user}
+
+    @app.post("/api/settings")
+    async def post_settings(data: dict):
+        from app.config import save_settings
+        save_settings(data)
+        loop = asyncio.get_event_loop()
+        loop.call_later(1, os._exit, 0)
+        return {"status": "ok", "message": "config saved, restarting"}
+
     @app.get("/api/qrcode")
     async def qrcode():
         return {"service_name": "esp-bridge", "pop": ""}

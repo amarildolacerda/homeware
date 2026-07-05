@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/main/bridg
 Personalizando:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/main/bridge/install.sh | MQTT_HOST=core-mosquitto HTTP_PORT=80 bash
+curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/main/bridge/install.sh | MQTT_HOST=core-mosquitto MQTT_USER=seu_usuario MQTT_PASS=sua_senha HTTP_PORT=80 bash
 ```
 
 ### Raspberry Pi (sem curl)
