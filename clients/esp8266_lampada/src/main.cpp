@@ -204,7 +204,6 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             {
                 Serial.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
                 set_relay(cmd->command ? true : false);
-                s_last_espnow_send = 0;
             }
             break;
         }
@@ -381,6 +380,7 @@ static void set_relay(bool state)
     s_relay_state = state;
     digitalWrite(RELAY_PIN, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
+    s_last_espnow_send = 0;
 }
 
 static void toggle_relay(void)
