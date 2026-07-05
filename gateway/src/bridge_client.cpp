@@ -206,6 +206,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_GAS: return "gas";
         case SENSOR_TYPE_DHT_GAS: return "dht_gas";
         case SENSOR_TYPE_RAIN: return "rain";
+        case SENSOR_TYPE_ONOFF: return "onoff";
         case SENSOR_TYPE_TANK: return "tanque";
         default: return "unknown";
     }
@@ -280,6 +281,9 @@ bool bridge_client_send_state(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_TANK:
             doc["level_pct"] = sensor->state.tank.level_pct;
             doc["distance_cm"] = sensor->state.tank.distance_cm;
+            break;
+        case SENSOR_TYPE_ONOFF:
+            doc["power"] = (bool)sensor->state.onoff.state;
             break;
     }
     doc["battery"] = sensor->battery_pct;

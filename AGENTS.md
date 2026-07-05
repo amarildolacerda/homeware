@@ -48,8 +48,9 @@
 - `main` é estável e usado em produção — nunca commitar diretamente em `main`, os commits devem ser feito no dev
 - Quando o dev passa para produção (main), fazer uma tag ,  fazer um merge do dev para o main, ficando o main no mesmo ponto do dev,  criar um branch <main_xxx>
 
-- os dashboards devem ter uma url /docs para listar a api <swagger like>, se form um device manter enxuto para nao comprometer memoria - atualizar quando alteracoes na url forem implementadas/alteradas
+- os dashboards devem ter uma url /docs para listar a api <swagger like>, se for um device manter enxuto para nao comprometer memoria - atualizar quando alteracoes na url forem implementadas/alteradas
 - o dashboard precisa ser responsivo e tratar o loop para nao congelar a carga do browser
+- os arquivos fontes devem tentar organização separados por responsabilidade, tentar otimizar uso de memoria / PROGMEM nos ESP, deixando o main mais limpo, usar config.h para mapear configurações;
 
 ### Novos Clients
 1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações releventes ao cliente

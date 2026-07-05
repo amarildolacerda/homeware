@@ -7,3 +7,10 @@ venv/
 mosquitto/
 data/
 .pio
+
+.vscode/
+*.code-workspace
+.pio/
+venv/
+__pycache__/
+*.pyc

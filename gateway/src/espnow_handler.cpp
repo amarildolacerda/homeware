@@ -77,7 +77,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                              (req->sensor_type == SENSOR_TYPE_MOTION) ? "Movimento" :
                              (req->sensor_type == SENSOR_TYPE_GAS) ? "Gas" :
                              (req->sensor_type == SENSOR_TYPE_DHT_GAS) ? "DHT+Gas" :
-                             (req->sensor_type == SENSOR_TYPE_RAIN) ? "Chuva" : "Tanque",
+                             (req->sensor_type == SENSOR_TYPE_RAIN) ? "Chuva" :
+                             (req->sensor_type == SENSOR_TYPE_ONOFF) ? "Luz" : "Tanque",
                              i + 1);
                     s_pending_pairs[i].active = true;
                     Serial.printf("[ESP-NOW] Pair request queued from %s type=%d seq=%d slot=%d\n",

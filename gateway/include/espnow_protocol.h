@@ -27,6 +27,7 @@ typedef enum {
     SENSOR_TYPE_RAIN = 5,
     SENSOR_TYPE_TANK = 6,
     SENSOR_TYPE_DHT_GAS = 7,
+    SENSOR_TYPE_ONOFF = 8,
 } sensor_type_t;
 
 typedef struct __attribute__((packed)) {
@@ -77,6 +78,10 @@ typedef struct __attribute__((packed)) {
     uint16_t level_pct;
     uint16_t distance_cm;
 } payload_tank_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t state;
+} payload_onoff_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t msg_type;
