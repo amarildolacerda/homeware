@@ -1,0 +1,54 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    networks:
+      - bridge
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_config:/etc/mosquitto
+      - mosquitto_data:/var/lib/mosquitto
+
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    networks:
+      - bridge
+    ports:
+      - "8123:8123"
+    privileged: true
+    volumes:
+      - /home/kzuca/homeassistant/config:/config
+
+  bridge:
+    build: ./home_bridge
+    container_name: home-bridge
+    restart: unless-stopped
+    networks:
+      - bridge
+    ports:
+      - "80:80"
+      - "5000:5000/udp"
+    volumes:
+      - bridge_data:/data/home_bridge
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      HTTP_PORT: "80"
+      LOG_LEVEL: info
+      BRIDGE_IP: 192.168.1.73
+    depends_on:
+      - mosquitto
+
+volumes:
+  mosquitto_config:
+  mosquitto_data:
+  bridge_data:
+
+networks:
+  bridge:
+    driver: bridge
