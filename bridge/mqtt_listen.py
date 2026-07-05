@@ -19,7 +19,7 @@ def pretty(payload: str) -> str:
     except json.JSONDecodeError:
         return payload
 
-async def run(host: str, port: int, topic: str, seconds: int, pretty_print: bool, no_color: bool):
+async def run(host: str, port: int, topic: str, seconds: int, no_color: bool):
     import aiomqtt
 
     if seconds <= 0:
@@ -38,9 +38,7 @@ async def run(host: str, port: int, topic: str, seconds: int, pretty_print: bool
                     async with asyncio.timeout(seconds if seconds > 0 else None):
                         async for msg in client.messages:
                             elapsed = time.time() - start
-                            payload = msg.payload.decode(errors="replace")
-                            if pretty_print:
-                                payload = pretty(payload)
+                            payload = pretty(msg.payload.decode(errors="replace"))
                             if no_color:
                                 print(f"[{elapsed:6.1f}s] {msg.topic}: {payload}")
                             else:
@@ -61,21 +59,15 @@ def main():
     parser.add_argument("--host", default="localhost", help="Host MQTT")
     parser.add_argument("--port", type=int, default=1883, help="Porta MQTT")
     parser.add_argument("--topic", default="homeassistant/#", help="Topico ou pattern")
-    parser.add_argument("-s", "--seconds", type=int, default=0, help="Tempo de escuta (0=infinito)")
-    parser.add_argument("-i", "--interactive", action="store_true", help="Modo interativo (equivale a -s 0)")
-    parser.add_argument("-p", "--pretty", action="store_true", help="Pretty print JSON")
+    parser.add_argument("-s", "--seconds", type=int, default=0, help="Tempo de escuta (0=infinito, padrao)")
     parser.add_argument("-n", "--no-color", action="store_true", help="Sem cores no output")
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
     args = parser.parse_args()
 
-    seconds = args.seconds
-    if args.interactive:
-        seconds = 0
-
     try:
-        asyncio.run(run(args.host, args.port, args.topic, seconds, args.pretty, args.no_color))
+        asyncio.run(run(args.host, args.port, args.topic, args.seconds, args.no_color))
     except KeyboardInterrupt:
         print("\nInterrompido pelo usuario")
 
