@@ -43,12 +43,6 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 <div class="status-row"><span class="label">Uptime</span><span class="value" id="uptimeStatus">-</span></div>
 <div class="status-row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
 <div class="status-row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
-<div class="ota">
-<form id="otaForm" enctype="multipart/form-data" method="POST" action="/api/ota">
-<input type="file" name="firmware" accept=".bin" id="otaFile">
-<button type="submit">OTA</button>
-</form>
-</div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
 <script>
@@ -77,7 +71,6 @@ async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('l
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();btn.classList.toggle('on',d.state);relayStatus.textContent=d.state?'LIGADA':'DESLIGADA';
 }catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
-document.getElementById('otaForm').addEventListener('submit',function(e){if(!document.getElementById('otaFile').value){e.preventDefault();alert('Selecione um arquivo .bin')}});
 setInterval(fetchState,3000);fetchState();
 </script>
 </body>
