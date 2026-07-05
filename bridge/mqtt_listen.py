@@ -19,7 +19,7 @@ def pretty(payload: str) -> str:
     except json.JSONDecodeError:
         return payload
 
-async def run(host: str, port: int, topic: str, seconds: int, no_color: bool):
+async def run(host: str, port: int, topic: str, seconds: int, no_color: bool, username: str = "", password: str = ""):
     import aiomqtt
 
     if seconds <= 0:
@@ -28,8 +28,14 @@ async def run(host: str, port: int, topic: str, seconds: int, no_color: bool):
         print(f"Conectado ao MQTT {host}:{port}, topico '{topic}', tempo: {seconds}s")
     print("-" * 50)
 
+    kwargs = dict(hostname=host, port=port)
+    if username:
+        kwargs["username"] = username
+    if password:
+        kwargs["password"] = password
+
     try:
-        async with aiomqtt.Client(hostname=host, port=port) as client:
+        async with aiomqtt.Client(**kwargs) as client:
             await client.subscribe(topic)
             start = time.time()
             count = 0
@@ -60,6 +66,8 @@ def main():
     parser.add_argument("--port", type=int, default=1883, help="Porta MQTT")
     parser.add_argument("--topic", default="homeassistant/#", help="Topico ou pattern")
     parser.add_argument("-s", "--seconds", type=int, default=0, help="Tempo de escuta (0=infinito, padrao)")
+    parser.add_argument("-u", "--username", default="", help="Usuario MQTT")
+    parser.add_argument("-pw", "--password", default="", help="Senha MQTT")
     parser.add_argument("-n", "--no-color", action="store_true", help="Sem cores no output")
     if len(sys.argv) == 1:
         parser.print_help()
@@ -67,7 +75,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        asyncio.run(run(args.host, args.port, args.topic, args.seconds, args.no_color))
+        asyncio.run(run(args.host, args.port, args.topic, args.seconds, args.no_color, args.username, args.password))
     except KeyboardInterrupt:
         print("\nInterrompido pelo usuario")
 
