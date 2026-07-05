@@ -6,7 +6,7 @@ import tempfile
 
 INSTALL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_URL = "https://github.com/amarildolacerda/homeware.git"
-BRANCH = "main"
+BRANCH = "dev"
 
 async def git_pull() -> dict:
     tmp = None
