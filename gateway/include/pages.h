@@ -70,6 +70,8 @@ h1 { font-size:1.5rem; font-weight:600; }
 .form-group { margin-bottom:16px; }
 .form-group label { display:block; margin-bottom:6px; font-size:0.85rem; }
 .form-group input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#0b0f1a; color:var(--text); font-size:16px; }
+.row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:0.85rem; }
+.row:last-child { border-bottom:none; }
 @media (max-width:700px) {
     .header .btn-group { width:100%; }
     .header .btn-group .btn { flex:1; text-align:center; }
@@ -115,6 +117,36 @@ h1 { font-size:1.5rem; font-weight:600; }
         <h2>Sensores Virtuais</h2>
         <div id="sensors-grid" class="grid"><div class="loading">carregando</div></div>
     </div>
+
+    <div class="card">
+        <h2>Bridge</h2>
+        <div id="bridge-status">
+            <div class="row"><span class="label">Host</span><span class="value" id="bridge-host">--</span></div>
+            <div class="row"><span class="label">Porta</span><span class="value" id="bridge-port">--</span></div>
+            <div class="row"><span class="label">Status</span><span class="value" id="bridge-status-tag">--</span></div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="showBridgeModal()">Configurar Bridge</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="bridge-modal">
+    <div class="modal-content">
+        <h3>Configurar Bridge</h3>
+        <div class="form-group">
+            <label>IP do Bridge</label>
+            <input type="text" id="bridge-host-input" placeholder="Ex: 192.168.1.73" maxlength="64">
+        </div>
+        <div class="form-group">
+            <label>Porta</label>
+            <input type="number" id="bridge-port-input" placeholder="80" min="1" max="65535">
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="saveBridgeConfig()">Salvar</button>
+            <button class="btn btn-secondary" onclick="closeBridgeModal()">Cancelar</button>
+        </div>
+    </div>
 </div>
 
 <div class="modal" id="name-modal">
@@ -141,6 +173,8 @@ let pairingTimer = null;
 let namingSlot = -1;
 let s_pairingWindowSec = 180;
 let s_loadFailCount = 0;
+let s_loading = false;
+let s_pollTimer = null;
 
 async function api(path, opts={}) {
     const controller = new AbortController();
@@ -242,6 +276,8 @@ function renderState(s) {
 }
 
 async function loadData() {
+    if (s_loading) return;
+    s_loading = true;
     const grid = document.getElementById('sensors-grid');
     const wasEmpty = grid.querySelector('.loading, .empty');
     try {
@@ -253,11 +289,49 @@ async function loadData() {
         document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
         if (info.pairing_window_sec) s_pairingWindowSec = info.pairing_window_sec;
         renderSensors(sensors.map(s => (delete s.mac_bytes, s.mac_str = s.mac, s)));
+        document.getElementById('bridge-host').textContent = info.bridge_host || '--';
+        document.getElementById('bridge-port').textContent = info.bridge_port || '--';
+        document.getElementById('bridge-status-tag').innerHTML = info.bridge_discovered
+            ? '<span class="badge badge-online">ok</span>'
+            : '<span class="badge badge-offline">desconectado</span>';
     } catch (e) {
         s_loadFailCount++;
         if (wasEmpty) grid.innerHTML = '<div class="empty" style="color:var(--danger)">Falha ao carregar dados</div>';
         if (s_loadFailCount % 3 === 0) showToast('Erro ao carregar: '+e.message, true);
+    } finally {
+        s_loading = false;
     }
+}
+
+function schedulePoll() {
+    if (s_pollTimer) clearTimeout(s_pollTimer);
+    s_pollTimer = setTimeout(async () => {
+        await loadData();
+        schedulePoll();
+    }, 10000);
+}
+
+function showBridgeModal() {
+    document.getElementById('bridge-host-input').value = document.getElementById('bridge-host').textContent === '--' ? '' : document.getElementById('bridge-host').textContent;
+    document.getElementById('bridge-port-input').value = document.getElementById('bridge-port').textContent === '--' ? '80' : document.getElementById('bridge-port').textContent;
+    document.getElementById('bridge-modal').classList.add('show');
+    document.getElementById('bridge-host-input').focus();
+}
+
+function closeBridgeModal() {
+    document.getElementById('bridge-modal').classList.remove('show');
+}
+
+async function saveBridgeConfig() {
+    const host = document.getElementById('bridge-host-input').value.trim();
+    const port = parseInt(document.getElementById('bridge-port-input').value) || 80;
+    if (!host) { showToast('IP do bridge obrigatorio', true); return; }
+    try {
+        await api('/api/config/bridge', {method:'POST', body:JSON.stringify({host, port})});
+        showToast('Bridge configurado: ' + host + ':' + port);
+        closeBridgeModal();
+        loadData();
+    } catch (e) { showToast('Erro: '+e.message, true); }
 }
 
 function startPairingCountdown() {
@@ -345,13 +419,14 @@ async function removeSensor(slot) {
 }
 
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeNameModal();
+    if (e.key === 'Escape') { closeNameModal(); closeBridgeModal(); }
 });
 
 document.getElementById('name-modal').addEventListener('click', e => { if(e.target.id==='name-modal') closeNameModal(); });
+document.getElementById('bridge-modal').addEventListener('click', e => { if(e.target.id==='bridge-modal') closeBridgeModal(); });
 
 loadData();
-setInterval(loadData, 10000);
+schedulePoll();
 </script>
 </body>
 </html>

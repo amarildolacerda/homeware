@@ -23,44 +23,9 @@ class _UDPProtocol(asyncio.DatagramProtocol):
         self._discovery._handle_message(data, addr)
 
 
-def _get_default_gateway() -> str | None:
-    try:
-        with open("/proc/net/route") as f:
-            for line in f.readlines()[1:]:
-                parts = line.strip().split()
-                if len(parts) >= 3 and parts[1] == "00000000":
-                    gw_hex = parts[2]
-                    gw = ".".join(str(int(gw_hex[i:i+2], 16))
-                                  for i in range(6, -2, -2))
-                    if gw != "0.0.0.0":
-                        return gw
-    except Exception:
-        pass
-    return None
-
-
-def _get_local_ip() -> str:
-    gateway = _get_default_gateway()
-    targets = [("8.8.8.8", 53)]
-    if gateway:
-        targets.insert(0, (gateway, 80))
-    for target, port in targets:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(1)
-            s.connect((target, port))
-            ip = s.getsockname()[0]
-            s.close()
-            if ip and ip != "0.0.0.0":
-                return ip
-        except Exception:
-            continue
-    return "0.0.0.0"
-
-
 class UDPDiscovery:
     def __init__(self, bridge_ip: str = "", http_port: int = 80):
-        self._bridge_ip = bridge_ip or _get_local_ip()
+        self._bridge_ip = bridge_ip or "0.0.0.0"
         self._http_port = http_port
         self._discovered_ips: dict[str, tuple[str, float]] = {}
         self._running = False

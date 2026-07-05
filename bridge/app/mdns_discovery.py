@@ -19,8 +19,7 @@ class MDNSDiscovery:
     async def start(self):
         loop = asyncio.get_event_loop()
         self._zeroconf = await loop.run_in_executor(None, Zeroconf)
-        ip = self._bridge_ip or _get_local_ip()
-        ips = socket.gethostbyname_ex(socket.gethostname())[2] if not ip else [ip]
+        ips = [self._bridge_ip] if self._bridge_ip else socket.gethostbyname_ex(socket.gethostname())[2]
         server = socket.gethostname()
 
         self._service_info = ServiceInfo(
@@ -32,7 +31,7 @@ class MDNSDiscovery:
             server=f"{server}.local.",
         )
         await loop.run_in_executor(None, self._zeroconf.register_service, self._service_info)
-        LOG.info("mDNS service registered: %s (%s:%d)", SERVICE_NAME, ip, self._http_port)
+        LOG.info("mDNS service registered: %s (%s:%d)", SERVICE_NAME, ", ".join(ips), self._http_port)
 
     async def stop(self):
         if self._zeroconf and self._service_info:
@@ -40,15 +39,3 @@ class MDNSDiscovery:
             await loop.run_in_executor(None, self._zeroconf.unregister_service, self._service_info)
             await loop.run_in_executor(None, self._zeroconf.close)
             LOG.info("mDNS service unregistered")
-
-
-def _get_local_ip() -> str:
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(1)
-        s.connect(("8.8.8.8", 53))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "0.0.0.0"
