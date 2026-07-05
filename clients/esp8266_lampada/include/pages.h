@@ -23,11 +23,6 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 .value{font-weight:600;color:#e94560}
 .value.connected{color:#4ade80}
 .footer{text-align:center;margin-top:12px;font-size:.8em;color:#555}
-.ota{border-top:1px solid #2a2a4a;margin-top:16px;padding-top:16px}
-.ota form{display:flex;gap:8px}
-.ota input[type="file"]{flex:1;background:#2d2d44;color:#eee;border:1px solid #444;border-radius:8px;padding:8px;font-size:.8em}
-.ota button{background:#4361ee;border:none;border-radius:8px;padding:8px 16px;color:#fff;cursor:pointer;font-size:.8em}
-.ota button:hover{background:#3a56d4}
 .loading{opacity:.5;pointer-events:none}
 </style>
 </head>
@@ -41,7 +36,6 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 <div class="status-row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
 <div class="status-row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
 <div class="status-row"><span class="label">Uptime</span><span class="value" id="uptimeStatus">-</span></div>
-<div class="status-row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
 <div class="status-row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
@@ -53,7 +47,6 @@ const rssiEl=document.getElementById('rssiStatus');
 const batteryEl=document.getElementById('batteryStatus');
 const ipEl=document.getElementById('ipStatus');
 const uptimeEl=document.getElementById('uptimeStatus');
-const slotEl=document.getElementById('slotStatus');
 const fwEl=document.getElementById('fwVersion');
 const footerEl=document.getElementById('footer');
 let loading=false;
@@ -63,7 +56,7 @@ gatewayEl.textContent=d.gateway_connected?'Conectado':'Desconectado';
 gatewayEl.className='value'+(d.gateway_connected?' connected':'');
 rssiEl.textContent=d.rssi+' dBm';batteryEl.textContent=d.battery+'%';
 ipEl.textContent=d.ip;let m=Math.floor(d.uptime_s/60);let s=d.uptime_s%60;
-uptimeEl.textContent=m+'m '+s+'s';slotEl.textContent='Slot '+(d.slot||'?');fwEl.textContent=d.fw_version||'-';
+uptimeEl.textContent=m+'m '+s+'s';fwEl.textContent=d.fw_version||'-';
 document.getElementById('deviceName').textContent=d.device_name;
 footerEl.textContent='ID: '+d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+'s ago':'');
 }catch(e){footerEl.textContent='Erro: '+e.message}}
