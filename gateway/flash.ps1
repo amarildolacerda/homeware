@@ -1,40 +1,41 @@
 param (
-    [string]$Port = "COM3",
-    [switch]$Ota,
-    [string]$Ip
+    [string]$p = "COM3",
+    [string]$o
 )
 
 # Flash ESP8266 Gateway
 # .\flash.ps1                     (serial, COM3)
-# .\flash.ps1 -Port COM4          (serial, COM4)
-# .\flash.ps1 -Ota -Ip 192.168.1.100  (OTA)
+# .\flash.ps1 -p COM4             (serial, COM4)
+# .\flash.ps1 -o 192.168.1.100    (OTA)
 
 $ErrorActionPreference = "Stop"
 
-function Test-Command {
-    param($Command)
-    return (Get-Command $Command -ErrorAction SilentlyContinue) -ne $null
+function Get-Pio {
+    $paths = @(
+        "pio",
+        "platformio",
+        "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python3*\Scripts\pio.exe"
+    )
+    foreach ($p in $paths) {
+        $cmd = Get-Command $p -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    }
+    return $null
 }
 
-$pio = $null
-if (Test-Command pio) { $pio = "pio" }
-elseif (Test-Command platformio) { $pio = "platformio" }
-
+$pio = Get-Pio
 if (-not $pio) {
-    Write-Error "PlatformIO CLI not found. Install: pip install platformio"
+    Write-Error "PlatformIO CLI not found. Tente: python -m pip install platformio"
     exit 1
 }
 
-if ($Ota -or $Ip) {
-    $target = $Ip
-    if (-not $target) {
-        $target = Read-Host "IP do Gateway para OTA"
-    }
-    Write-Host "Building and uploading OTA to $target..." -ForegroundColor Cyan
-    & $pio run -e esp8266_gateway_ota --target upload --upload-port "$target"
+if ($o) {
+    Write-Host "Building and uploading OTA to $o..." -ForegroundColor Cyan
+    & $pio run -e esp8266_gateway_ota --target upload --upload-port "$o"
 } else {
-    Write-Host "Building and flashing on $Port..." -ForegroundColor Cyan
-    & $pio run -e esp8266_gateway --target upload --upload-port "$Port"
+    Write-Host "Building and flashing on $p..." -ForegroundColor Cyan
+    & $pio run -e esp8266_gateway --target upload --upload-port "$p"
 }
 
 Write-Host "Done." -ForegroundColor Green
