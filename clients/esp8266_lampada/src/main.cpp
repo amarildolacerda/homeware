@@ -157,6 +157,8 @@ static bool mac_parse(const char *str, uint8_t *mac)
     return true;
 }
 
+static void set_relay(bool state);
+
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
