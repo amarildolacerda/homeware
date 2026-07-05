@@ -6,7 +6,7 @@ const char PAGE_DASHBOARD[] PROGMEM = R"rawliteral(
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>ESP-NOW Gateway</title>
 <style>
 :root { --bg:#0b0f1a; --card:#111827; --border:#1f2937; --text:#e5e7eb; --muted:#9ca3af; --primary:#22d3ee; --success:#22c55e; --danger:#ef4444; --warn:#f59e0b; }
@@ -41,7 +41,7 @@ h1 { font-size:1.5rem; font-weight:600; }
 .state-rain { color:#60a5fa; }
 .state-tank { color:#4ade80; }
 .state-battery { color:#fcd34d; }
-.btn { padding:10px 18px; border:none; border-radius:8px; font-weight:600; cursor:pointer; transition:all .2s; font-size:0.85rem; }
+.btn { padding:10px 18px; border:none; border-radius:8px; font-weight:600; cursor:pointer; transition:all .2s; font-size:0.85rem; min-height:44px; }
 .btn-primary { background:var(--primary); color:#0b0f1a; }
 .btn-primary:hover { filter:brightness(1.1); }
 .btn-danger { background:var(--danger); color:white; }
@@ -57,19 +57,39 @@ h1 { font-size:1.5rem; font-weight:600; }
 .toast { position:fixed; bottom:20px; right:20px; padding:12px 20px; border-radius:8px; background:#1f2937; color:white; box-shadow:0 10px 25px rgba(0,0,0,.3); z-index:1000; display:none; }
 .toast.show { display:block; animation:slideIn .3s; }
 @keyframes slideIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+.loading { text-align:center; color:var(--muted); padding:40px 20px; font-size:0.9rem; }
+.loading:after { content:"..."; animation:dots 1.5s infinite; }
+@keyframes dots { 0%{content:"."} 33%{content:".."} 66%{content:"..."} }
 .empty { text-align:center; color:var(--muted); padding:40px 20px; }
 .btn-pairing { background:var(--warn); color:#000; animation:pulse 1.5s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
-.modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:100; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:100; padding:16px; }
 .modal.show { display:flex; }
-.modal-content { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; width:90%; max-width:400px; }
+.modal-content { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; width:100%; max-width:400px; max-height:90vh; overflow-y:auto; }
 .modal h3 { margin-bottom:16px; }
 .form-group { margin-bottom:16px; }
 .form-group label { display:block; margin-bottom:6px; font-size:0.85rem; }
-.form-group input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#0b0f1a; color:var(--text); }
+.form-group input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#0b0f1a; color:var(--text); font-size:16px; }
+@media (max-width:700px) {
+    .header .btn-group { width:100%; }
+    .header .btn-group .btn { flex:1; text-align:center; }
+    .toast { left:10px; right:10px; bottom:10px; text-align:center; }
+}
 @media (max-width:600px) {
-    .stats { grid-template-columns:repeat(2,1fr); }
+    .container { padding:12px; }
+    h1 { font-size:1.2rem; }
+    .stats { grid-template-columns:repeat(2,1fr); gap:8px; }
+    .stat { padding:12px; }
+    .stat-value { font-size:1.2rem; }
     .sensor-meta { grid-template-columns:1fr; }
+    .sensor { padding:12px; }
+    .card { padding:14px; }
+    .modal-content { padding:16px; }
+}
+@media (max-width:400px) {
+    .stats { grid-template-columns:1fr; }
+    .header { flex-direction:column; align-items:stretch; }
+    .header .btn-group .btn { font-size:0.8rem; padding:10px 8px; }
 }
 </style>
 </head>
@@ -79,21 +99,21 @@ h1 { font-size:1.5rem; font-weight:600; }
         <h1>ESP-NOW Gateway</h1>
         <div class="btn-group">
             <button class="btn btn-primary" id="btn-pair" onclick="enterPairingMode()">+ Adicionar Sensor</button>
-            <button class="btn btn-secondary" onclick="broadcastReregister()">Re-registrar Tudo</button>
-            <button class="btn btn-secondary" onclick="loadData()">Atualizar</button>
+            <button class="btn btn-secondary" onclick="broadcastReregister()">Re-registrar</button>
+            <button class="btn btn-secondary" onclick="loadData()" title="Atualizar">&#x21bb;</button>
         </div>
     </div>
 
     <div class="stats">
-        <div class="stat"><div class="stat-value" id="stat-paired">0</div><div class="stat-label">Pareados</div></div>
-        <div class="stat"><div class="stat-value" id="stat-online">0</div><div class="stat-label">Online</div></div>
-        <div class="stat"><div class="stat-value" id="stat-rx">0</div><div class="stat-label">RX Total</div></div>
-        <div class="stat"><div class="stat-value" id="stat-uptime">0s</div><div class="stat-label">Uptime</div></div>
+        <div class="stat"><div class="stat-value" id="stat-paired">--</div><div class="stat-label">Pareados</div></div>
+        <div class="stat"><div class="stat-value" id="stat-online">--</div><div class="stat-label">Online</div></div>
+        <div class="stat"><div class="stat-value" id="stat-rx">--</div><div class="stat-label">RX Total</div></div>
+        <div class="stat"><div class="stat-value" id="stat-uptime">--</div><div class="stat-label">Uptime</div></div>
     </div>
 
     <div class="card">
         <h2>Sensores Virtuais</h2>
-        <div id="sensors-grid" class="grid"></div>
+        <div id="sensors-grid" class="grid"><div class="loading">carregando</div></div>
     </div>
 </div>
 
@@ -102,7 +122,7 @@ h1 { font-size:1.5rem; font-weight:600; }
         <h3>Nomear Sensor</h3>
         <div class="form-group">
             <label>Nome do sensor (slot <span id="name-slot">0</span>)</label>
-            <input type="text" id="name-input" placeholder="Ex: Sala, Cozinha, Portão..." maxlength="32">
+            <input type="text" id="name-input" placeholder="Ex: Sala, Cozinha, Portao..." maxlength="32">
         </div>
         <div class="form-group">
             <label>Tipo</label>
@@ -120,15 +140,22 @@ h1 { font-size:1.5rem; font-weight:600; }
 let pairingTimer = null;
 let namingSlot = -1;
 let s_pairingWindowSec = 180;
+let s_loadFailCount = 0;
 
 async function api(path, opts={}) {
-    const res = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
-    if (!res.ok) {
-        let msg = 'HTTP ' + res.status;
-        try { const j = await res.json(); if (j.error) msg = j.error; } catch(_) {}
-        throw new Error(msg);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15000);
+    try {
+        const res = await fetch(path, {headers:{'Content-Type':'application/json'}, signal:controller.signal, ...opts});
+        if (!res.ok) {
+            let msg = 'HTTP ' + res.status;
+            try { const j = await res.json(); if (j.error) msg = j.error; } catch(_) {}
+            throw new Error(msg);
+        }
+        return res.json();
+    } finally {
+        clearTimeout(t);
     }
-    return res.json();
 }
 
 function showToast(msg, err=false) {
@@ -136,7 +163,7 @@ function showToast(msg, err=false) {
     t.textContent = msg;
     t.style.background = err ? '#dc2626' : '#16a34a';
     t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
+    setTimeout(() => t.classList.remove('show'), 4000);
 }
 
 function fmtUptime(ms) {
@@ -148,7 +175,7 @@ function fmtUptime(ms) {
 }
 
 function typeName(type) {
-    const names = {1:'Temp+Hum', 2:'Contato', 3:'Movimento', 4:'Gás', 5:'Chuva', 6:'Tanque', 7:'DHT+Gas'};
+    const names = {1:'Temp+Hum', 2:'Contato', 3:'Movimento', 4:'Gas', 5:'Chuva', 6:'Tanque', 7:'DHT+Gas'};
     return names[type] || 'Desconhecido';
 }
 
@@ -163,7 +190,7 @@ function renderSensors(sensors) {
             <div class="sensor-header">
                 <div>
                     <div class="sensor-name">${s.name || 'Sem nome'}</div>
-                    <span class="sensor-type">${typeName(s.type)} • Slot ${s.slot}</span>
+                    <span class="sensor-type">${typeName(s.type)} &bull; Slot ${s.slot}</span>
                 </div>
                 <span class="badge ${s.online ? 'badge-online' : 'badge-offline'}">${s.online ? 'Online' : 'Offline'}</span>
             </div>
@@ -171,9 +198,9 @@ function renderSensors(sensors) {
                 <div><span class="label">MAC</span><span class="value">${s.mac_str}</span></div>
                 <div><span class="label">Bateria</span><span class="value state-battery">${s.battery_pct}%</span></div>
                 <div><span class="label">RSSI</span><span class="value">${s.last_rssi} dBm</span></div>
-                <div><span class="label">Último</span><span class="value">${s.last_seen >= 0 ? fmtUptime(s.last_seen) : '—'}</span></div>
+                <div><span class="label">Ultimo</span><span class="value">${s.last_seen >= 0 ? fmtUptime(s.last_seen) : '&mdash;'}</span></div>
                 <div><span class="label">Seq</span><span class="value">${s.sequence}</span></div>
-                <div><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">${s.bridge_device_id || '—'}</span></div>
+                <div><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">${s.bridge_device_id || '&mdash;'}</span></div>
                 ${s.ip ? `<div><span class="label">IP</span><span class="value"><a href="http://${s.ip}">${s.ip}</a></span></div>` : ''}
             </div>
             <div class="sensor-state" id="state-${s.slot}">${renderState(s)}</div>
@@ -189,48 +216,47 @@ function renderState(s) {
     const st = s.state || {};
     let html = '';
     if (s.type === 1) {
-        html += `<span class="state-item state-temp">🌡 ${(st.temperature||0).toFixed(1)}°C</span>`;
-        html += `<span class="state-item state-hum">💧 ${(st.humidity||0).toFixed(0)}%</span>`;
+        html += `<span class="state-item state-temp">${(st.temperature||0).toFixed(1)}&deg;C</span>`;
+        html += `<span class="state-item state-hum">${(st.humidity||0).toFixed(0)}%</span>`;
     } else if (s.type === 2) {
-        html += `<span class="state-item state-contact">${st.contact ? '🚪 ABERTO' : '🔒 FECHADO'}</span>`;
-        if (st.tamper) html += `<span class="state-item state-contact">⚠️ VIOLAÇÃO</span>`;
+        html += `<span class="state-item state-contact">${st.contact ? 'ABERTO' : 'FECHADO'}</span>`;
+        if (st.tamper) html += `<span class="state-item state-contact">VIOLACAO</span>`;
     } else if (s.type === 3) {
-        html += `<span class="state-item state-motion">${st.occupancy ? '🏃 MOVIMENTO' : '😴 LIVRE'}</span>`;
+        html += `<span class="state-item state-motion">${st.occupancy ? 'MOVIMENTO' : 'LIVRE'}</span>`;
     } else if (s.type === 4) {
-        html += `<span class="state-item state-gas">⛽ ${st.gas_level||0} ppm</span>`;
-        if (st.alarm) html += `<span class="state-item state-gas">🚨 ALARME</span>`;
+        html += `<span class="state-item state-gas">${st.gas_level||0} ppm</span>`;
+        if (st.alarm) html += `<span class="state-item state-gas">ALARME</span>`;
     } else if (s.type === 5) {
-        html += `<span class="state-item state-rain">🌧 ${st.rain_level||0}%</span>`;
-        html += `<span class="state-item state-rain">${st.rain_digital ? '☔ Chuva' : '☀️ Seco'}</span>`;
+        html += `<span class="state-item state-rain">${st.rain_level||0}%</span>`;
+        html += `<span class="state-item state-rain">${st.rain_digital ? 'Chuva' : 'Seco'}</span>`;
     } else if (s.type === 6) {
-        html += `<span class="state-item state-tank">🛢 ${st.level_pct||0}%</span>`;
+        html += `<span class="state-item state-tank">${st.level_pct||0}%</span>`;
         html += `<span class="state-item state-tank">${st.distance_cm||0} cm</span>`;
     } else if (s.type === 7) {
-        html += `<span class="state-item state-temp">🌡 ${(st.temperature||0).toFixed(1)}°C</span>`;
-        html += `<span class="state-item state-hum">💧 ${(st.humidity||0).toFixed(0)}%</span>`;
-        html += `<span class="state-item state-gas">⛽ ${st.gas_level||0}%</span>`;
-        if (st.alarm) html += `<span class="state-item state-gas">🚨 ALARME</span>`;
-    }
-    if (s.battery_pct !== undefined) {
-        html += `<span class="state-item state-battery">🔋 ${s.battery_pct}%</span>`;
+        html += `<span class="state-item state-temp">${(st.temperature||0).toFixed(1)}&deg;C</span>`;
+        html += `<span class="state-item state-hum">${(st.humidity||0).toFixed(0)}%</span>`;
+        html += `<span class="state-item state-gas">${st.gas_level||0}%</span>`;
+        if (st.alarm) html += `<span class="state-item state-gas">ALARME</span>`;
     }
     return html || '<span class="state-item" style="color:var(--muted)">Aguardando dados...</span>';
 }
 
 async function loadData() {
+    const grid = document.getElementById('sensors-grid');
+    const wasEmpty = grid.querySelector('.loading, .empty');
     try {
         const [info, sensors] = await Promise.all([api('/api/info'), api('/api/sensors')]);
+        s_loadFailCount = 0;
         document.getElementById('stat-paired').textContent = info.paired_count;
         document.getElementById('stat-online').textContent = info.online_count;
         document.getElementById('stat-rx').textContent = info.rx_total;
         document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
         if (info.pairing_window_sec) s_pairingWindowSec = info.pairing_window_sec;
-        renderSensors(sensors.map(s => ({
-            ...s,
-            mac_str: s.mac
-        })));
+        renderSensors(sensors.map(s => (delete s.mac_bytes, s.mac_str = s.mac, s)));
     } catch (e) {
-        showToast('Erro ao carregar: '+e.message, true);
+        s_loadFailCount++;
+        if (wasEmpty) grid.innerHTML = '<div class="empty" style="color:var(--danger)">Falha ao carregar dados</div>';
+        if (s_loadFailCount % 3 === 0) showToast('Erro ao carregar: '+e.message, true);
     }
 }
 
@@ -238,11 +264,11 @@ function startPairingCountdown() {
     const btn = document.getElementById('btn-pair');
     btn.classList.add('btn-pairing');
     let remaining = s_pairingWindowSec;
-    btn.textContent = '✕ Pareando (' + remaining + 's)';
+    btn.textContent = 'Cancelar (' + remaining + 's)';
     pairingTimer = setInterval(() => {
         remaining--;
         if (remaining > 0) {
-            btn.textContent = '✕ Pareando (' + remaining + 's)';
+            btn.textContent = 'Cancelar (' + remaining + 's)';
         } else {
             exitPairingMode();
         }
@@ -250,14 +276,11 @@ function startPairingCountdown() {
 }
 
 async function enterPairingMode() {
-    console.log('[pair] enterPairingMode called, pairingTimer=', pairingTimer);
     if (pairingTimer) { exitPairingMode(); return; }
     try {
-        const res = await api('/api/pair/start', {method:'POST'});
-        console.log('[pair] API success:', res);
+        await api('/api/pair/start', {method:'POST'});
         startPairingCountdown();
     } catch (e) {
-        console.error('[pair] API error:', e.message);
         if (e.message.includes('already pairing')) {
             startPairingCountdown();
         } else {
@@ -292,12 +315,13 @@ async function renameSensor(slot) {
         document.getElementById('name-input').value = s.name || '';
         document.getElementById('name-type').value = typeName(s.type);
         document.getElementById('name-modal').classList.add('show');
+        document.getElementById('name-input').focus();
     } catch (e) { showToast('Erro: '+e.message, true); }
 }
 
 async function confirmName() {
     const name = document.getElementById('name-input').value.trim();
-    if (!name) { showToast('Nome obrigatório', true); return; }
+    if (!name) { showToast('Nome obrigatorio', true); return; }
     try {
         await api('/api/sensor/'+namingSlot+'/name', {method:'POST', body:JSON.stringify({name})});
         showToast('Nome atualizado');
@@ -320,12 +344,133 @@ async function removeSensor(slot) {
     } catch (e) { showToast('Erro: '+e.message, true); }
 }
 
-loadData();
-setInterval(loadData, 10000);
-
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeNameModal();
+});
 
 document.getElementById('name-modal').addEventListener('click', e => { if(e.target.id==='name-modal') closeNameModal(); });
+
+loadData();
+setInterval(loadData, 10000);
 </script>
+</body>
+</html>
+)rawliteral";
+
+const char PAGE_DOCS[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Docs - ESP-NOW Gateway</title>
+<style>
+:root{--bg:#0b0f1a;--card:#111827;--border:#1f2937;--text:#e5e7eb;--muted:#9ca3af;--primary:#22d3ee;--get:#22c55e;--post:#60a5fa;--del:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);padding:16px}
+h1{font-size:1.3rem;margin-bottom:8px}
+.sub{color:var(--muted);font-size:0.85rem;margin-bottom:24px}
+h2{font-size:1rem;margin:20px 0 12px;color:var(--primary)}
+.endpoint{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px}
+.endpoint .head{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.method{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;min-width:44px;text-align:center}
+.method.get{background:var(--get)}
+.method.post{background:var(--post)}
+.method.del{background:var(--del)}
+.path{font-family:Menlo,monospace;font-size:0.85rem;font-weight:600;word-break:break-all}
+.path span{color:var(--muted);font-weight:400}
+.desc{color:var(--muted);font-size:0.82rem;line-height:1.4}
+.desc code{background:#0b0f1a;padding:1px 5px;border-radius:4px;font-size:0.78rem}
+.params{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:0.78rem;color:var(--muted)}
+.params table{width:100%;border-collapse:collapse;margin-top:4px}
+.params th,.params td{text-align:left;padding:4px 6px;font-size:0.75rem;border-bottom:1px solid var(--border)}
+.params th{color:var(--muted);font-weight:500}
+.footer{text-align:center;color:var(--muted);font-size:0.75rem;margin-top:32px;padding-top:16px;border-top:1px solid var(--border)}
+@media(max-width:500px){
+  h1{font-size:1.1rem}
+  .endpoint{padding:10px}
+  .path{font-size:0.78rem}
+}
+</style>
+</head>
+<body>
+<h1>API Reference</h1>
+<p class="sub">ESP-NOW Gateway &mdash; endpoints REST</p>
+
+<h2>Gateway</h2>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/info</span></div>
+  <div class="desc">Status do gateway: sensores pareados/online, RX total, uptime, modo de pareamento, versao FW, configuracao do bridge</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/sensors</span></div>
+  <div class="desc">Lista todos os sensores pareados com estado atual, MAC, bateria, RSSI, IP</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/</span></div>
+  <div class="desc">Dashboard web</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/docs</span></div>
+  <div class="desc">Esta pagina de documentacao da API</div>
+</div>
+
+<h2>Pareamento</h2>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/pair/start</span></div>
+  <div class="desc">Inicia modo de pareamento por <code>PAIRING_WINDOW_MS</code>. Retorna <code>200</code> ok, <code>409</code> ja pareando, <code>400</code> max sensores atingido</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/pair/stop</span></div>
+  <div class="desc">Interrompe modo de pareamento ativo</div>
+</div>
+
+<h2>Sensores</h2>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/sensor/<span>{slot}</span>/name</span></div>
+  <div class="desc">Renomeia um sensor</div>
+  <div class="params">
+    <table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+    <tr><td><code>name</code></td><td>string</td><td>Novo nome (max 32 char)</td></tr></table>
+    <div><em>Path:</em> <code>{slot}</code> = numero do slot do sensor</div>
+  </div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/sensor/<span>{slot}</span>/remove</span></div>
+  <div class="desc">Remove um sensor pareado</div>
+  <div class="params"><div><em>Path:</em> <code>{slot}</code> = numero do slot do sensor</div></div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/clear</span></div>
+  <div class="desc">Remove <strong>todos</strong> os sensores pareados</div>
+</div>
+
+<h2>Bridge</h2>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/broadcast</span></div>
+  <div class="desc">Re-registra todos os sensores no Bridge via HTTP</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/config/bridge</span></div>
+  <div class="desc">Configura host/porta do Bridge manualmente</div>
+  <div class="params">
+    <table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+    <tr><td><code>host</code></td><td>string</td><td>IP ou hostname do Bridge</td></tr>
+    <tr><td><code>port</code></td><td>number</td><td>Porta HTTP do Bridge</td></tr></table>
+  </div>
+</div>
+
+<h2>Manutencao</h2>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>
+  <div class="desc">Reinicia o gateway</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div>
+  <div class="desc">Upload de firmware via OTA (multipart/form-data)</div>
+</div>
+
+<p class="footer">ESP-NOW Gateway &mdash; <span id="v">v0.0.15</span></p>
 </body>
 </html>
 )rawliteral";

@@ -45,7 +45,11 @@
 
 ## Desenvolvimento
 - Alterações de código devem ser feitas apenas no branch `dev`. Verifique com `git branch --show-current` antes de começar.
-- `main` é estável e usado em produção — nunca commitar diretamente em `main`.
+- `main` é estável e usado em produção — nunca commitar diretamente em `main`, os commits devem ser feito no dev
+- Quando o dev entra em produção, é para fazer um merge do dev para o main, ficando o main no mesmo ponto do dev, fazer uma tag ,<main_xxx>
+- os dashboards devem ter uma url /docs para listar a api <swagger like>, se form um device manter enxuto para nao comprometer memoria - atualizar quando alteracoes na url forem implementadas/alteradas
+- o dashboard precisa ser responsivo e tratar o loop para nao congelar a carga do browser
+
 ### Novos Clients
 1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações releventes ao cliente
 2. ter um dashboard pertinent 

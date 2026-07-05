@@ -18,6 +18,10 @@ void web_server_init() {
     s_server.on("/", HTTP_GET, []() {
         s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
     });
+
+    s_server.on("/docs", HTTP_GET, []() {
+        s_server.send(200, "text/html", FPSTR(PAGE_DOCS));
+    });
     
     s_server.on("/api/info", HTTP_GET, []() {
         JsonDocument doc;

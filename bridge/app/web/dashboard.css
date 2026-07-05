@@ -442,13 +442,52 @@ h1 {
     display: grid;
   }
 
-  .hero {
+  .summary-grid {
     grid-template-columns: 1fr;
   }
+}
 
-  .summary-grid {
-    min-width: 0;
-    grid-template-columns: 1fr;
+@media (max-width: 600px) {
+  body {
+    padding: 10px;
+  }
+
+  .hero-card {
+    padding: 14px 16px;
+  }
+
+  h1 {
+    font-size: 1.2rem;
+  }
+
+  .content {
+    gap: 10px;
+  }
+
+  .device {
+    padding: 12px;
+  }
+
+  .dev-state {
+    font-size: 0.82rem;
+    word-break: break-word;
+  }
+
+  .dropdown-item {
+    padding: 14px 16px;
+    font-size: 0.92rem;
+  }
+
+  .badge, .badge-rain {
+    min-width: 60px;
+    font-size: 11px;
+  }
+
+  .toast {
+    left: 10px;
+    right: 10px;
+    transform: none;
+    text-align: center;
   }
 }
 
