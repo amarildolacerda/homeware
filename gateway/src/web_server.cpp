@@ -167,6 +167,27 @@ void web_server_init() {
             sensor_registry_save();
             bridge_client_register_sensor(s);
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        } else if (action == "command") {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+            if (err || !doc.containsKey("state")) {
+                s_server.send(400, "application/json", "{\"error\":\"state required\"}");
+                return;
+            }
+            uint8_t state = doc["state"] ? 1 : 0;
+            virtual_sensor_t *s = sensor_registry_get(slot);
+            if (!s || !s->paired) {
+                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                return;
+            }
+            if (s->type != SENSOR_TYPE_ONOFF) {
+                s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
+                return;
+            }
+            if (espnow_send_command(s->mac, slot, state))
+                s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+            else
+                s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "remove") {
             if (sensor_registry_remove(slot)) {
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");

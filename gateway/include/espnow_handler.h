@@ -14,5 +14,6 @@ unsigned long espnow_get_rx_count();
 unsigned long espnow_get_ack_count();
 unsigned long espnow_get_crc_errors();
 uint8_t* espnow_get_gateway_mac();
+bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state);
 
 #endif

@@ -193,6 +193,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             }
             break;
         }
+        case ESPNOW_MSG_COMMAND:
+        {
+            if (len < sizeof(espnow_command_t)) return;
+            espnow_command_t *cmd = (espnow_command_t *)data;
+            Serial.printf("[%s] Command received: state=%d\n", TAG, cmd->command);
+            set_relay(cmd->command ? true : false);
+            break;
+        }
         case ESPNOW_MSG_ACK:
         {
             if (len < sizeof(espnow_ack_t)) return;

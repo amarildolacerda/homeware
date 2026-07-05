@@ -273,7 +273,8 @@ function renderState(s) {
         html += `<span class="state-item state-gas">${st.gas_level||0}%</span>`;
         if (st.alarm) html += `<span class="state-item state-gas">ALARME</span>`;
     } else if (s.type === 8) {
-        html += `<span class="state-item state-contact">${st.state ? 'LIGADA' : 'DESLIGADA'}</span>`;
+        const on = st.state ? true : false;
+        html += `<button class="btn ${on ? 'btn-success' : 'btn-secondary'}" onclick="toggleSensor(${s.slot}, ${on ? 0 : 1})" style="min-width:100%">${on ? 'DESLIGAR' : 'LIGAR'}</button>`;
     }
     return html || '<span class="state-item" style="color:var(--muted)">Aguardando dados...</span>';
 }
@@ -411,6 +412,14 @@ async function confirmName() {
 function closeNameModal() {
     document.getElementById('name-modal').classList.remove('show');
     namingSlot = -1;
+}
+
+async function toggleSensor(slot, state) {
+    try {
+        await api('/api/sensor/'+slot+'/command', {method:'POST', body:JSON.stringify({state: !!state})});
+        showToast(state ? 'Ligado' : 'Desligado');
+        loadData();
+    } catch (e) { showToast('Erro: '+e.message, true); }
 }
 
 async function removeSensor(slot) {

@@ -267,6 +267,29 @@ bool espnow_is_pairing() {
     return s_pairing_mode;
 }
 
+bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
+    espnow_command_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.msg_type = ESPNOW_MSG_COMMAND;
+    cmd.sequence = 0;
+    mac_copy(cmd.target_mac, mac);
+    cmd.command = state;
+
+    esp_now_del_peer((uint8_t*)mac);
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&cmd, sizeof(cmd));
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+    if (ret == 0) {
+        Serial.printf("[ESP-NOW] Command sent to %s slot=%d state=%d\n", mac_str, slot, state);
+        return true;
+    }
+    Serial.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
+    return false;
+}
+
 unsigned long espnow_get_rx_count() { return s_rx_count; }
 unsigned long espnow_get_ack_count() { return s_ack_count; }
 unsigned long espnow_get_crc_errors() { return s_crc_errors; }
