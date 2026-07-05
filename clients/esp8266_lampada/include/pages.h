@@ -23,11 +23,6 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 .value{font-weight:600;color:#e94560}
 .value.connected{color:#4ade80}
 .footer{text-align:center;margin-top:12px;font-size:.8em;color:#555}
-.ota{border-top:1px solid #2a2a4a;margin-top:16px;padding-top:16px}
-.ota form{display:flex;gap:8px}
-.ota input[type="file"]{flex:1;background:#2d2d44;color:#eee;border:1px solid #444;border-radius:8px;padding:8px;font-size:.8em}
-.ota button{background:#4361ee;border:none;border-radius:8px;padding:8px 16px;color:#fff;cursor:pointer;font-size:.8em}
-.ota button:hover{background:#3a56d4}
 .loading{opacity:.5;pointer-events:none}
 </style>
 </head>
@@ -41,13 +36,7 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 <div class="status-row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
 <div class="status-row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
 <div class="status-row"><span class="label">Uptime</span><span class="value" id="uptimeStatus">-</span></div>
-<div class="status-row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
-<div class="ota">
-<form id="otaForm" enctype="multipart/form-data" method="POST" action="/api/ota">
-<input type="file" name="firmware" accept=".bin" id="otaFile">
-<button type="submit">OTA</button>
-</form>
-</div>
+<div class="status-row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
 <script>
@@ -58,7 +47,7 @@ const rssiEl=document.getElementById('rssiStatus');
 const batteryEl=document.getElementById('batteryStatus');
 const ipEl=document.getElementById('ipStatus');
 const uptimeEl=document.getElementById('uptimeStatus');
-const slotEl=document.getElementById('slotStatus');
+const fwEl=document.getElementById('fwVersion');
 const footerEl=document.getElementById('footer');
 let loading=false;
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
@@ -67,7 +56,7 @@ gatewayEl.textContent=d.gateway_connected?'Conectado':'Desconectado';
 gatewayEl.className='value'+(d.gateway_connected?' connected':'');
 rssiEl.textContent=d.rssi+' dBm';batteryEl.textContent=d.battery+'%';
 ipEl.textContent=d.ip;let m=Math.floor(d.uptime_s/60);let s=d.uptime_s%60;
-uptimeEl.textContent=m+'m '+s+'s';slotEl.textContent='Slot '+(d.slot||'?');
+uptimeEl.textContent=m+'m '+s+'s';fwEl.textContent=d.fw_version||'-';
 document.getElementById('deviceName').textContent=d.device_name;
 footerEl.textContent='ID: '+d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+'s ago':'');
 }catch(e){footerEl.textContent='Erro: '+e.message}}
@@ -75,7 +64,6 @@ async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('l
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();btn.classList.toggle('on',d.state);relayStatus.textContent=d.state?'LIGADA':'DESLIGADA';
 }catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
-document.getElementById('otaForm').addEventListener('submit',function(e){if(!document.getElementById('otaFile').value){e.preventDefault();alert('Selecione um arquivo .bin')}});
 setInterval(fetchState,3000);fetchState();
 </script>
 </body>

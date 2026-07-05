@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.0.16"
+#define FW_VERSION "v0.0.17"
 #endif
 
 #ifndef DEVICE_NAME
@@ -25,7 +25,7 @@
 #endif
 
 #ifndef WIFI_CONFIG_PORTAL_PASS
-#define WIFI_CONFIG_PORTAL_PASS "12345678"
+#define WIFI_CONFIG_PORTAL_PASS "password123"
 #endif
 
 #ifndef STATE_UPDATE_INTERVAL
@@ -61,11 +61,11 @@
 #endif
 
 #ifndef DASHBOARD_PORT
-#define DASHBOARD_PORT 8080
+#define DASHBOARD_PORT 80
 #endif
 
 #ifndef FAUXMO_PORT
-#define FAUXMO_PORT 80
+#define FAUXMO_PORT 8080
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.

@@ -124,6 +124,7 @@ h1 { font-size:1.5rem; font-weight:600; }
             <div class="row"><span class="label">Host</span><span class="value" id="bridge-host">--</span></div>
             <div class="row"><span class="label">Porta</span><span class="value" id="bridge-port">--</span></div>
             <div class="row"><span class="label">Status</span><span class="value" id="bridge-status-tag">--</span></div>
+            <div class="row"><span class="label">Versão</span><span class="value" id="fw-version">--</span></div>
         </div>
         <div class="btn-group">
             <button class="btn btn-primary" onclick="showBridgeModal()">Configurar Bridge</button>
@@ -209,7 +210,7 @@ function fmtUptime(ms) {
 }
 
 function typeName(type) {
-    const names = {1:'Temp+Hum', 2:'Contato', 3:'Movimento', 4:'Gas', 5:'Chuva', 6:'Tanque', 7:'DHT+Gas'};
+    const names = {1:'Temp+Hum', 2:'Contato', 3:'Movimento', 4:'Gas', 5:'Chuva', 6:'Tanque', 7:'DHT+Gas', 8:'Interruptor'};
     return names[type] || 'Desconhecido';
 }
 
@@ -271,6 +272,9 @@ function renderState(s) {
         html += `<span class="state-item state-hum">${(st.humidity||0).toFixed(0)}%</span>`;
         html += `<span class="state-item state-gas">${st.gas_level||0}%</span>`;
         if (st.alarm) html += `<span class="state-item state-gas">ALARME</span>`;
+    } else if (s.type === 8) {
+        const on = st.state ? true : false;
+        html += `<button class="btn ${on ? 'btn-success' : 'btn-secondary'}" onclick="toggleSensor(${s.slot}, ${on ? 0 : 1})" style="min-width:100%">${on ? 'DESLIGAR' : 'LIGAR'}</button>`;
     }
     return html || '<span class="state-item" style="color:var(--muted)">Aguardando dados...</span>';
 }
@@ -294,6 +298,7 @@ async function loadData() {
         document.getElementById('bridge-status-tag').innerHTML = info.bridge_discovered
             ? '<span class="badge badge-online">ok</span>'
             : '<span class="badge badge-offline">desconectado</span>';
+        document.getElementById('fw-version').textContent = info.fw_version || '--';
     } catch (e) {
         s_loadFailCount++;
         if (wasEmpty) grid.innerHTML = '<div class="empty" style="color:var(--danger)">Falha ao carregar dados</div>';
@@ -407,6 +412,14 @@ async function confirmName() {
 function closeNameModal() {
     document.getElementById('name-modal').classList.remove('show');
     namingSlot = -1;
+}
+
+async function toggleSensor(slot, state) {
+    try {
+        await api('/api/sensor/'+slot+'/command', {method:'POST', body:JSON.stringify({state: !!state})});
+        showToast(state ? 'Ligado' : 'Desligado');
+        loadData();
+    } catch (e) { showToast('Erro: '+e.message, true); }
 }
 
 async function removeSensor(slot) {

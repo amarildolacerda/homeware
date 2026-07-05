@@ -42,6 +42,7 @@ static char s_device_name[48] = DEVICE_NAME;
 static bool s_wifi_configuration_mode = false;
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_use_repeater = false;
+static uint8_t s_my_mac[6];
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 static fauxmoESP s_fauxmo;
@@ -157,6 +158,8 @@ static bool mac_parse(const char *str, uint8_t *mac)
     return true;
 }
 
+static void set_relay(bool state);
+
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
@@ -193,6 +196,17 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             }
             break;
         }
+        case ESPNOW_MSG_COMMAND:
+        {
+            if (len < sizeof(espnow_command_t)) return;
+            espnow_command_t *cmd = (espnow_command_t *)data;
+            if (mac_equal(cmd->target_mac, s_my_mac))
+            {
+                Serial.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
+                set_relay(cmd->command ? true : false);
+            }
+            break;
+        }
         case ESPNOW_MSG_ACK:
         {
             if (len < sizeof(espnow_ack_t)) return;
@@ -209,6 +223,21 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             }
             s_ack_received = true;
             break;
+        }
+    }
+
+    /* Repeater: forward messages between clients and gateway */
+    if (s_paired)
+    {
+        if (mac_equal(mac, s_gateway_mac))
+        {
+            /* From gateway → broadcast (other devices check target_mac) */
+            esp_now_send(s_broadcast_mac, data, len);
+        }
+        else
+        {
+            /* From client → forward to gateway */
+            esp_now_send(s_gateway_mac, data, len);
         }
     }
 }
@@ -351,6 +380,7 @@ static void set_relay(bool state)
     s_relay_state = state;
     digitalWrite(RELAY_PIN, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
+    s_last_espnow_send = 0;
 }
 
 static void toggle_relay(void)
@@ -499,6 +529,7 @@ static void handle_api_state(void)
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         if (s_last_send_ms) doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
+        doc["fw_version"] = FW_VERSION;
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
@@ -798,6 +829,7 @@ void setup(void)
     }
 
     espnow_init_client();
+    WiFi.macAddress(s_my_mac);
 
     s_fauxmo.createServer(true);
     s_fauxmo.addDevice(s_device_name);
