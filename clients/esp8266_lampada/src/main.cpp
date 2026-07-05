@@ -42,6 +42,7 @@ static char s_device_name[48] = DEVICE_NAME;
 static bool s_wifi_configuration_mode = false;
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_use_repeater = false;
+static uint8_t s_my_mac[6];
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 static fauxmoESP s_fauxmo;
@@ -199,9 +200,12 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         {
             if (len < sizeof(espnow_command_t)) return;
             espnow_command_t *cmd = (espnow_command_t *)data;
-            Serial.printf("[%s] Command received: state=%d\n", TAG, cmd->command);
-            set_relay(cmd->command ? true : false);
-            s_last_espnow_send = 0;
+            if (mac_equal(cmd->target_mac, s_my_mac))
+            {
+                Serial.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
+                set_relay(cmd->command ? true : false);
+                s_last_espnow_send = 0;
+            }
             break;
         }
         case ESPNOW_MSG_ACK:
@@ -228,9 +232,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (mac_equal(mac, s_gateway_mac))
         {
-            /* From gateway → broadcast to clients behind this lampada */
-            if (data[0] != ESPNOW_MSG_COMMAND)
-                esp_now_send(s_broadcast_mac, data, len);
+            /* From gateway → broadcast (other devices check target_mac) */
+            esp_now_send(s_broadcast_mac, data, len);
         }
         else
         {
@@ -826,6 +829,7 @@ void setup(void)
     }
 
     espnow_init_client();
+    WiFi.macAddress(s_my_mac);
 
     s_fauxmo.createServer(true);
     s_fauxmo.addDevice(s_device_name);
