@@ -83,7 +83,7 @@ if pgrep -f "app.main" > /dev/null 2>&1; then
     echo "========================================"
     echo " Bridge instalado e rodando!"
     echo "========================================"
-    echo " URL:    http://$(hostname -I | awk '{print $1}'):$HTTP_PORT"
+    echo " URL:    http://$(ip route get 1 2>/dev/null | awk '{print $7}'):$HTTP_PORT"
     echo " Log:    $INSTALL_DIR/bridge.log"
     echo " Parar:  pkill -f 'app.main'"
     echo " Iniciar: nohup $INSTALL_DIR/venv/bin/python -m app.main &"
