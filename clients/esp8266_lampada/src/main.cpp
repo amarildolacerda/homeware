@@ -223,14 +223,20 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         }
     }
 
-    /* Repeater: forward non-gateway messages to the gateway */
-    if (s_paired && !mac_equal(mac, s_gateway_mac))
+    /* Repeater: forward messages between clients and gateway */
+    if (s_paired)
     {
-        esp_now_del_peer(s_gateway_mac);
-        int ch = WiFi.channel();
-        if (ch < 1 || ch > 13) ch = 1;
-        esp_now_add_peer(s_gateway_mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
-        esp_now_send(s_gateway_mac, data, len);
+        if (mac_equal(mac, s_gateway_mac))
+        {
+            /* From gateway → broadcast to clients behind this lampada */
+            if (data[0] != ESPNOW_MSG_COMMAND)
+                esp_now_send(s_broadcast_mac, data, len);
+        }
+        else
+        {
+            /* From client → forward to gateway */
+            esp_now_send(s_gateway_mac, data, len);
+        }
     }
 }
 
