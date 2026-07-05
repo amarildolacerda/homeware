@@ -1,0 +1,69 @@
+#pragma once
+
+#ifndef FW_VERSION
+#define FW_VERSION "v0.1.0"
+#endif
+
+#ifndef DEVICE_NAME
+#define DEVICE_NAME "Luz Lampada"
+#endif
+
+#ifndef RELAY_PIN
+#define RELAY_PIN 4
+#endif
+
+#ifndef RELAY_ON
+#define RELAY_ON HIGH
+#endif
+
+#ifndef LED_PIN
+#define LED_PIN 2
+#endif
+
+#ifndef WIFI_CONFIG_PORTAL_SSID
+#define WIFI_CONFIG_PORTAL_SSID "Lampada-Config"
+#endif
+
+#ifndef WIFI_CONFIG_PORTAL_PASS
+#define WIFI_CONFIG_PORTAL_PASS "12345678"
+#endif
+
+#ifndef STATE_UPDATE_INTERVAL
+#define STATE_UPDATE_INTERVAL 10000
+#endif
+
+#ifndef HEARTBEAT_INTERVAL
+#define HEARTBEAT_INTERVAL 60000
+#endif
+
+#ifndef ESPNOW_PAIR_INTERVAL_MS
+#define ESPNOW_PAIR_INTERVAL_MS 5000
+#endif
+
+#ifndef ESPNOW_MAX_PAIR_ATTEMPTS
+#define ESPNOW_MAX_PAIR_ATTEMPTS 10
+#endif
+
+#ifndef ESPNOW_ACK_TIMEOUT_MS
+#define ESPNOW_ACK_TIMEOUT_MS 500
+#endif
+
+#ifndef ESPNOW_SEND_RETRIES
+#define ESPNOW_SEND_RETRIES 3
+#endif
+
+#ifndef LED_BLINK_WIFI_MS
+#define LED_BLINK_WIFI_MS 250
+#endif
+
+#ifndef LED_BLINK_GATEWAY_MS
+#define LED_BLINK_GATEWAY_MS 500
+#endif
+
+#ifndef DASHBOARD_PORT
+#define DASHBOARD_PORT 8080
+#endif
+
+#ifndef FAUXMO_PORT
+#define FAUXMO_PORT 80
+#endif

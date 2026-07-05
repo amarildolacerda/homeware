@@ -163,6 +163,13 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
+        case SENSOR_TYPE_ONOFF: {
+            if (payload_len >= sizeof(payload_onoff_t)) {
+                payload_onoff_t *p = (payload_onoff_t*)payload;
+                s->state.onoff.state = p->state;
+            }
+            break;
+        }
     }
 
     size_t expected = 0;
@@ -174,6 +181,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_DHT_GAS:  expected = sizeof(payload_dht_gas_t); break;
         case SENSOR_TYPE_RAIN:     expected = sizeof(payload_rain_t); break;
         case SENSOR_TYPE_TANK:     expected = sizeof(payload_tank_t); break;
+        case SENSOR_TYPE_ONOFF:    expected = sizeof(payload_onoff_t); break;
     }
     if (expected && payload_len >= expected + 4)
         memcpy(s->ip, payload + payload_len - 4, 4);

@@ -108,6 +108,9 @@ void web_server_init() {
                         state["gas_level"] = s->state.dht_gas.gas_level;
                         state["alarm"] = s->state.dht_gas.alarm;
                         break;
+                    case SENSOR_TYPE_ONOFF:
+                        state["state"] = s->state.onoff.state;
+                        break;
                 }
             }
         }

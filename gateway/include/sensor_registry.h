@@ -27,6 +27,7 @@ typedef struct {
         struct { float temperature; float humidity; uint16_t gas_level; uint8_t alarm; } dht_gas;
         struct { uint8_t rain_level; uint8_t rain_digital; } rain;
         struct { uint16_t level_pct; uint16_t distance_cm; } tank;
+        struct { uint8_t state; } onoff;
     } state;
 } virtual_sensor_t;
 
