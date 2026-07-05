@@ -222,6 +222,16 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             break;
         }
     }
+
+    /* Repeater: forward non-gateway messages to the gateway */
+    if (s_paired && !mac_equal(mac, s_gateway_mac))
+    {
+        esp_now_del_peer(s_gateway_mac);
+        int ch = WiFi.channel();
+        if (ch < 1 || ch > 13) ch = 1;
+        esp_now_add_peer(s_gateway_mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+        esp_now_send(s_gateway_mac, data, len);
+    }
 }
 
 static bool espnow_init_client(void)
