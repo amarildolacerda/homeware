@@ -1,27 +1,40 @@
 from __future__ import annotations
 import os
 import subprocess
+import sys
+import tempfile
 
-_SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-GIT_REMOTE = "https://github.com/amarildolacerda/homeware.git"
-GIT_BRANCH = "dev"
+INSTALL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_URL = "https://github.com/amarildolacerda/homeware.git"
+BRANCH = "dev"
 
 async def git_pull() -> dict:
+    tmp = None
     try:
-        branch = GIT_BRANCH
-        remote = GIT_REMOTE
+        tmp = tempfile.mkdtemp()
         subprocess.run(
-            ["git", "fetch", remote, branch],
-            cwd=_SCRIPT_DIR, capture_output=True, text=True, timeout=15
+            ["git", "clone", "--depth", "1", "--branch", BRANCH, REPO_URL, tmp],
+            capture_output=True, text=True, timeout=30, check=True
         )
+        src = os.path.join(tmp, "bridge")
+        if not os.path.isdir(src):
+            return {"success": False, "updated": False, "message": "pasta bridge/ nao encontrada no repo"}
+
         result = subprocess.run(
-            ["git", "merge", f"{remote}/{branch}", "--ff-only"],
-            cwd=_SCRIPT_DIR, capture_output=True, text=True, timeout=15
+            ["rsync", "-av", "--delete",
+             "--exclude=venv/", "--exclude=__pycache__/", "--exclude=*.pyc",
+             "--exclude=bridge.log",
+             f"{src}/", f"{INSTALL_DIR}/"],
+            capture_output=True, text=True, timeout=30
         )
-        success = result.returncode == 0
-        updated = "Already up to date" not in result.stdout and "Updating" in result.stdout
-        message = result.stdout.strip() or result.stderr.strip()
-        return {"success": success, "updated": updated, "message": message}
+        updated = result.returncode == 0
+        return {"success": True, "updated": updated, "message": "Atualizado com sucesso" if updated else "Ja esta atualizado"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "updated": False, "message": "Timeout"}
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "updated": False, "message": e.stderr.strip()}
     except Exception as e:
         return {"success": False, "updated": False, "message": str(e)}
+    finally:
+        if tmp and os.path.isdir(tmp):
+            subprocess.run(["rm", "-rf", tmp], capture_output=True)
