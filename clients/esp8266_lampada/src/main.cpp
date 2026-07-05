@@ -499,6 +499,7 @@ static void handle_api_state(void)
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         if (s_last_send_ms) doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
+        doc["fw_version"] = FW_VERSION;
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);

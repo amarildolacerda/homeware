@@ -42,6 +42,7 @@ h1{text-align:center;font-size:1.5em;margin-bottom:24px;color:#e94560}
 <div class="status-row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
 <div class="status-row"><span class="label">Uptime</span><span class="value" id="uptimeStatus">-</span></div>
 <div class="status-row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
+<div class="status-row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="ota">
 <form id="otaForm" enctype="multipart/form-data" method="POST" action="/api/ota">
 <input type="file" name="firmware" accept=".bin" id="otaFile">
@@ -59,6 +60,7 @@ const batteryEl=document.getElementById('batteryStatus');
 const ipEl=document.getElementById('ipStatus');
 const uptimeEl=document.getElementById('uptimeStatus');
 const slotEl=document.getElementById('slotStatus');
+const fwEl=document.getElementById('fwVersion');
 const footerEl=document.getElementById('footer');
 let loading=false;
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
@@ -67,7 +69,7 @@ gatewayEl.textContent=d.gateway_connected?'Conectado':'Desconectado';
 gatewayEl.className='value'+(d.gateway_connected?' connected':'');
 rssiEl.textContent=d.rssi+' dBm';batteryEl.textContent=d.battery+'%';
 ipEl.textContent=d.ip;let m=Math.floor(d.uptime_s/60);let s=d.uptime_s%60;
-uptimeEl.textContent=m+'m '+s+'s';slotEl.textContent='Slot '+(d.slot||'?');
+uptimeEl.textContent=m+'m '+s+'s';slotEl.textContent='Slot '+(d.slot||'?');fwEl.textContent=d.fw_version||'-';
 document.getElementById('deviceName').textContent=d.device_name;
 footerEl.textContent='ID: '+d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+'s ago':'');
 }catch(e){footerEl.textContent='Erro: '+e.message}}
