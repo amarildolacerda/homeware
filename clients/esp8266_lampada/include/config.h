@@ -61,11 +61,11 @@
 #endif
 
 #ifndef DASHBOARD_PORT
-#define DASHBOARD_PORT 8080
+#define DASHBOARD_PORT 80
 #endif
 
 #ifndef FAUXMO_PORT
-#define FAUXMO_PORT 80
+#define FAUXMO_PORT 8080
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.
