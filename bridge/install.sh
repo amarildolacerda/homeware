@@ -2,9 +2,9 @@
 set -e
 
 REPO_URL="${REPO_URL:-https://github.com/amarildolacerda/homeware.git}"
-REPO_BRANCH="${REPO_BRANCH:-dev}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/addons/bridge_python}"
-HTTP_PORT="${HTTP_PORT:-8080}"
+HTTP_PORT="${HTTP_PORT:-80}"
 MQTT_HOST="${MQTT_HOST:-localhost}"
 MQTT_PORT="${MQTT_PORT:-1883}"
 MQTT_USER="${MQTT_USER:-}"
