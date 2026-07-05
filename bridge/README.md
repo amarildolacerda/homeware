@@ -8,13 +8,37 @@ Bridge em Python que conecta sensores ESP8266 ao Home Assistant via MQTT Discove
 2. O bridge publica **entidades MQTT Discovery** no formato do Home Assistant
 3. O **Home Assistant** descobre e cria os dispositivos automaticamente
 
-## Instalação Rápida (Docker)
+## Instalação Rápida
+
+### Docker
 
 ```bash
 docker compose up -d
 ```
 
-Isso sobe Mosquitto, Home Assistant e o bridge.
+Sobe Mosquitto, Home Assistant e o bridge.
+
+### Raspberry Pi (curl)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/main/bridge/install.sh | bash
+```
+
+Personalizando:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amarildolacerda/homeware/main/bridge/install.sh | MQTT_HOST=core-mosquitto HTTP_PORT=80 bash
+```
+
+### Raspberry Pi (sem curl)
+
+```bash
+git clone --depth 1 --branch main https://github.com/amarildolacerda/homeware.git /tmp/homeware
+rsync -av /tmp/homeware/bridge/ /addons/bridge_python/
+rm -rf /tmp/homeware
+cd /addons/bridge_python && python3 -m venv venv && venv/bin/pip install -r requirements.txt
+nohup venv/bin/python -m app.main > bridge.log 2>&1 &
+```
 
 ## Instalação como Add-on HA
 
