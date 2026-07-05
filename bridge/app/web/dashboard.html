@@ -21,14 +21,30 @@
 <div class="admin-dropdown" id="adminMenu">
 <div class="dropdown-item" onclick="doBroadcast()">&#128260; Buscar dispositivos</div>
 <div class="dropdown-item" onclick="forceGitPull()">&#128190; Forcar Atualizacao (git pull)</div>
-<div class="dropdown-item danger" onclick="doReset()">&#8635; Reiniciar Gateway</div>
-</div>
+ <div class="dropdown-item" onclick="showSettings()">&#9881; Configurar MQTT</div>
+ <div class="dropdown-item danger" onclick="doReset()">&#8635; Reiniciar Gateway</div>
+ </div>
 </div>
 </div>
 <div class="sub" id="sub">carregando...</div>
 </div>
 
 </section>
+
+<div class="modal-overlay" id="settingsModal" style="display:none" onclick="if(event.target===this)hideSettings()">
+  <div class="modal">
+    <h2>Configuracoes MQTT</h2>
+    <label>Host <input id="sHost" value=""></label>
+    <label>Porta <input id="sPort" type="number" value="1883"></label>
+    <label>Usuario <input id="sUser" value=""></label>
+    <label>Senha <input id="sPass" type="password" value=""></label>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideSettings()">Cancelar</button>
+      <button class="btn primary" onclick="saveSettings()">Salvar e Reiniciar</button>
+    </div>
+    <p id="settingsStatus"></p>
+  </div>
+</div>
 
 <section class="content">
     <div class="card">
@@ -241,6 +257,36 @@ async function loadHistory() {
   } catch (e) {}
 }
 
+function showSettings() {
+  document.getElementById('settingsStatus').textContent = '';
+  fetch('/api/settings').then(r=>r.json()).then(d=>{
+    document.getElementById('sHost').value = d.mqtt_host || '';
+    document.getElementById('sPort').value = d.mqtt_port || 1883;
+    document.getElementById('sUser').value = d.mqtt_user || '';
+    document.getElementById('sPass').value = '';
+    document.getElementById('settingsModal').style.display = 'flex';
+  });
+}
+function hideSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+async function saveSettings() {
+  const btn = document.querySelector('#settingsModal .primary');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  const data = {
+    mqtt_host: document.getElementById('sHost').value,
+    mqtt_port: parseInt(document.getElementById('sPort').value) || 1883,
+    mqtt_user: document.getElementById('sUser').value,
+    mqtt_pass: document.getElementById('sPass').value
+  };
+  try {
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    const j = await r.json();
+    document.getElementById('settingsStatus').textContent = j.message || 'OK';
+    setTimeout(() => window.location.reload(), 2000);
+  } catch(e) {
+    document.getElementById('settingsStatus').textContent = 'Erro: ' + e.message;
+    btn.disabled = false; btn.textContent = 'Salvar e Reiniciar';
+  }
+}
 function updateCharts() {
   let hasData = false;
   for (const [id, data] of Object.entries(history.temp)) { if (data.length) { tempChart.data.datasets[0].data = data; hasData = true; } }

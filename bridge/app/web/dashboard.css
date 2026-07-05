@@ -521,3 +521,59 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+.modal {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 360px;
+  max-width: 90vw;
+}
+.modal h2 {
+  margin: 0 0 16px;
+  color: var(--primary);
+  font-size: 1rem;
+}
+.modal label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.modal input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+}
+.modal input:focus {
+  border-color: var(--primary);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.modal-actions .btn {
+  flex: 1;
+}
+#settingsStatus {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted-subtle);
+}
