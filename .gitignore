@@ -6,5 +6,4 @@ venv/
 .git_token
 mosquitto/
 data/
-.git_token
 .pio
