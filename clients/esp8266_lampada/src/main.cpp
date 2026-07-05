@@ -390,7 +390,7 @@ static bool wifi_setup(bool force_config_portal = false)
     if (!force_config_portal && WiFi.SSID() != "")
     {
         wifiManager.setTimeout(180);
-        wifiManager.setConnectRetries(3);
+      ///  wifiManager.setConnectRetries(3);
         Serial.printf("[%s] Connecting to saved WiFi: %s\n", TAG, WiFi.SSID().c_str());
         if (wifiManager.autoConnect())
         {

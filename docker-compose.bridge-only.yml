@@ -1,0 +1,12 @@
+services:
+  bridge:
+    build: ./bridge
+    container_name: bridge
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MQTT_HOST: 192.168.1.50
+      MQTT_PORT: "1883"
+      HTTP_PORT: "80"
+      LOG_LEVEL: info
+      BRIDGE_IP: 192.168.1.50
