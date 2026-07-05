@@ -1,9 +1,0 @@
-[submodule "bridge"]
-	path = bridge
-	url = https://github.com/amarildolacerda/bridge.git
-[submodule "home_bridge"]
-	path = home_bridge
-	url = https://github.com/amarildolacerda/bridge_python.git
-[submodule "espnow_gateway"]
-	path = espnow_gateway
-	url = https://github.com/amarildolacerda/espnow_gateway.git
