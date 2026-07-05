@@ -1,9 +1,9 @@
-# Homeware Bridge + ESP8266 Clients — Projeto
+# HA Bridge API + Gateway ESPNOW - ESPNOW Clients — Projeto
 
 ## SubModules
 - `bridge` - projeto bridge para rodar em esp32 com integração com RainMaker
-- `home_bridge` - bridge de integração com Home Assistant
-- `espnow_gateway` - projeto gateway para ESP usando protocolo ESPNOW e comunicação com o bridge
+- `clients` - clientes para o gateway
+- `gateway` - projeto gateway para ESP usando protocolo ESPNOW e comunicação com o bridge
 
 ## Branches
 - `main` — estável, usado nos dispositivos em produção
@@ -17,28 +17,9 @@
 ## Ambiente
 
 ### Pré-requisitos
-- `sudo apt install ccache git curl` — ccache acelera rebuilds
+- `platformio`
 - Python 3.10+ com `venv`
 
-### ESP-IDF (primeira instalação)
-```sh
-mkdir -p ~/.espressif/v5.5.4
-git clone --recursive -b v5.5.4 https://github.com/espressif/esp-idf.git ~/.espressif/v5.5.4/esp-idf
-```
-> Se o clone falhar por falta de internet, reconecte a rede e execute:
-> ```sh
-> git -C ~/.espressif/v5.5.4/esp-idf submodule update --init --recursive
-> ```
-
-### RainMaker
-```sh
-git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~/esp/esp-rainmaker
-```
-
-## Build
-1. `source config.sh` carrega IDF v5.5.4 + RMAKER_PATH (ativa ccache automaticamente)
-2. `idf.py build` compila bridge ESP32
-3. Clientes ESP8266: compilar separadamente (Arduino IDE / PlatformIO)
 
 ## Scripts
 - `build.sh` — só build
@@ -48,8 +29,8 @@ git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~
 - `erase.sh` — source + erase-flash
 
 ## Arquitetura
-- Bridge (ESP32/IDF): servidor HTTP REST + RainMaker + discovery UDP + terminal serial
-- Clients (ESP8266/Arduino): sensores/atuadores que se registram no bridge via HTTP
+- Bridge (HA python): servidor HTTP REST + HA + discovery UDP
+- Clients (ESP8266/Arduino): sensores/atuadores que se registram no gateway via ESPNOW
 - Discovery UDP: broadcast porta 5000, service name `"esp-bridge"`
 
 ## Terminal do Bridge (console serial)
@@ -62,14 +43,6 @@ git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~
 - Usa `getchar()` single-key, prompt `bridge>` só aparece após comando executado
 - para descobrir o ip do Bridge rodar discover_bridge.py
 
-## Provisionamento WiFi
-- Bridge usa **BLE** (não SoftAP): quando não há credenciais STA salvas, inicia BLE advertising `PROV_<nome>`
-- Provisionamento feito via app ESP RainMaker (escaneia QR code ou conecta via BLE)
-- POP_TYPE_NONE + Security v1 — sem PIN, app conecta direto
-- QR code gerado com `app_network_get_device_service_name()` + `app_network_get_device_pop(POP_TYPE_RANDOM)` no dashboard em `/api/qrcode`
-- Após provisionamento via BLE, bridge conecta ao WiFi e inicia RainMaker cloud
-- `app_main.cpp` — init: network → event handlers → rmaker_gateway → esp_rmaker_start → app_network_start (BLE, POP_TYPE_NONE)
-
 ## Desenvolvimento
 - Alterações de código devem ser feitas apenas no branch `dev`. Verifique com `git branch --show-current` antes de começar.
 - `main` é estável e usado em produção — nunca commitar diretamente em `main`.
@@ -79,6 +52,7 @@ git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~
 3. se possivel ter configuração WIFI com WiFiManager
 4. ter atalhos de teclados no terminal
 5. seguir API do gateway
+6. ter um SPECx.md para o especificação de funcionamento esperado
 
 ## Regras importantes
 1. Device ID é dinâmico (`esp8266_<chip_id>`), não configurável
@@ -91,10 +65,9 @@ git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~
 8. Clients enviam `bridge_connected` no `/api/state`
 9. DHT21 client: GPIO 5, tipo DHT21, fallback `isnan()` não envia ao bridge (flag `s_dht_valid`)
 10. Clients respondem a `re_register:true` no UDP registrando novamente via HTTP POST `/api/device/register`
-11. Bridge broadcast (`b`): envia `re_register:true` via UDP, clients re-registram via HTTP, mostra registrados + descobertos
-12. Dashboard web tem card QR code do RainMaker em `/api/qrcode`
-13. Versão (tag) vale para bridge C, bridge Python e clients ESP8266 — todos devem ter a mesma FW_VERSION
-14. Toda implementação adicionada no bridge C (main/) deve ser replicada no bridge Python (home_bridge/ - submodule) e vice-versa
+11. Bridge broadcast (`b`): envia `re_register:true` via UDP, gateway re-registram via HTTP, mostra registrados + descobertos
+12. clients se cominica via ESPNOW com o gateway
+12. Versão (tag) vale para gateway ESP, HA bridge Python e clients ESP8266 — todos devem ter a mesma FW_VERSION
 
 ## Regras de AI
 0. economizar tokens com respostas minimas sem explicações desnecessaria 
@@ -103,6 +76,3 @@ git clone --recursive -b v1.8.2 https://github.com/espressif/esp-rainmaker.git ~
 3. manter uma comunicação objetiva sem rodeios
 
 ### Clientes estáveis (não modificar)
-- `clients/esp8266_gas/` — estável, não aplicar alterações
-- `clients/esp8266_dht21/` — estável, não aplicar alterações
-- `clients/esp8266_chuva/` — estável, não aplicar alterações

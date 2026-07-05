@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Optional
+from app.config import settings
 from app.models import BridgedDevice, DeviceType
 
 LOG = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def build_device_info(dev: BridgedDevice) -> dict:
     return {
         "identifiers": [f"esp32_bridge_{dev.id}"],
         "name": dev.name,
-        "sw_version": "bridge_python_v0.0.11",
+        "sw_version": f"bridge_python_{settings.version}",
         "manufacturer": "ESP-HA Bridge",
         "model": dev.type.value,
     }
@@ -220,7 +221,7 @@ class MQTTDiscovery:
         "device": {
             "identifiers": ["esp32_bridge_host"],
             "name": "ESP32 Bridge Host",
-            "sw_version": "bridge_python_v0.0.11",
+            "sw_version": f"bridge_python_{settings.version}",
             "manufacturer": "ESP-HA Bridge",
             "model": "bridge",
         },

@@ -123,7 +123,11 @@ let s_pairingWindowSec = 180;
 
 async function api(path, opts={}) {
     const res = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+        let msg = 'HTTP ' + res.status;
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch(_) {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -246,11 +250,14 @@ function startPairingCountdown() {
 }
 
 async function enterPairingMode() {
+    console.log('[pair] enterPairingMode called, pairingTimer=', pairingTimer);
     if (pairingTimer) { exitPairingMode(); return; }
     try {
-        await api('/api/pair/start', {method:'POST'});
+        const res = await api('/api/pair/start', {method:'POST'});
+        console.log('[pair] API success:', res);
         startPairingCountdown();
     } catch (e) {
+        console.error('[pair] API error:', e.message);
         if (e.message.includes('already pairing')) {
             startPairingCountdown();
         } else {

@@ -13,31 +13,18 @@ MQTT_PASS="${MQTT_PASS:-}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 BRIDGE_IP="${BRIDGE_IP:-}"
 
+export HTTP_PORT MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS LOG_LEVEL BRIDGE_IP
+
 echo "=== bridge_python (host) ==="
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "[1/3] Criando venv..."
-    python3 -m venv "$VENV_DIR"
+    python3 -m venv "$VENV_DIR" --upgrade-deps
 fi
 
-echo "[1/3] Verificando dependencias..."
+echo "[2/3] Verificando dependencias..."
+"$VENV_DIR/bin/python" -m pip install -q --upgrade pip
 "$VENV_DIR/bin/pip" install -q -r requirements.txt
 
-echo "[2/3] Checando MQTT ($MQTT_HOST:$MQTT_PORT)..."
-if command -v nc &>/dev/null; then
-    if nc -z -w3 "$MQTT_HOST" "$MQTT_PORT" 2>/dev/null; then
-        echo "  MQTT ok"
-    else
-        echo "  WARNING: MQTT broker nao respondendo em $MQTT_HOST:$MQTT_PORT"
-    fi
-else
-    echo "  WARNING: nc nao disponivel, pulando verificacao MQTT"
-fi
-
-mkdir -p data
-
-echo "[3/3] Iniciando bridge em http://0.0.0.0:$HTTP_PORT"
-echo ""
-
-export MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS HTTP_PORT LOG_LEVEL BRIDGE_IP
+echo "[3/3] Iniciando bridge..."
 exec "$VENV_DIR/bin/python" -m app.main
