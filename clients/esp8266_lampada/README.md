@@ -32,6 +32,20 @@ Firmware for ESP8266 (Wemos D1 Mini) relay control with ESP-NOW sensor protocol.
 | `h` / `?` | Help |
 | `r` | Restart |
 
+## Repeater (ESP-NOW Range Extender)
+
+Para locais distantes do gateway, configure um MAC de repeater:
+
+**Opção 1 — `config.h`:**
+```cpp
+#define REPEATER_MAC "AA:BB:CC:DD:EE:FF"
+```
+
+**Opção 2 — WiFiManager:**
+No portal de configuração, preencha o campo `Repeater MAC`.
+
+Quando o repeater está configurado, o cliente pula a etapa de pareamento e envia todos os pacotes direto para o repeater, que encaminha ao gateway.
+
 ## Alexa (UPnP / Fauxmo)
 
 Emula um dispositivo Belkin Wemo, detectável pela Alexa na rede local.

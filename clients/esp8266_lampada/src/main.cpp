@@ -41,6 +41,7 @@ static char s_device_name[48] = DEVICE_NAME;
 
 static bool s_wifi_configuration_mode = false;
 static unsigned long s_wifi_config_start_time = 0;
+static bool s_use_repeater = false;
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 static fauxmoESP s_fauxmo;
@@ -144,6 +145,18 @@ static void load_device_name(void)
     EEPROM.end();
 }
 
+static bool mac_parse(const char *str, uint8_t *mac)
+{
+    int vals[6];
+    if (sscanf(str, "%x:%x:%x:%x:%x:%x",
+               &vals[0], &vals[1], &vals[2],
+               &vals[3], &vals[4], &vals[5]) != 6)
+        return false;
+    for (int i = 0; i < 6; i++)
+        mac[i] = (uint8_t)vals[i];
+    return true;
+}
+
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
@@ -162,9 +175,12 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
             if (resp->status == PAIR_STATUS_OK)
             {
-                mac_copy(s_gateway_mac, mac);
+                if (!s_use_repeater)
+                {
+                    mac_copy(s_gateway_mac, mac);
+                    save_gateway_mac(mac);
+                }
                 s_assigned_slot = resp->assigned_slot;
-                save_gateway_mac(mac);
                 s_paired = true;
                 s_gateway_connected = true;
                 char mac_str[18];
@@ -390,8 +406,12 @@ static bool wifi_setup(bool force_config_portal = false)
     s_wifi_config_start_time = millis();
     wifiManager.setConfigPortalTimeout(300);
 
+    char buf_repeater[20];
+    buf_repeater[0] = '\0';
     WiFiManagerParameter custom_dev_name("dev_name", "Device Name", s_device_name, 48);
     wifiManager.addParameter(&custom_dev_name);
+    WiFiManagerParameter custom_repeater("repeater_mac", "Repeater MAC (vazio=normal)", buf_repeater, 18);
+    wifiManager.addParameter(&custom_repeater);
 
     if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS))
     {
@@ -400,6 +420,15 @@ static bool wifi_setup(bool force_config_portal = false)
             strncpy(s_device_name, custom_dev_name.getValue(), sizeof(s_device_name) - 1);
             s_device_name[sizeof(s_device_name) - 1] = '\0';
             save_device_name(s_device_name);
+        }
+        if (strlen(custom_repeater.getValue()) > 0)
+        {
+            if (mac_parse(custom_repeater.getValue(), s_gateway_mac))
+            {
+                s_use_repeater = true;
+                s_paired = true; // no pair needed, use repeater directly
+                save_gateway_mac(s_gateway_mac);
+            }
         }
         s_wifi_configuration_mode = false;
         return true;
@@ -688,6 +717,12 @@ static void handle_serial(void)
         }
         Serial.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
         Serial.printf("  Alexa:       %s (UPnP port %d)\n", s_device_name, FAUXMO_PORT);
+        if (s_use_repeater)
+        {
+            char mac_str[18];
+            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
+            Serial.printf("  Repeater:    %s\n", mac_str);
+        }
         Serial.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
         Serial.printf("  Uptime:      %lu s\n", up);
         Serial.printf("---------------\n\n");
@@ -793,7 +828,16 @@ void setup(void)
     Serial.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
     Serial.printf("  => Terminal:  'h' comando de ajuda\n");
 
-    if (load_gateway_mac())
+    /* Check for REPEATER_MAC from config.h */
+    if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
+    {
+        s_use_repeater = true;
+        s_paired = true;
+        char mac_str[18];
+        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
+        Serial.printf("[%s] Using repeater MAC: %s\n", TAG, mac_str);
+    }
+    else if (load_gateway_mac())
     {
         Serial.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;

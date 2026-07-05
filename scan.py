@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import socket
 import json
 import argparse
@@ -39,8 +40,22 @@ def fetch_title(ip, port):
     except:
         return None
 
+def get_mac_via_arp(ip):
+    try:
+        import subprocess, re
+        if os.name == "nt":
+            out = subprocess.check_output(f"arp -a {ip}", shell=True, timeout=3).decode("utf-8", errors="ignore")
+            m = re.search(r"([0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2}[-:][0-9A-Fa-f]{2})", out)
+        else:
+            out = subprocess.check_output(f"arp -n {ip}", shell=True, timeout=3).decode("utf-8", errors="ignore")
+            m = re.search(r"([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})", out, re.I)
+        if m: return m.group(1).replace("-", ":")
+    except: pass
+    return None
+
 def identify(ip, port):
     title = fetch_title(ip, port)
+    mac = None
     
     try:
         req = Request(f"http://{ip}:{port}/api/info", method="GET", headers={"User-Agent": "scan.py"})
@@ -50,20 +65,25 @@ def identify(ip, port):
         fw = data.get("fw_version", "")
         paired = data.get("paired_count", "?")
         online = data.get("online_count", "?")
-        is_gateway = "gateway" in gw_id or "gateway" in str(data.get("gateway_mac", ""))
+        mac = data.get("gateway_mac") or data.get("mac") or data.get("sta_mac")
+        is_gateway = "gateway" in gw_id or "gateway" in str(mac) or mac is not None
         label = "GATEWAY" if is_gateway else "bridge"
         info = f"  [{label}] {ip}:{port}  FW={fw}  paired={paired} online={online}  id={gw_id}"
-        if title:
-            info += f"  title=\"{title}\""
-        return info
+        if mac: info += f"  MAC={mac}"
+        if title: info += f"  title=\"{title}\""
+        return (info, mac)
     except:
+        mac = get_mac_via_arp(ip) if not mac else mac
         if title:
-            return f"  [HTTP] {ip}:{port}  title=\"{title}\""
+            info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
+            if mac: info += f"  MAC={mac}"
+            return (info, mac)
         return None
 
 def main():
     parser = argparse.ArgumentParser(description="Scan for ESP-NOW gateway on local network")
     parser.add_argument("-p", "--port", type=int, default=80, help="Port to scan (default: 80)")
+    parser.add_argument("--mac", action="store_true", help="Show only gateway MAC (for repeater config)")
     args = parser.parse_args()
 
     local_ip = get_local_ip()
@@ -93,12 +113,22 @@ def main():
         return
 
     print(f"\nIdentificando dispositivos...")
+    found_gateway_mac = None
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(identify, ip, args.port): ip for ip in found}
         for future in as_completed(futures):
-            info = future.result()
-            if info:
+            result = future.result()
+            if result:
+                info, mac = result
                 print(info)
+                if mac and not found_gateway_mac:
+                    found_gateway_mac = mac
+
+    if args.mac:
+        if found_gateway_mac:
+            print(f"\n{found_gateway_mac}")
+        else:
+            print("\nGateway MAC nao encontrado")
 
 if __name__ == "__main__":
     main()

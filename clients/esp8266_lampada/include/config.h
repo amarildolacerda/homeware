@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.1.0"
+#define FW_VERSION "v0.0.16"
 #endif
 
 #ifndef DEVICE_NAME
@@ -66,4 +66,10 @@
 
 #ifndef FAUXMO_PORT
 #define FAUXMO_PORT 80
+#endif
+
+/* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.
+   Formato: "AA:BB:CC:DD:EE:FF". Deixe vazio para modo normal. */
+#ifndef REPEATER_MAC
+#define REPEATER_MAC ""
 #endif
