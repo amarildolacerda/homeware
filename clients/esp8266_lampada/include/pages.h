@@ -8,7 +8,7 @@ static const char PAGE_DASHBOARD[] PROGMEM = R"=====(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lampada</title>
+<title id="pageTitle">Lampada</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
@@ -22,10 +22,14 @@ h1{text-align:center;font-size:1.3em;color:#e94560;margin-bottom:12px}
 .badge.off{background:rgba(229,72,77,.15);color:#e5484d}
 .expand-header{display:flex;justify-content:space-between;align-items:center;padding:10px 0;cursor:pointer;color:#888;font-size:.85em;border-bottom:1px solid #2a2a4a;user-select:none}
 .expand-header:hover{color:#e94560}
-#expandIcon{font-size:1em;transition:transform .2s}
-#expandIcon.open{transform:rotate(90deg)}
+#expandIcon,#expandIcon2{font-size:1em;transition:transform .2s}
+#expandIcon.open,#expandIcon2.open{transform:rotate(90deg)}
 .details{overflow:hidden;max-height:0;transition:max-height .3s ease}
 .details.open{max-height:400px}
+select{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;background:#1a1a2e;color:#eee;font-size:.85em;width:100px}
+input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;background:#1a1a2e;color:#eee;font-size:.85em;width:100%;box-sizing:border-box}
+.save-btn{padding:6px 16px;border-radius:8px;border:none;background:#e94560;color:#fff;font-size:.85em;cursor:pointer;margin-left:8px}
+.save-btn:active{transform:scale(.95)}
 .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #2a2a4a}
 .row:last-child{border-bottom:none}
 .label{color:#888;font-size:.85em}
@@ -49,6 +53,20 @@ h1{text-align:center;font-size:1.3em;color:#e94560;margin-bottom:12px}
 <div class="row"><span class="label">Uptime</span><span class="value" id="uptimeStatus">-</span></div>
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 </div>
+<div class="expand-header" onclick="toggleSettings()"><span>Configuracao</span><span id="expandIcon2">&#9654;</span></div>
+<div class="details" id="settingsDetails">
+<div class="row"><span class="label">Nome</span>
+<span><input type="text" id="deviceNameInput" maxlength="47"></span>
+</div>
+<div class="row"><span class="label">GPIO rele</span>
+<span><select id="relayPinSelect"></select></span>
+</div>
+<div class="row"><span class="label">GPIO botao</span>
+<span><select id="buttonPinSelect"></select></span>
+</div>
+<div style="text-align:center;margin-top:8px"><button class="save-btn" onclick="savePins()">Salvar</button></div>
+<div class="row"><span class="label"> </span><span><button class="save-btn" style="background:#ef4444" onclick="restartDevice()">Reiniciar</button></span></div>
+</div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
 <script>
@@ -62,10 +80,22 @@ const uptimeEl=document.getElementById('uptimeStatus');
 const fwEl=document.getElementById('fwVersion');
 const footerEl=document.getElementById('footer');
 const details=document.getElementById('details');
+const settingsDetails=document.getElementById('settingsDetails');
 const expandIcon=document.getElementById('expandIcon');
+const expandIcon2=document.getElementById('expandIcon2');
+const relayPinSelect=document.getElementById('relayPinSelect');
+const buttonPinSelect=document.getElementById('buttonPinSelect');
 let loading=false;
 let expanded=false;
+let expanded2=false;
 function toggleDetails(){expanded=!expanded;details.classList.toggle('open',expanded);expandIcon.classList.toggle('open',expanded)}
+function toggleSettings(){expanded2=!expanded2;settingsDetails.classList.toggle('open',expanded2);expandIcon2.classList.toggle('open',expanded2)}
+async function restartDevice(){if(!confirm('Reiniciar dispositivo?'))return;
+try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
+async function savePins(){let nm=deviceNameInput.value.trim();let rp=relayPinSelect.value;let bp=buttonPinSelect.value;if(!rp||!bp)return;
+let body={relay_pin:parseInt(rp),button_pin:parseInt(bp)};if(nm)body.device_name=nm;
+try{let r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';
 badge.className='badge '+(on?'on':'off');
@@ -75,14 +105,21 @@ rssiEl.textContent=d.rssi+' dBm';batteryEl.textContent=d.battery+'%';
 ipEl.textContent=d.ip;let m=Math.floor(d.uptime_s/60);let s=d.uptime_s%60;
 uptimeEl.textContent=m+'m '+s+'s';fwEl.textContent=d.fw_version||'-';
 document.getElementById('deviceName').textContent=d.device_name;
+document.getElementById('pageTitle').textContent=d.device_name;
 footerEl.textContent=d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+'s ago':'');
 }catch(e){footerEl.textContent='Erro: '+e.message}}
+async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
+deviceNameInput.value=d.device_name;
+relayPinSelect.innerHTML='';buttonPinSelect.innerHTML='';
+d.available_pins.forEach(function(p){
+let ro=document.createElement('option');ro.value=p;ro.text='GPIO '+p;if(p===d.relay_pin)ro.selected=true;relayPinSelect.appendChild(ro);
+let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.button_pin)bo.selected=true;buttonPinSelect.appendChild(bo)})}catch(e){}}
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';
 badge.className='badge '+(on?'on':'off');
 }catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
-setInterval(fetchState,3000);fetchState();
+setInterval(fetchState,3000);fetchState();fetchSettings();
 </script>
 </body>
 </html>

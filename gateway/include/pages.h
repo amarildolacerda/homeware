@@ -24,14 +24,21 @@ h1 { font-size:1.5rem; font-weight:600; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
 .sensor { background:#0c1222; border:1px solid var(--border); border-radius:8px; padding:16px; transition:border-color .2s; }
 .sensor:hover { border-color:var(--primary); }
+.sensor.offline { opacity:.6; border-color:var(--danger); }
+.sensor-onoff .sensor-header { margin-bottom:0; }
+.sensor-onoff .sensor-state { display:flex; align-items:center; gap:8px; }
 .sensor-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
 .sensor-name { font-weight:600; font-size:0.95rem; }
 .sensor-type { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-.sensor-meta { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; font-size:0.8rem; }
+.sensor-meta { overflow:hidden; max-height:0; transition:max-height .3s ease; display:grid; grid-template-columns:repeat(2,1fr); gap:8px; font-size:0.8rem; }
+.sensor-meta.open { max-height:300px; }
 .sensor-meta div { display:flex; flex-direction:column; }
 .sensor-meta .label { color:var(--muted); font-size:0.65rem; }
 .sensor-meta .value { font-weight:500; }
-.sensor-state { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:8px; }
+.btn-group { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+.sensor-btn-group { overflow:hidden; max-height:0; transition:max-height .3s ease; display:flex; gap:8px; flex-wrap:wrap; margin-top:0; }
+.sensor-btn-group.open { max-height:60px; margin-top:12px; }
+.sensor-state { display:flex; flex-wrap:wrap; gap:8px; }
 .state-item { background:#0b0f1a; padding:4px 10px; border-radius:6px; font-size:0.75rem; }
 .state-temp { color:#f87171; }
 .state-hum { color:#60a5fa; }
@@ -41,6 +48,8 @@ h1 { font-size:1.5rem; font-weight:600; }
 .state-rain { color:#60a5fa; }
 .state-tank { color:#4ade80; }
 .state-battery { color:#fcd34d; }
+.sensor-expand { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:0.7rem; transition:color .2s; }
+.sensor-expand:hover { color:var(--primary); }
 .btn { padding:10px 18px; border:none; border-radius:8px; font-weight:600; cursor:pointer; transition:all .2s; font-size:0.85rem; min-height:44px; }
 .btn-primary { background:var(--primary); color:#0b0f1a; }
 .btn-primary:hover { filter:brightness(1.1); }
@@ -209,6 +218,15 @@ function fmtUptime(ms) {
     return Math.floor(s/86400)+'d '+Math.floor((s%86400)/3600)+'h';
 }
 
+function toggleDetails(slot) {
+    const meta = document.getElementById('meta-'+slot);
+    const btns = document.getElementById('btns-'+slot);
+    const btn = document.getElementById('expand-'+slot);
+    const open = meta.classList.toggle('open');
+    btns.classList.toggle('open', open);
+    btn.innerHTML = open ? '&#9660; detalhes' : '&#9654; detalhes';
+}
+
 function typeName(type) {
     const names = {1:'Temp+Hum', 2:'Contato', 3:'Movimento', 4:'Gas', 5:'Chuva', 6:'Tanque', 7:'DHT+Gas', 8:'Interruptor'};
     return names[type] || 'Desconhecido';
@@ -220,16 +238,22 @@ function renderSensors(sensors) {
         grid.innerHTML = '<div class="empty">Nenhum sensor pareado. Clique em "Adicionar Sensor".</div>';
         return;
     }
-    grid.innerHTML = sensors.map(s => `
-        <div class="sensor">
+    grid.innerHTML = sensors.map(s => {
+        const offlineClass = s.online ? '' : ' offline';
+        if (s.type === 8) {
+            const on = (s.state && s.state.state) ? true : false;
+            return `
+        <div class="sensor sensor-onoff${offlineClass}">
             <div class="sensor-header">
                 <div>
                     <div class="sensor-name">${s.name || 'Sem nome'}</div>
                     <span class="sensor-type">${typeName(s.type)} &bull; Slot ${s.slot}</span>
                 </div>
-                <span class="badge ${s.online ? 'badge-online' : 'badge-offline'}">${s.online ? 'Online' : 'Offline'}</span>
+                <div class="sensor-state">
+                    <button class="btn ${on ? 'btn-success' : 'btn-secondary'}" onclick="toggleSensor(${s.slot}, ${on ? 0 : 1})">${on ? 'LIGADO' : 'DESLIGADO'}</button>
+                </div>
             </div>
-            <div class="sensor-meta">
+            <div class="sensor-meta" id="meta-${s.slot}">
                 <div><span class="label">MAC</span><span class="value">${s.mac_str}</span></div>
                 <div><span class="label">Bateria</span><span class="value state-battery">${s.battery_pct}%</span></div>
                 <div><span class="label">RSSI</span><span class="value">${s.last_rssi} dBm</span></div>
@@ -238,13 +262,45 @@ function renderSensors(sensors) {
                 <div><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">${s.bridge_device_id || '&mdash;'}</span></div>
                 ${s.ip ? `<div><span class="label">IP</span><span class="value"><a href="http://${s.ip}">${s.ip}</a></span></div>` : ''}
             </div>
-            <div class="sensor-state" id="state-${s.slot}">${renderState(s)}</div>
-            <div class="btn-group">
+            <div class="sensor-btn-group" id="btns-${s.slot}">
                 <button class="btn btn-secondary" onclick="renameSensor(${s.slot})">Renomear</button>
                 <button class="btn btn-danger" onclick="removeSensor(${s.slot})">Remover</button>
             </div>
-        </div>
-    `).join('');
+            <div style="text-align:center;margin-top:8px">
+                <button class="sensor-expand" onclick="toggleDetails(${s.slot})" id="expand-${s.slot}">&#9654; detalhes</button>
+            </div>
+        </div>`;
+        }
+        return `
+        <div class="sensor${offlineClass}">
+            <div class="sensor-header">
+                <div>
+                    <div class="sensor-name">${s.name || 'Sem nome'}</div>
+                    <span class="sensor-type">${typeName(s.type)} &bull; Slot ${s.slot}</span>
+                </div>
+                <div style="text-align:right">
+                    <span class="badge ${s.online ? 'badge-online' : 'badge-offline'}">${s.online ? 'Online' : 'Offline'}</span>
+                </div>
+            </div>
+            <div class="sensor-state" id="state-${s.slot}">${renderState(s)}</div>
+            <div class="sensor-meta" id="meta-${s.slot}">
+                <div><span class="label">MAC</span><span class="value">${s.mac_str}</span></div>
+                <div><span class="label">Bateria</span><span class="value state-battery">${s.battery_pct}%</span></div>
+                <div><span class="label">RSSI</span><span class="value">${s.last_rssi} dBm</span></div>
+                <div><span class="label">Ultimo</span><span class="value">${s.last_seen >= 0 ? fmtUptime(s.last_seen) : '&mdash;'}</span></div>
+                <div><span class="label">Seq</span><span class="value">${s.sequence}</span></div>
+                <div><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">${s.bridge_device_id || '&mdash;'}</span></div>
+                ${s.ip ? `<div><span class="label">IP</span><span class="value"><a href="http://${s.ip}">${s.ip}</a></span></div>` : ''}
+            </div>
+            <div class="sensor-btn-group" id="btns-${s.slot}">
+                <button class="btn btn-secondary" onclick="renameSensor(${s.slot})">Renomear</button>
+                <button class="btn btn-danger" onclick="removeSensor(${s.slot})">Remover</button>
+            </div>
+            <div style="text-align:center;margin-top:8px">
+                <button class="sensor-expand" onclick="toggleDetails(${s.slot})" id="expand-${s.slot}">&#9654; detalhes</button>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function renderState(s) {
