@@ -1,15 +1,19 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.0.17"
+#define FW_VERSION "v0.0.18"
 #endif
 
 #ifndef DEVICE_NAME
-#define DEVICE_NAME "Luz Lampada"
+#define DEVICE_NAME "sacadasocial"
 #endif
 
 #ifndef RELAY_PIN
-#define RELAY_PIN 4
+#define RELAY_PIN 15
+#endif
+
+#ifndef BUTTON_PIN
+#define BUTTON_PIN 4
 #endif
 
 #ifndef RELAY_ON
@@ -64,8 +68,8 @@
 #define DASHBOARD_PORT 80
 #endif
 
-#ifndef FAUXMO_PORT
-#define FAUXMO_PORT 8080
+#ifndef ESP_NOW_CHANNEL
+#define ESP_NOW_CHANNEL 1
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.
@@ -73,3 +77,7 @@
 #ifndef REPEATER_MAC
 #define REPEATER_MAC ""
 #endif
+
+/* Pinos GPIO disponiveis para configuracao do relé */
+static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};
+static const int AVAILABLE_GPIOS_COUNT = 9;

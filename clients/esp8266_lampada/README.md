@@ -58,19 +58,16 @@ O nome do dispositivo é o mesmo configurado via WiFiManager (padrão: `Luz Lamp
 
 ## Web Interface
 
-- `http://<ip>:8080/` — Dashboard with on/off button + status
-- `http://<ip>:8080/api/state` — Full device JSON
-- `http://<ip>:8080/api/relay` — GET (state) / POST (`{"state":true/false}`)
-- `http://<ip>:8080/api/pin` — Direct GPIO control
-- `http://<ip>:8080/api/ota` — Firmware upload
+- `http://<ip>:80/` — Dashboard with on/off button + estado (compacto, detalhes expansíveis)
+- `http://<ip>:80/api/state` — Full device JSON
+- `http://<ip>:80/api/relay` — GET (state) / POST (`{"state":true/false}`)
+- `http://<ip>:80/api/pin` — Direct GPIO control
 
 ## OTA
 
 ```
 pio run -t upload --upload-port <ip>
 ```
-
-Or upload `.bin` via web dashboard.
 
 ## Build
 

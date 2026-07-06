@@ -1,40 +1,51 @@
 param (
-    [string]$IP = "192.168.1.100"
+    [string]$p = "COM3",
+    [string]$o,
+    [string]$e
 )
 
-# Flash ESP8266 OTA from Windows PowerShell
-# Requires: Python + espota.py (from ESP8266 Arduino core) or platformio
+<#
+.SYNOPSIS
+    Flash ESP8266 Lampada
+.EXAMPLE
+    .\flash.ps1                     # serial, COM3, env esp8266
+    .\flash.ps1 -p COM4             # serial, COM4
+    .\flash.ps1 -o 192.168.1.100    # OTA, env esp8266_ota
+    .\flash.ps1 -o 192.168.1.100 -e esp8266   # override env
+#>
 
 $ErrorActionPreference = "Stop"
 
-function Test-Command {
-    param($Command)
-    return (Get-Command $Command -ErrorAction SilentlyContinue) -ne $null
-}
-
-if (Test-Command pio) {
-    Write-Host "Using PlatformIO..." -ForegroundColor Cyan
-    pio run -t upload --upload-port "$IP"
-    exit
-}
-
-if (Test-Command platformio) {
-    Write-Host "Using PlatformIO..." -ForegroundColor Cyan
-    platformio run -t upload --upload-port "$IP"
-    exit
-}
-
-$firmware = ".pio\build\esp8266\firmware.bin"
-if (-not (Test-Path $firmware)) {
-    if (Test-Command pio) {
-        pio run
-    } elseif (Test-Command platformio) {
-        platformio run
-    } else {
-        Write-Error "Firmware not found and PlatformIO not available"
-        exit 1
+function Get-Pio {
+    $paths = @(
+        "pio",
+        "platformio",
+        "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python3*\Scripts\pio.exe"
+    )
+    foreach ($p in $paths) {
+        $cmd = Get-Command $p -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
     }
+    return $null
 }
 
-Write-Host "Uploading OTA to $IP..." -ForegroundColor Cyan
-python -m espota -i $IP -p 8266 -f $firmware
+$pio = Get-Pio
+if (-not $pio) {
+    Write-Error "PlatformIO CLI not found. Use: python -m pip install platformio"
+    exit 1
+}
+
+if ($o) {
+    $envName = if ($e) { $e } else { "esp8266_ota" }
+    Write-Host "Building + OTA upload to $o (env: $envName)..." -ForegroundColor Cyan
+    & $pio run -e $envName --target upload --upload-port "$o"
+    if ($LASTEXITCODE -ne 0) { Write-Error "OTA upload failed"; exit 1 }
+} else {
+    $envName = if ($e) { $e } else { "esp8266" }
+    Write-Host "Building + serial flash on $p (env: $envName)..." -ForegroundColor Cyan
+    & $pio run -e $envName --target upload --upload-port "$p"
+    if ($LASTEXITCODE -ne 0) { Write-Error "Flash failed"; exit 1 }
+}
+
+Write-Host "Done." -ForegroundColor Green

@@ -1,7 +1,7 @@
 #include "web_server.h"
 #include "sensor_registry.h"
 #include "espnow_handler.h"
-#include "bridge_client.h"
+#include "mqtt_client.h"
 #include "config.h"
 #include "pages.h"
 #include <ESP8266WebServer.h>
@@ -13,14 +13,44 @@
 static ESP8266WebServer s_server(80);
 static bool s_wifi_config_mode = false;
 static unsigned long s_wifi_config_start = 0;
+static bool s_wifi_reconnect_active = false;
+static unsigned long s_wifi_reconnect_deadline = 0;
 
 void web_server_init() {
     s_server.on("/", HTTP_GET, []() {
-        s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
+        size_t total = strlen_P(PAGE_DASHBOARD);
+        WiFiClient cl = s_server.client();
+        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+        cl.print(total);
+        cl.print(F("\r\nConnection: close\r\n\r\n"));
+        PGM_P src = PAGE_DASHBOARD;
+        char buf[256];
+        while (total > 0) {
+            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+            memcpy_P(buf, src, chunk);
+            cl.write((const uint8_t*)buf, chunk);
+            src += chunk;
+            total -= chunk;
+            yield();
+        }
     });
 
     s_server.on("/docs", HTTP_GET, []() {
-        s_server.send(200, "text/html", FPSTR(PAGE_DOCS));
+        size_t total = strlen_P(PAGE_DOCS);
+        WiFiClient cl = s_server.client();
+        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+        cl.print(total);
+        cl.print(F("\r\nConnection: close\r\n\r\n"));
+        PGM_P src = PAGE_DOCS;
+        char buf[256];
+        while (total > 0) {
+            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+            memcpy_P(buf, src, chunk);
+            cl.write((const uint8_t*)buf, chunk);
+            src += chunk;
+            total -= chunk;
+            yield();
+        }
     });
     
     s_server.on("/api/info", HTTP_GET, []() {
@@ -33,9 +63,10 @@ void web_server_init() {
         doc["uptime_ms"] = millis();
         doc["pairing_mode"] = espnow_is_pairing();
         doc["pairing_window_sec"] = PAIRING_WINDOW_MS / 1000;
-        doc["bridge_host"] = bridge_client_get_host();
-        doc["bridge_port"] = bridge_client_get_port();
-        doc["bridge_discovered"] = bridge_client_is_discovered();
+        doc["mqtt_host"] = mqtt_client_get_host();
+        doc["mqtt_port"] = mqtt_client_get_port();
+        doc["mqtt_user"] = mqtt_client_get_user();
+        doc["mqtt_connected"] = mqtt_client_is_connected();
         char mac_buf[18];
         mac_to_str(espnow_get_gateway_mac(), mac_buf, sizeof(mac_buf));
         doc["gateway_mac"] = mac_buf;
@@ -141,7 +172,7 @@ void web_server_init() {
     });
     
     s_server.on("/api/broadcast", HTTP_POST, []() {
-        bridge_client_register_all();
+        mqtt_client_publish_all();
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
     
@@ -165,7 +196,7 @@ void web_server_init() {
             strncpy(s->name, name, sizeof(s->name) - 1);
             s->name[sizeof(s->name) - 1] = '\0';
             sensor_registry_save();
-            bridge_client_register_sensor(s);
+            mqtt_client_publish_discovery(s);
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else if (action == "command") {
             JsonDocument doc;
@@ -199,7 +230,7 @@ void web_server_init() {
         }
     });
     
-    s_server.on("/api/config/bridge", HTTP_POST, []() {
+    s_server.on("/api/config/mqtt", HTTP_POST, []() {
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
         if (err || !doc.containsKey("host") || !doc.containsKey("port")) {
@@ -208,12 +239,10 @@ void web_server_init() {
         }
         const char *host = doc["host"];
         uint16_t port = doc["port"];
-        if (bridge_client_save_config(host, port)) {
-            bridge_client_discover();
-            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            s_server.send(500, "application/json", "{\"error\":\"save failed\"}");
-        }
+        const char *user = doc["user"] | "";
+        const char *pass = doc["pass"] | "";
+        mqtt_client_save_config(host, port, user, pass);
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {
@@ -281,14 +310,19 @@ bool web_server_wifi_setup(bool force_portal) {
     s_wifi_config_start = millis();
     wifiManager.setConfigPortalTimeout(300);
     
-    WiFiManagerParameter custom_bridge_host("bridge_host", "Bridge IP", bridge_client_get_host(), 64);
-    WiFiManagerParameter custom_bridge_port("bridge_port", "Bridge Port", String(bridge_client_get_port()).c_str(), 6);
-    wifiManager.addParameter(&custom_bridge_host);
-    wifiManager.addParameter(&custom_bridge_port);
+    WiFiManagerParameter custom_mqtt_host("mqtt_host", "MQTT Broker IP", mqtt_client_get_host(), 64);
+    WiFiManagerParameter custom_mqtt_port("mqtt_port", "MQTT Port", String(mqtt_client_get_port()).c_str(), 6);
+    WiFiManagerParameter custom_mqtt_user("mqtt_user", "MQTT User", mqtt_client_get_user(), 32);
+    WiFiManagerParameter custom_mqtt_pass("mqtt_pass", "MQTT Pass", mqtt_client_get_pass(), 32);
+    wifiManager.addParameter(&custom_mqtt_host);
+    wifiManager.addParameter(&custom_mqtt_port);
+    wifiManager.addParameter(&custom_mqtt_user);
+    wifiManager.addParameter(&custom_mqtt_pass);
     
     if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS)) {
-        if (strlen(custom_bridge_host.getValue()) > 0) {
-            bridge_client_save_config(custom_bridge_host.getValue(), atoi(custom_bridge_port.getValue()));
+        if (strlen(custom_mqtt_host.getValue()) > 0) {
+            mqtt_client_save_config(custom_mqtt_host.getValue(), atoi(custom_mqtt_port.getValue()),
+                                     custom_mqtt_user.getValue(), custom_mqtt_pass.getValue());
         }
         s_wifi_config_mode = false;
         return true;
@@ -300,20 +334,25 @@ bool web_server_wifi_setup(bool force_portal) {
 }
 
 void web_server_maintain_wifi() {
-    if (WiFi.status() == WL_CONNECTED) return;
-    
-    static unsigned long last_attempt = 0;
-    if (millis() - last_attempt < 30000) return;
-    last_attempt = millis();
-    
-    Serial.println("[WIFI] Reconnecting...");
-    WiFi.begin();
-    unsigned long start = millis();
-    while (millis() - start < 15000) {
-        if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
+        if (s_wifi_reconnect_active) {
+            s_wifi_reconnect_active = false;
             Serial.printf("[WIFI] Reconnected! IP: %s\n", WiFi.localIP().toString().c_str());
-            return;
         }
-        delay(500);
+        return;
+    }
+
+    static unsigned long last_attempt = 0;
+
+    if (!s_wifi_reconnect_active) {
+        if (millis() - last_attempt < 30000) return;
+        last_attempt = millis();
+        Serial.println("[WIFI] Reconnecting...");
+        WiFi.begin();
+        s_wifi_reconnect_active = true;
+        s_wifi_reconnect_deadline = millis() + 15000;
+    } else if (millis() >= s_wifi_reconnect_deadline) {
+        Serial.println("[WIFI] Reconnect timeout");
+        s_wifi_reconnect_active = false;
     }
 }

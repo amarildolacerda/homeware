@@ -7,7 +7,7 @@
 #include <ArduinoOTA.h>
 #include <Updater.h>
 #include <espnow.h>
-#include <fauxmoESP.h>
+#include <Espalexa.h>
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
@@ -20,6 +20,10 @@ static unsigned long s_last_reconnect_attempt = 0;
 static unsigned long s_last_espnow_send = 0;
 static unsigned long s_last_espnow_pair = 0;
 static unsigned long s_last_heartbeat = 0;
+static unsigned long s_last_alexa_activity = 0;
+static unsigned long s_send_deadline = 0;
+static int s_send_retries_left = 0;
+static unsigned long s_pair_wait_until = 0;
 
 static bool s_gateway_connected = false;
 static bool s_paired = false;
@@ -32,7 +36,11 @@ static bool s_send_pending = false;
 static bool s_espnow_ready = false;
 
 static bool s_relay_state = false;
+static int s_relay_pin = RELAY_PIN;
+static int s_button_pin = BUTTON_PIN;
 static int s_battery = 100;
+static bool s_button_last = HIGH;
+static unsigned long s_button_last_ms = 0;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
 
@@ -45,7 +53,8 @@ static bool s_use_repeater = false;
 static uint8_t s_my_mac[6];
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
-static fauxmoESP s_fauxmo;
+static Espalexa s_alexa;
+static EspalexaDevice *s_alexa_dev = nullptr;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -53,6 +62,9 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_GATEWAY_MAC_SIZE 6
 #define EEPROM_NAME_ADDR 10
 #define EEPROM_NAME_MAX 48
+#define EEPROM_RELAY_STATE_ADDR (EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1)
+#define EEPROM_RELAY_PIN_ADDR (EEPROM_RELAY_STATE_ADDR + 1)
+#define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
 #define EEPROM_MAGIC 0xAA
 
 static void save_gateway_mac(const uint8_t *mac)
@@ -86,7 +98,7 @@ static bool load_gateway_mac(void)
 static void save_relay_state(void)
 {
     EEPROM.begin(128);
-    EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1, s_relay_state ? 1 : 0);
+    EEPROM.write(EEPROM_RELAY_STATE_ADDR, s_relay_state ? 1 : 0);
     EEPROM.commit();
     EEPROM.end();
 }
@@ -94,9 +106,61 @@ static void save_relay_state(void)
 static void load_relay_state(void)
 {
     EEPROM.begin(128);
-    uint8_t val = EEPROM.read(EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1);
+    uint8_t val = EEPROM.read(EEPROM_RELAY_STATE_ADDR);
     EEPROM.end();
     s_relay_state = (val == 1);
+}
+
+static void save_relay_pin(void)
+{
+    EEPROM.begin(128);
+    EEPROM.write(EEPROM_RELAY_PIN_ADDR, (uint8_t)s_relay_pin);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_relay_pin(void)
+{
+    EEPROM.begin(128);
+    uint8_t val = EEPROM.read(EEPROM_RELAY_PIN_ADDR);
+    EEPROM.end();
+    if (val != 0xFF)
+    {
+        for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
+        {
+            if (AVAILABLE_GPIOS[i] == (int)val)
+            {
+                s_relay_pin = (int)val;
+                return;
+            }
+        }
+    }
+}
+
+static void save_button_pin(void)
+{
+    EEPROM.begin(128);
+    EEPROM.write(EEPROM_BUTTON_PIN_ADDR, (uint8_t)s_button_pin);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_button_pin(void)
+{
+    EEPROM.begin(128);
+    uint8_t val = EEPROM.read(EEPROM_BUTTON_PIN_ADDR);
+    EEPROM.end();
+    if (val != 0xFF)
+    {
+        for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
+        {
+            if (AVAILABLE_GPIOS[i] == (int)val)
+            {
+                s_button_pin = (int)val;
+                return;
+            }
+        }
+    }
 }
 
 static void save_device_name(const char *name)
@@ -159,6 +223,25 @@ static bool mac_parse(const char *str, uint8_t *mac)
 }
 
 static void set_relay(bool state);
+
+static void name_to_ssid(const char *name, char *out, size_t max)
+{
+    size_t j = 0;
+    for (size_t i = 0; name[i] && j < max - 1; i++)
+    {
+        char c = name[i];
+        if (c >= 32 && c <= 126 && c != '"' && c != '\\')
+            out[j++] = c;
+    }
+    while (j > 0 && out[j - 1] == ' ') j--;
+    if (j == 0)
+    {
+        strncpy(out, "Lampada", max - 1);
+        out[max - 1] = '\0';
+        return;
+    }
+    out[j] = '\0';
+}
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
@@ -261,8 +344,7 @@ static bool espnow_add_peer(const uint8_t *mac)
 {
     if (!s_espnow_ready) return false;
     esp_now_del_peer((uint8_t *)mac);
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
+    int ch = ESP_NOW_CHANNEL;
     int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
     if (ret != 0)
     {
@@ -378,7 +460,7 @@ static bool espnow_send_pair_request(void)
 static void set_relay(bool state)
 {
     s_relay_state = state;
-    digitalWrite(RELAY_PIN, state ? RELAY_ON : !RELAY_ON);
+    digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
     s_last_espnow_send = 0;
 }
@@ -388,11 +470,11 @@ static void toggle_relay(void)
     set_relay(!s_relay_state);
 }
 
-static void fauxmo_callback(unsigned char device_id, const char *device_name, bool state, unsigned char value)
+static void alexa_callback(EspalexaDevice *d)
 {
-    (void)device_id;
-    (void)value;
-    Serial.printf("[%s] Alexa: %s -> %s\n", TAG, device_name, state ? "ON" : "OFF");
+    bool state = (d->getValue() > 0);
+    s_last_alexa_activity = millis();
+    Serial.printf("[%s] Alexa: %s -> %s\n", TAG, s_device_name, state ? "ON" : "OFF");
     set_relay(state);
     if (s_paired)
     {
@@ -403,9 +485,13 @@ static void fauxmo_callback(unsigned char device_id, const char *device_name, bo
 
 static void init_hardware(void)
 {
-    pinMode(RELAY_PIN, OUTPUT);
+    load_relay_pin();
+    load_button_pin();
+    pinMode(s_relay_pin, OUTPUT);
     load_relay_state();
-    digitalWrite(RELAY_PIN, s_relay_state ? RELAY_ON : !RELAY_ON);
+    digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
+    pinMode(s_button_pin, INPUT_PULLUP);
+    s_button_last = digitalRead(s_button_pin);
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
@@ -443,7 +529,9 @@ static bool wifi_setup(bool force_config_portal = false)
     WiFiManagerParameter custom_repeater("repeater_mac", "Repeater MAC (vazio=normal)", buf_repeater, 18);
     wifiManager.addParameter(&custom_repeater);
 
-    if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS))
+    char portal_ssid[33];
+    name_to_ssid(s_device_name, portal_ssid, sizeof(portal_ssid));
+    if (wifiManager.startConfigPortal(portal_ssid, WIFI_CONFIG_PORTAL_PASS))
     {
         if (strlen(custom_dev_name.getValue()) > 0 && strcmp(s_device_name, custom_dev_name.getValue()) != 0)
         {
@@ -519,6 +607,7 @@ static void handle_api_state(void)
     {
         JsonDocument doc;
         doc["state"] = s_relay_state;
+        doc["button"] = (digitalRead(s_button_pin) == LOW);
         doc["battery"] = s_battery;
         doc["device_id"] = s_device_id;
         doc["device_name"] = s_device_name;
@@ -529,6 +618,7 @@ static void handle_api_state(void)
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         if (s_last_send_ms) doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
+        doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
         doc["fw_version"] = FW_VERSION;
         serializeJson(doc, json);
     }
@@ -719,11 +809,10 @@ static void handle_serial(void)
     case 'A':
         Serial.printf("\n--- Alexa ---\n");
         Serial.printf("  Dispositivo: %s\n", s_device_name);
-        Serial.printf("  Protocolo:   UPnP (Wemo emulation)\n");
-        Serial.printf("  Porta:       %d\n", FAUXMO_PORT);
-        Serial.printf("  Status:      ativo\n");
+        Serial.printf("  Protocolo:   Hue Bridge (SSDP + UPnP)\n");
         Serial.printf("  Dica:        \"Alexa, ligue %s\"\n", s_device_name);
         Serial.printf("               \"Alexa, desligue %s\"\n", s_device_name);
+        Serial.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         Serial.printf("-------------\n\n");
         break;
     case 's':
@@ -747,7 +836,7 @@ static void handle_serial(void)
             Serial.printf("  Gateway:     nao pareado\n");
         }
         Serial.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
-        Serial.printf("  Alexa:       %s (UPnP port %d)\n", s_device_name, FAUXMO_PORT);
+        Serial.printf("  Alexa:       %s (ativo)\n", s_device_name);
         if (s_use_repeater)
         {
             char mac_str[18];
@@ -760,6 +849,115 @@ static void handle_serial(void)
         break;
     }
     }
+}
+
+static bool is_valid_gpio(int pin)
+{
+    for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
+    {
+        if (AVAILABLE_GPIOS[i] == pin) return true;
+    }
+    return false;
+}
+
+static void handle_api_settings(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        String json;
+        JsonDocument doc;
+        doc["device_name"] = s_device_name;
+        doc["relay_pin"] = s_relay_pin;
+        doc["button_pin"] = s_button_pin;
+        JsonArray pins = doc["available_pins"].to<JsonArray>();
+        for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
+            pins.add(AVAILABLE_GPIOS[i]);
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err)
+        {
+            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+            return;
+        }
+        bool changed = false;
+        if (doc.containsKey("device_name"))
+        {
+            const char *new_name = doc["device_name"];
+            if (is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
+            {
+                strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
+                s_device_name[sizeof(s_device_name) - 1] = '\0';
+                save_device_name(s_device_name);
+                if (s_alexa_dev) s_alexa_dev->setName(s_device_name);
+                Serial.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
+                changed = true;
+            }
+        }
+        if (doc.containsKey("relay_pin"))
+        {
+            int new_pin = doc["relay_pin"];
+            if (!is_valid_gpio(new_pin))
+            {
+                s_server.send(400, "application/json", "{\"error\":\"invalid relay_pin\"}");
+                return;
+            }
+            if (new_pin != s_relay_pin)
+            {
+                pinMode(s_relay_pin, INPUT);
+                s_relay_pin = new_pin;
+                pinMode(s_relay_pin, OUTPUT);
+                digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
+                save_relay_pin();
+                Serial.printf("[%s] Relay pin changed to GPIO%d\n", TAG, s_relay_pin);
+                changed = true;
+            }
+        }
+        if (doc.containsKey("button_pin"))
+        {
+            int new_pin = doc["button_pin"];
+            if (!is_valid_gpio(new_pin))
+            {
+                s_server.send(400, "application/json", "{\"error\":\"invalid button_pin\"}");
+                return;
+            }
+            if (new_pin != s_button_pin)
+            {
+                pinMode(s_button_pin, INPUT);
+                s_button_pin = new_pin;
+                pinMode(s_button_pin, INPUT_PULLUP);
+                s_button_last = digitalRead(s_button_pin);
+                save_button_pin();
+                Serial.printf("[%s] Button pin changed to GPIO%d\n", TAG, s_button_pin);
+                changed = true;
+            }
+        }
+        if (!changed)
+        {
+            s_server.send(200, "application/json", "{\"status\":\"no changes\"}");
+            return;
+        }
+        String json;
+        JsonDocument resp;
+        resp["device_name"] = s_device_name;
+        resp["relay_pin"] = s_relay_pin;
+        resp["button_pin"] = s_button_pin;
+        resp["status"] = "ok";
+        serializeJson(resp, json);
+        s_server.send(200, "application/json", json);
+    }
+}
+
+static void handle_api_restart(void)
+{
+    s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    delay(500);
+    ESP.restart();
 }
 
 static void handle_ota(void)
@@ -823,26 +1021,29 @@ void setup(void)
 
     if (!wifi_setup(false))
     {
-        Serial.printf("[%s] WiFi setup failed, restarting...\n", TAG);
-        delay(5000);
-        ESP.restart();
+        Serial.printf("[%s] WiFi setup failed, operating in AP_STA mode for ESP-NOW\n", TAG);
     }
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setOutputPower(20.5);
 
     espnow_init_client();
     WiFi.macAddress(s_my_mac);
 
-    s_fauxmo.createServer(true);
-    s_fauxmo.addDevice(s_device_name);
-    s_fauxmo.onSetState(fauxmo_callback);
-    s_fauxmo.enable(true);
-    Serial.printf("[%s] Alexa UPnP: %s device ready on port %d\n", TAG, s_device_name, FAUXMO_PORT);
+    s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
+    s_alexa.addDevice(s_alexa_dev);
+    s_alexa.begin(&s_server);
+    Serial.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
 
     s_server.on("/", handle_root);
+    s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
-    s_server.on("/api/pin", handle_api_pin);
+    s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
+    s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
+    s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
-    s_server.begin();
+    /* s_server.begin() is called by Espalexa internally */
 
     ArduinoOTA.setHostname(s_device_id);
     ArduinoOTA.onStart([]() { Serial.printf("[%s] OTA update start\n", TAG); });
@@ -889,20 +1090,34 @@ void loop(void)
     handle_serial();
     check_config_portal_timeout();
     ArduinoOTA.handle();
-    s_server.handleClient();
-    s_fauxmo.handle();
+    s_alexa.loop();
+
+    {
+        bool btn = digitalRead(s_button_pin);
+        unsigned long now = millis();
+        if (btn != s_button_last && now - s_button_last_ms > 50)
+        {
+            s_button_last_ms = now;
+            s_button_last = btn;
+            if (btn == LOW)
+            {
+                toggle_relay();
+                Serial.printf("[%s] Button press -> relay %s\n", TAG, s_relay_state ? "ON" : "OFF");
+            }
+        }
+    }
 
     if (WiFi.status() != WL_CONNECTED)
     {
         maintain_wifi_connection();
-        delay(1000);
-        return;
     }
 
     unsigned long now = millis();
 
     if (!s_paired)
     {
+        if (s_pair_wait_until > 0 && now < s_pair_wait_until)
+            return;
         if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
         {
             s_last_espnow_pair = now;
@@ -912,63 +1127,53 @@ void loop(void)
             if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
             {
                 s_pair_attempts = 0;
-                Serial.printf("[%s] Max pair attempts, waiting before retry\n", TAG);
-                delay(60000);
+                s_pair_wait_until = now + 60000;
+                Serial.printf("[%s] Max pair attempts, waiting 60s\n", TAG);
             }
         }
-        delay(1);
         return;
     }
 
-    if (now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
+    if (s_send_pending)
+    {
+        if (s_ack_received)
+        {
+            s_send_pending = false;
+            s_gateway_connected = true;
+            s_last_send_ms = millis();
+        }
+        else if (now > s_send_deadline)
+        {
+            if (s_send_retries_left > 0)
+            {
+                s_send_retries_left--;
+                s_ack_received = false;
+                if (espnow_send_data())
+                    s_send_deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
+                else
+                    s_send_pending = false;
+            }
+            else
+            {
+                s_send_pending = false;
+                s_gateway_connected = false;
+                Serial.printf("[%s] Send failed, re-pairing\n", TAG);
+                s_paired = false;
+                s_pair_attempts = 0;
+                s_last_espnow_pair = 0;
+            }
+        }
+    }
+
+    if (!s_send_pending && now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
     {
         s_last_espnow_send = now;
         s_ack_received = false;
         if (espnow_send_data())
         {
-            unsigned long deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
-            while (millis() < deadline)
-            {
-                if (s_ack_received) break;
-                delay(1);
-            }
-            if (s_ack_received)
-            {
-                s_gateway_connected = true;
-                s_last_send_ms = millis();
-            }
-            else
-            {
-                s_gateway_connected = false;
-                bool ok = false;
-                for (int retry = 0; retry < ESPNOW_SEND_RETRIES; retry++)
-                {
-                    delay(50);
-                    s_ack_received = false;
-                    if (espnow_send_data())
-                    {
-                        deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
-                        while (millis() < deadline)
-                        {
-                            if (s_ack_received) break;
-                            delay(1);
-                        }
-                        if (s_ack_received) { ok = true; break; }
-                    }
-                }
-                if (ok)
-                {
-                    s_gateway_connected = true;
-                    s_last_send_ms = millis();
-                }
-                else
-                {
-                    Serial.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
-                    s_paired = false;
-                    s_pair_attempts = 0;
-                    s_last_espnow_pair = 0;
-                }
-            }
+            s_send_pending = true;
+            s_send_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
+            s_send_retries_left = ESPNOW_SEND_RETRIES;
         }
     }
 
@@ -1007,6 +1212,4 @@ void loop(void)
         digitalWrite(LED_PIN, LOW);
     }
 #endif
-
-    delay(1);
 }

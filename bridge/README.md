@@ -1,10 +1,10 @@
 # ESP-HA Bridge
 
-Bridge em Python que conecta sensores ESP8266 ao Home Assistant via MQTT Discovery. Substitui o bridge ESP32 físico.
+Bridge em Python que conecta sensores ESP8266 ao Home Assistant via MQTT Discovery.
 
 ## Como Funciona
 
-1. Os **clients ESP8266** se registram no bridge via HTTP/UDP
+1. Os **clients ESP8266** se registram no bridge via gateway ESP-NOW ou HTTP/UDP direto
 2. O bridge publica **entidades MQTT Discovery** no formato do Home Assistant
 3. O **Home Assistant** descobre e cria os dispositivos automaticamente
 
@@ -49,16 +49,17 @@ Veja [HA_INTEGRATION.md](HA_INTEGRATION.md).
 | Tipo | O que aparece no HA | Exemplo |
 |------|---------------------|---------|
 | `onoff` | Switch (liga/desliga) | Relé |
-| `temperature` | Temperatura + Umidade | Sensor DHT21 |
+| `temperature` | Temperatura + Umidade | Sensor DHT22 |
+| `humidity` | Umidade (%) | Sensor de umidade |
 | `gas` | Alarme (sim/não) + Nível de gás | Detector de gás |
 | `rain` | Chuva (sim/não) + Nível | Sensor de chuva |
 | `contact` | Porta (aberta/fechada) | Sensor magnético |
 | `occupancy` | Presença | Sensor PIR |
 | `light_sensor` | Luminosidade (lx) | LDR |
 | `tanque` | Nível de água (%) | Boia |
-| `humidity` | Umidade (%) | Sensor de umidade |
 | `dimmable` | Luz ajustável | Lâmpada dimerizável |
 | `electricity` | Corrente (mA) | Medidor |
+| `dht_gas` | Temperatura + Umidade + Gás | DHT22 + MQ-2 |
 
 ## Variáveis de Ambiente
 
@@ -81,7 +82,12 @@ Acesse `http://<ip_do_bridge>:80/` para ver os dispositivos em tempo real.
 |-----------|------|
 | Health check | `GET /api/ping` |
 | Listar devices | `GET /api/devices` |
+| Detalhes de um device | `GET /api/devices/<id>` |
+| Atualizar device | `PATCH /api/devices/<id>` |
 | Status do bridge | `GET /api/gateway/info` |
+| Registrar device (gateway) | `POST /api/device/register` |
+| WebSocket (tempo real) | `GET /ws` |
+| Docs da API | `GET /docs` |
 
 ## Clientes ESP8266
 

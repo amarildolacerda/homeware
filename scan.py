@@ -57,6 +57,7 @@ def identify(ip, port):
     title = fetch_title(ip, port)
     mac = None
     
+    # Try gateway /api/info
     try:
         req = Request(f"http://{ip}:{port}/api/info", method="GET", headers={"User-Agent": "scan.py"})
         resp = urlopen(req, timeout=2)
@@ -73,12 +74,34 @@ def identify(ip, port):
         if title: info += f"  title=\"{title}\""
         return (info, mac)
     except:
-        mac = get_mac_via_arp(ip) if not mac else mac
-        if title:
-            info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
-            if mac: info += f"  MAC={mac}"
-            return (info, mac)
-        return None
+        pass
+
+    # Try client /api/state (lampada, sensor, etc.)
+    try:
+        req = Request(f"http://{ip}:{port}/api/state", method="GET", headers={"User-Agent": "scan.py"})
+        resp = urlopen(req, timeout=2)
+        data = json.loads(resp.read())
+        dev_id = data.get("device_id", "")
+        dev_name = data.get("device_name", "")
+        fw = data.get("fw_version", "")
+        relay = data.get("state", None)
+        gw_con = data.get("gateway_connected", False)
+        label = "DEVICE"
+        info = f"  [{label}] {ip}:{port}  name=\"{dev_name}\"  id={dev_id}  FW={fw}"
+        if relay is not None: info += f"  relay={'ON' if relay else 'OFF'}"
+        info += f"  gw={gw_con}"
+        if title and title != dev_name: info += f"  title=\"{title}\""
+        return (info, None)
+    except:
+        pass
+
+    # Fallback: just show title
+    mac = get_mac_via_arp(ip) if not mac else mac
+    if title:
+        info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
+        if mac: info += f"  MAC={mac}"
+        return (info, mac)
+    return None
 
 def main():
     parser = argparse.ArgumentParser(description="Scan for ESP-NOW gateway on local network")
