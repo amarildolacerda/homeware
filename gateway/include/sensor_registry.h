@@ -44,5 +44,6 @@ bool sensor_registry_save();
 void sensor_registry_load();
 void sensor_registry_clear_all();
 void sensor_registry_print_all();
+const char* sensor_type_to_string(uint8_t type);
 
 #endif

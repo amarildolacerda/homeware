@@ -68,8 +68,8 @@
 #define DASHBOARD_PORT 80
 #endif
 
-#ifndef FAUXMO_PORT
-#define FAUXMO_PORT 8080
+#ifndef ESP_NOW_CHANNEL
+#define ESP_NOW_CHANNEL 1
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.

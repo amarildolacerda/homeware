@@ -278,3 +278,17 @@ void sensor_registry_print_all() {
     Serial.printf("Total: %d paired, %d online\n", sensor_registry_count_paired(), sensor_registry_count_online());
     Serial.println("========================\n");
 }
+
+const char* sensor_type_to_string(uint8_t type) {
+    switch (type) {
+        case SENSOR_TYPE_TEMP_HUM: return "temperature";
+        case SENSOR_TYPE_CONTACT: return "contact";
+        case SENSOR_TYPE_MOTION: return "occupancy";
+        case SENSOR_TYPE_GAS: return "gas";
+        case SENSOR_TYPE_DHT_GAS: return "dht_gas";
+        case SENSOR_TYPE_RAIN: return "rain";
+        case SENSOR_TYPE_ONOFF: return "onoff";
+        case SENSOR_TYPE_TANK: return "tanque";
+        default: return "unknown";
+    }
+}

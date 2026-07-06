@@ -63,6 +63,7 @@
 4. ter atalhos de teclado no terminal
 5. seguir API do gateway
 6. ter um SPEC.md para especificação de funcionamento esperado
+7. **perguntar ao usuário** se o cliente deve incluir funções de **repeater** ESP-NOW e quais regras usar (ex: repetir broadcast do gateway, encaminhar dados de outros clients). Se for repeater, deve ser **bidirecional** (gateway ↔ clientes em ambas as direções).
 
 ## Regras importantes
 1. Device ID é dinâmico (`esp8266_<chip_id>`), não configurável
@@ -79,6 +80,8 @@
 12. Clients se comunicam via ESP-NOW com o gateway (NÃO HTTP direto)
 13. Versão (tag) vale para gateway ESP, HA bridge Python e clients ESP8266 — todos devem ter a mesma FW_VERSION
 14. Qualquer mudança de estado no client deve disparar feedback imediato ao gateway (setar `s_last_espnow_send = 0`)
+15. **Loop non-blocking**: `loop()` não pode conter `delay()` bloqueante. Usar máquina de estados com timestamps (`millis()`) para ESP-NOW sends, ACK wait, retries, pareamento, heartbeat e LED. Aplica-se a gateway e todos os clients.
+16. **Páginas web PROGMEM**: páginas HTML grandes (>10KB) via `FPSTR` + `send()` estouram heap no ESP8266 porque alocam String RAM. `send_P()` e `sendContent_P()` também falham se o buffer TCP encher (`write()` retorna 0). Para páginas grandes, escrever response manualmente via `WiFiClient` em chunks pequenos (256 bytes) com `yield()` entre chunks. Alternativa: manter páginas enxutas (<8KB) para usar `send_P()` sem risco.
 
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias
@@ -92,5 +95,5 @@
 
 ### Clientes em desenvolvimento
 - `clients/esp8266_dht_gas` — sensor DHT22 + MQ-2 ESP-NOW
-- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa (Fauxmo) e função repeater
+- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa (Espalexa) e função repeater
 - `clients/esp8266_repeater` — extensor de alcance ESP-NOW

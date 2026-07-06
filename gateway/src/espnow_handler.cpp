@@ -1,7 +1,7 @@
 #include "espnow_handler.h"
 #include "config.h"
 #include "sensor_registry.h"
-#include "bridge_client.h"
+#include "mqtt_client.h"
 #include <espnow.h>
 #include <ESP8266WiFi.h>
 #include <Arduino.h>
@@ -210,8 +210,8 @@ void espnow_handler_loop() {
         sensor_registry_add(s_pending_pairs[i].mac, s_pending_pairs[i].sensor_type,
                             free_slot, s_pending_pairs[i].name);
         send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, free_slot);
-        if (bridge_client_is_discovered())
-            bridge_client_register_sensor(sensor_registry_get(free_slot));
+        if (mqtt_client_is_connected())
+            mqtt_client_publish_discovery(sensor_registry_get(free_slot));
 
         Serial.printf("[ESP-NOW] Paired sensor slot %d: %02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
                       free_slot,
@@ -225,8 +225,8 @@ void espnow_handler_loop() {
         int slot = s_pending_state_slots[s_pending_state_tail];
         s_pending_state_tail = (s_pending_state_tail + 1) % PENDING_STATE_MAX;
         virtual_sensor_t *s = sensor_registry_get(slot);
-        if (s && s->paired && bridge_client_is_discovered())
-            bridge_client_send_state(s);
+        if (s && s->paired && mqtt_client_is_connected())
+            mqtt_client_publish_state(s);
     }
 
     if (millis() - s_last_heartbeat > HEARTBEAT_INTERVAL_MS) {
@@ -253,7 +253,7 @@ bool espnow_start_pairing() {
     s_pairing_mode = true;
     s_pairing_start = millis();
     digitalWrite(STATUS_LED_GPIO, LOW);
-    Serial.printf("[ESP-NOW] Pairing mode started (%lus)\n", PAIRING_WINDOW_MS / 1000);
+    Serial.printf("[ESP-NOW] Pairing mode started (%us)\n", PAIRING_WINDOW_MS / 1000);
     return true;
 }
 

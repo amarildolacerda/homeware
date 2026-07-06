@@ -128,33 +128,42 @@ h1 { font-size:1.5rem; font-weight:600; }
     </div>
 
     <div class="card">
-        <h2>Bridge</h2>
-        <div id="bridge-status">
-            <div class="row"><span class="label">Host</span><span class="value" id="bridge-host">--</span></div>
-            <div class="row"><span class="label">Porta</span><span class="value" id="bridge-port">--</span></div>
-            <div class="row"><span class="label">Status</span><span class="value" id="bridge-status-tag">--</span></div>
+        <h2>MQTT</h2>
+        <div id="mqtt-status">
+            <div class="row"><span class="label">Host</span><span class="value" id="mqtt-host">--</span></div>
+            <div class="row"><span class="label">Porta</span><span class="value" id="mqtt-port">--</span></div>
+            <div class="row"><span class="label">Usuário</span><span class="value" id="mqtt-user">--</span></div>
+            <div class="row"><span class="label">Status</span><span class="value" id="mqtt-status-tag">--</span></div>
             <div class="row"><span class="label">Versão</span><span class="value" id="fw-version">--</span></div>
         </div>
         <div class="btn-group">
-            <button class="btn btn-primary" onclick="showBridgeModal()">Configurar Bridge</button>
+            <button class="btn btn-primary" onclick="showMqttModal()">Configurar MQTT</button>
         </div>
     </div>
 </div>
 
-<div class="modal" id="bridge-modal">
+<div class="modal" id="mqtt-modal">
     <div class="modal-content">
-        <h3>Configurar Bridge</h3>
+        <h3>Configurar MQTT</h3>
         <div class="form-group">
-            <label>IP do Bridge</label>
-            <input type="text" id="bridge-host-input" placeholder="Ex: 192.168.1.73" maxlength="64">
+            <label>Broker IP</label>
+            <input type="text" id="mqtt-host-input" placeholder="Ex: 192.168.1.50" maxlength="64">
         </div>
         <div class="form-group">
             <label>Porta</label>
-            <input type="number" id="bridge-port-input" placeholder="80" min="1" max="65535">
+            <input type="number" id="mqtt-port-input" placeholder="1883" min="1" max="65535">
+        </div>
+        <div class="form-group">
+            <label>Usuário (opcional)</label>
+            <input type="text" id="mqtt-user-input" placeholder="usuario" maxlength="32">
+        </div>
+        <div class="form-group">
+            <label>Senha (opcional)</label>
+            <input type="password" id="mqtt-pass-input" placeholder="senha" maxlength="32">
         </div>
         <div class="btn-group">
-            <button class="btn btn-primary" onclick="saveBridgeConfig()">Salvar</button>
-            <button class="btn btn-secondary" onclick="closeBridgeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveMqttConfig()">Salvar</button>
+            <button class="btn btn-secondary" onclick="closeMqttModal()">Cancelar</button>
         </div>
     </div>
 </div>
@@ -349,10 +358,11 @@ async function loadData() {
         document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
         if (info.pairing_window_sec) s_pairingWindowSec = info.pairing_window_sec;
         renderSensors(sensors.map(s => (delete s.mac_bytes, s.mac_str = s.mac, s)));
-        document.getElementById('bridge-host').textContent = info.bridge_host || '--';
-        document.getElementById('bridge-port').textContent = info.bridge_port || '--';
-        document.getElementById('bridge-status-tag').innerHTML = info.bridge_discovered
-            ? '<span class="badge badge-online">ok</span>'
+        document.getElementById('mqtt-host').textContent = info.mqtt_host || '--';
+        document.getElementById('mqtt-port').textContent = info.mqtt_port || '--';
+        document.getElementById('mqtt-user').textContent = info.mqtt_user || '--';
+        document.getElementById('mqtt-status-tag').innerHTML = info.mqtt_connected
+            ? '<span class="badge badge-online">conectado</span>'
             : '<span class="badge badge-offline">desconectado</span>';
         document.getElementById('fw-version').textContent = info.fw_version || '--';
     } catch (e) {
@@ -372,25 +382,29 @@ function schedulePoll() {
     }, 10000);
 }
 
-function showBridgeModal() {
-    document.getElementById('bridge-host-input').value = document.getElementById('bridge-host').textContent === '--' ? '' : document.getElementById('bridge-host').textContent;
-    document.getElementById('bridge-port-input').value = document.getElementById('bridge-port').textContent === '--' ? '80' : document.getElementById('bridge-port').textContent;
-    document.getElementById('bridge-modal').classList.add('show');
-    document.getElementById('bridge-host-input').focus();
+function showMqttModal() {
+    document.getElementById('mqtt-host-input').value = document.getElementById('mqtt-host').textContent === '--' ? '' : document.getElementById('mqtt-host').textContent;
+    document.getElementById('mqtt-port-input').value = document.getElementById('mqtt-port').textContent === '--' ? '1883' : document.getElementById('mqtt-port').textContent;
+    document.getElementById('mqtt-user-input').value = document.getElementById('mqtt-user').textContent === '--' ? '' : document.getElementById('mqtt-user').textContent;
+    document.getElementById('mqtt-pass-input').value = '';
+    document.getElementById('mqtt-modal').classList.add('show');
+    document.getElementById('mqtt-host-input').focus();
 }
 
-function closeBridgeModal() {
-    document.getElementById('bridge-modal').classList.remove('show');
+function closeMqttModal() {
+    document.getElementById('mqtt-modal').classList.remove('show');
 }
 
-async function saveBridgeConfig() {
-    const host = document.getElementById('bridge-host-input').value.trim();
-    const port = parseInt(document.getElementById('bridge-port-input').value) || 80;
-    if (!host) { showToast('IP do bridge obrigatorio', true); return; }
+async function saveMqttConfig() {
+    const host = document.getElementById('mqtt-host-input').value.trim();
+    const port = parseInt(document.getElementById('mqtt-port-input').value) || 1883;
+    const user = document.getElementById('mqtt-user-input').value.trim();
+    const pass = document.getElementById('mqtt-pass-input').value;
+    if (!host) { showToast('IP do broker obrigatorio', true); return; }
     try {
-        await api('/api/config/bridge', {method:'POST', body:JSON.stringify({host, port})});
-        showToast('Bridge configurado: ' + host + ':' + port);
-        closeBridgeModal();
+        await api('/api/config/mqtt', {method:'POST', body:JSON.stringify({host, port, user, pass})});
+        showToast('MQTT configurado: ' + host + ':' + port);
+        closeMqttModal();
         loadData();
     } catch (e) { showToast('Erro: '+e.message, true); }
 }
@@ -488,11 +502,11 @@ async function removeSensor(slot) {
 }
 
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeNameModal(); closeBridgeModal(); }
+    if (e.key === 'Escape') { closeNameModal(); closeMqttModal(); }
 });
 
 document.getElementById('name-modal').addEventListener('click', e => { if(e.target.id==='name-modal') closeNameModal(); });
-document.getElementById('bridge-modal').addEventListener('click', e => { if(e.target.id==='bridge-modal') closeBridgeModal(); });
+document.getElementById('mqtt-modal').addEventListener('click', e => { if(e.target.id==='mqtt-modal') closeMqttModal(); });
 
 loadData();
 schedulePoll();
@@ -544,7 +558,7 @@ h2{font-size:1rem;margin:20px 0 12px;color:var(--primary)}
 <h2>Gateway</h2>
 <div class="endpoint">
   <div class="head"><span class="method get">GET</span><span class="path">/api/info</span></div>
-  <div class="desc">Status do gateway: sensores pareados/online, RX total, uptime, modo de pareamento, versao FW, configuracao do bridge</div>
+  <div class="desc">Status do gateway: sensores pareados/online, RX total, uptime, modo de pareamento, versao FW, configuracao MQTT</div>
 </div>
 <div class="endpoint">
   <div class="head"><span class="method get">GET</span><span class="path">/api/sensors</span></div>
@@ -589,18 +603,20 @@ h2{font-size:1rem;margin:20px 0 12px;color:var(--primary)}
   <div class="desc">Remove <strong>todos</strong> os sensores pareados</div>
 </div>
 
-<h2>Bridge</h2>
+<h2>MQTT</h2>
 <div class="endpoint">
   <div class="head"><span class="method post">POST</span><span class="path">/api/broadcast</span></div>
-  <div class="desc">Re-registra todos os sensores no Bridge via HTTP</div>
+  <div class="desc">Publica discovery + estado de todos os sensores via MQTT</div>
 </div>
 <div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/config/bridge</span></div>
-  <div class="desc">Configura host/porta do Bridge manualmente</div>
+  <div class="head"><span class="method post">POST</span><span class="path">/api/config/mqtt</span></div>
+  <div class="desc">Configura broker MQTT</div>
   <div class="params">
     <table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
-    <tr><td><code>host</code></td><td>string</td><td>IP ou hostname do Bridge</td></tr>
-    <tr><td><code>port</code></td><td>number</td><td>Porta HTTP do Bridge</td></tr></table>
+    <tr><td><code>host</code></td><td>string</td><td>IP do broker MQTT</td></tr>
+    <tr><td><code>port</code></td><td>number</td><td>Porta do broker</td></tr>
+    <tr><td><code>user</code></td><td>string</td><td>Usuario (opcional)</td></tr>
+    <tr><td><code>pass</code></td><td>string</td><td>Senha (opcional)</td></tr></table>
   </div>
 </div>
 

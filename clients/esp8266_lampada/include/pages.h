@@ -46,6 +46,7 @@ input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;bac
 <div style="text-align:center"><span class="badge off" id="relayBadge">DESLIGADA</span></div>
 <div class="expand-header" onclick="toggleDetails()"><span>Detalhes</span><span id="expandIcon">&#9654;</span></div>
 <div class="details" id="details">
+<div class="row"><span class="label">Alexa</span><span class="value" id="alexaStatus">-</span></div>
 <div class="row"><span class="label">Gateway</span><span class="value" id="gatewayStatus">-</span></div>
 <div class="row"><span class="label">RSSI</span><span class="value" id="rssiStatus">-</span></div>
 <div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
@@ -72,6 +73,7 @@ input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;bac
 <script>
 const btn=document.getElementById('relayBtn');
 const badge=document.getElementById('relayBadge');
+const alexaEl=document.getElementById('alexaStatus');
 const gatewayEl=document.getElementById('gatewayStatus');
 const rssiEl=document.getElementById('rssiStatus');
 const batteryEl=document.getElementById('batteryStatus');
@@ -99,11 +101,14 @@ fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';
 badge.className='badge '+(on?'on':'off');
+alexaEl.textContent=d.alexa_connected?'Conectado':'-';
+alexaEl.className='value'+(d.alexa_connected?' connected':'');
 gatewayEl.textContent=d.gateway_connected?'Conectado':'Desconectado';
 gatewayEl.className='value'+(d.gateway_connected?' connected':'');
 rssiEl.textContent=d.rssi+' dBm';batteryEl.textContent=d.battery+'%';
 ipEl.textContent=d.ip;let m=Math.floor(d.uptime_s/60);let s=d.uptime_s%60;
-uptimeEl.textContent=m+'m '+s+'s';fwEl.textContent=d.fw_version||'-';
+let d_d=Math.floor(d.uptime_s/86400);let h=Math.floor((d.uptime_s%86400)/3600);let m_m=Math.floor((d.uptime_s%3600)/60);
+uptimeEl.textContent=(d_d?d_d+'d ':'')+(h?h+'h ':'')+m_m+'m';fwEl.textContent=d.fw_version||'-';
 document.getElementById('deviceName').textContent=d.device_name;
 document.getElementById('pageTitle').textContent=d.device_name;
 footerEl.textContent=d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+'s ago':'');
@@ -121,6 +126,90 @@ badge.className='badge '+(on?'on':'off');
 }catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
 setInterval(fetchState,3000);fetchState();fetchSettings();
 </script>
+</body>
+</html>
+)=====";
+
+static const char PAGE_DOCS[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Docs</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#1a1a2e;color:#eee;padding:16px}
+h1{color:#e94560;font-size:1.2em;margin-bottom:16px}
+.endpoint{background:#16213e;border-radius:12px;padding:12px;margin-bottom:8px}
+.head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.method{font-weight:700;font-size:.8em;padding:2px 8px;border-radius:4px}
+.get{color:#4ade80}.post{color:#e94560}
+.path{font-family:monospace;font-size:.9em;color:#eee}
+.desc{color:#888;font-size:.82em;margin-top:4px}
+table{width:100%;font-size:.8em;border-collapse:collapse;margin-top:4px}
+th{text-align:left;color:#888;padding:2px 4px;border-bottom:1px solid #2a2a4a}
+td{padding:2px 4px;border-bottom:1px solid #2a2a4a;color:#aaa;font-family:monospace}
+</style>
+</head>
+<body>
+<h1>API</h1>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/</span></div>
+  <div class="desc">Dashboard</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/state</span></div>
+  <div class="desc">Estado completo do dispositivo</div>
+  <table><tr><th>Chave</th><th>Tipo</th></tr>
+  <tr><td>state</td><td>bool</td></tr>
+  <tr><td>button</td><td>bool</td></tr>
+  <tr><td>battery</td><td>int</td></tr>
+  <tr><td>device_id</td><td>string</td></tr>
+  <tr><td>device_name</td><td>string</td></tr>
+  <tr><td>gateway_connected</td><td>bool</td></tr>
+  <tr><td>paired</td><td>bool</td></tr>
+  <tr><td>ip</td><td>string</td></tr>
+  <tr><td>rssi</td><td>int</td></tr>
+  <tr><td>uptime_s</td><td>int</td></tr>
+  <tr><td>slot</td><td>int</td></tr>
+  <tr><td>alexa_connected</td><td>bool</td></tr>
+  <tr><td>fw_version</td><td>string</td></tr>
+  <tr><td>last_send_s</td><td>int</td></tr>
+</table>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/relay</span></div>
+  <div class="desc">Estado do relé <code>{"state":bool}</code></div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/relay</span></div>
+  <div class="desc">Controla relé <code>{"state":bool}</code></div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/pin?gpio=N</span></div>
+  <div class="desc">Leitura digital de um GPIO</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/pin</span></div>
+  <div class="desc">Escrita digital <code>{"gpio":N,"state":0|1}</code></div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div>
+  <div class="desc">Configurações do dispositivo</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div>
+  <div class="desc">Altera nome/pinos <code>{"device_name":"...","relay_pin":N,"button_pin":N}</code></div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>
+  <div class="desc">Reinicia o dispositivo</div>
+</div>
+<div class="endpoint">
+  <div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div>
+  <div class="desc">OTA update (upload multipart)</div>
+</div>
 </body>
 </html>
 )=====";

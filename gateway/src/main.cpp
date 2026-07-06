@@ -5,7 +5,7 @@
 #include "config.h"
 #include "sensor_registry.h"
 #include "espnow_handler.h"
-#include "bridge_client.h"
+#include "mqtt_client.h"
 #include "web_server.h"
 #include "ota.h"
 
@@ -13,16 +13,15 @@ static const char *TAG = "esp8266_gateway";
 
 static unsigned long s_start_time = 0;
 static unsigned long s_last_telemetry = 0;
-static unsigned long s_last_serial_check = 0;
 
 void print_help() {
     Serial.println("\n=== Comandos ===");
     Serial.println("  h/?  - Esta ajuda");
     Serial.println("  l    - Listar sensores pareados");
-    Serial.printf("  p    - Iniciar modo pareamento (%lus)\n", PAIRING_WINDOW_MS / 1000);
+    Serial.printf("  p    - Iniciar modo pareamento (%us)\n", PAIRING_WINDOW_MS / 1000);
     Serial.println("  c    - Limpar TODOS os sensores");
     Serial.println("  r    - Reiniciar");
-    Serial.println("  b    - Broadcast re-register para Bridge");
+    Serial.println("  b    - Publicar todos os sensores via MQTT");
     Serial.println("  s    - Status do gateway");
     Serial.println("  w    - Forçar portal WiFi");
     Serial.println("================\n");
@@ -68,7 +67,7 @@ void handle_serial() {
             
         case 'b':
         case 'B':
-            bridge_client_register_all();
+            mqtt_client_publish_all();
             break;
             
         case 's':
@@ -84,9 +83,9 @@ void handle_serial() {
                           sensor_registry_count_paired(), sensor_registry_count_online());
             Serial.printf("ESP-NOW: RX=%lu ACK=%lu CRC_ERR=%lu\n",
                           espnow_get_rx_count(), espnow_get_ack_count(), espnow_get_crc_errors());
-            Serial.printf("Bridge: %s:%d (%s)\n", 
-                          bridge_client_get_host(), bridge_client_get_port(),
-                          bridge_client_is_discovered() ? "descoberto" : "não descoberto");
+            Serial.printf("MQTT: %s:%d (%s)\n", 
+                          mqtt_client_get_host(), mqtt_client_get_port(),
+                          mqtt_client_is_connected() ? "conectado" : "desconectado");
             Serial.printf("WiFi: %s ch=%d (RSSI: %d dBm)\n",
                           WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
                           WiFi.channel(), WiFi.RSSI());
@@ -119,8 +118,8 @@ void setup() {
     Serial.printf("============================================\n");
     
     sensor_registry_init();
-    bridge_client_load_config();
-    bridge_client_generate_device_ids();
+    mqtt_client_load_config();
+    mqtt_client_generate_device_ids();
     
     ota_init(get_gateway_device_id());
     
@@ -133,14 +132,7 @@ void setup() {
     espnow_handler_init();
     web_server_init();
     
-    if (bridge_client_is_discovered()) {
-        bridge_client_register_all();
-        Serial.printf("[%s] Bridge loaded from config, registered sensors\n", TAG);
-    } else if (bridge_client_discover()) {
-        bridge_client_register_all();
-    } else {
-        Serial.printf("[%s] Bridge não descoberto, aguardando...\n", TAG);
-    }
+    mqtt_client_connect();
     
     Serial.printf("============================================\n");
     Serial.printf("  Pronto! 'h' para ajuda\n");
@@ -162,7 +154,6 @@ void loop() {
                     espnow_start_pairing();
                 }
                 press_start = 0;
-                while (digitalRead(PAIR_BUTTON_GPIO) == LOW) delay(10);
             }
         } else {
             press_start = 0;
@@ -172,22 +163,16 @@ void loop() {
     web_server_loop();
     web_server_maintain_wifi();
     espnow_handler_loop();
-    bridge_client_maintain_discovery();
+    mqtt_client_loop();
     
     unsigned long now = millis();
     
     if (now - s_last_telemetry > 30000) {
         s_last_telemetry = now;
-        Serial.printf("[%s] Uptime=%lus RX=%lu ACK=%lu Paired=%d Online=%d\n",
+        Serial.printf("[%s] Uptime=%lus RX=%lu ACK=%lu Paired=%d Online=%d MQTT=%d\n",
                       TAG, now / 1000, espnow_get_rx_count(), espnow_get_ack_count(),
-                      sensor_registry_count_paired(), sensor_registry_count_online());
-        
-        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-            virtual_sensor_t *s = sensor_registry_get(i);
-            if (s && s->paired && s->online) {
-                bridge_client_send_heartbeat(s);
-            }
-        }
+                      sensor_registry_count_paired(), sensor_registry_count_online(),
+                      mqtt_client_is_connected());
     }
     
     delay(1);
