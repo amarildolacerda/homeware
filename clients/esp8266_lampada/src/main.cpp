@@ -310,7 +310,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
     /* Repeater: forward messages between clients and gateway */
-    if (s_paired)
+    if (s_paired && s_use_repeater)
     {
         if (mac_equal(mac, s_gateway_mac))
         {

@@ -56,33 +56,34 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
         case ESPNOW_MSG_PAIR_REQUEST: {
             if (len < sizeof(espnow_pair_request_t)) { s_crc_errors++; return; }
             espnow_pair_request_t *req = (espnow_pair_request_t*)data;
+            char sensor_mac_str[18];
+            mac_to_str(req->sensor_mac, sensor_mac_str, sizeof(sensor_mac_str));
 
-            int existing_slot = sensor_registry_find_by_mac(mac);
+            int existing_slot = sensor_registry_find_by_mac(req->sensor_mac);
             if (existing_slot >= 0) {
                 send_pair_response(mac, req->sequence, existing_slot);
-                Serial.printf("[ESP-NOW] Re-paired known sensor %s slot=%d\n", mac_str, existing_slot);
+                Serial.printf("[ESP-NOW] Re-paired known sensor %s slot=%d\n", sensor_mac_str, existing_slot);
                 return;
             }
 
             if (!s_pairing_mode) { Serial.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
 
             for (int i = 0; i < PENDING_PAIR_MAX; i++) {
+                if (s_pending_pairs[i].active && mac_equal(s_pending_pairs[i].mac, req->sensor_mac)) {
+                    Serial.printf("[ESP-NOW] Pair request already pending for %s\n", sensor_mac_str);
+                    return;
+                }
+            }
+
+            for (int i = 0; i < PENDING_PAIR_MAX; i++) {
                 if (!s_pending_pairs[i].active) {
-                    mac_copy(s_pending_pairs[i].mac, mac);
+                    mac_copy(s_pending_pairs[i].mac, req->sensor_mac);
                     s_pending_pairs[i].sensor_type = req->sensor_type;
                     s_pending_pairs[i].sequence = req->sequence;
-                    snprintf(s_pending_pairs[i].name, sizeof(s_pending_pairs[i].name), "%s %d",
-                             (req->sensor_type == SENSOR_TYPE_TEMP_HUM) ? "Temp+Hum" :
-                             (req->sensor_type == SENSOR_TYPE_CONTACT) ? "Contato" :
-                             (req->sensor_type == SENSOR_TYPE_MOTION) ? "Movimento" :
-                             (req->sensor_type == SENSOR_TYPE_GAS) ? "Gas" :
-                             (req->sensor_type == SENSOR_TYPE_DHT_GAS) ? "DHT+Gas" :
-                             (req->sensor_type == SENSOR_TYPE_RAIN) ? "Chuva" :
-                             (req->sensor_type == SENSOR_TYPE_ONOFF) ? "Luz" : "Tanque",
-                             i + 1);
+                    s_pending_pairs[i].name[0] = '\0';
                     s_pending_pairs[i].active = true;
                     Serial.printf("[ESP-NOW] Pair request queued from %s type=%d seq=%d slot=%d\n",
-                                  mac_str, req->sensor_type, req->sequence, i);
+                                  sensor_mac_str, req->sensor_type, req->sequence, i);
                     break;
                 }
             }
@@ -98,7 +99,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             if (hdr->version != ESPNOW_PROTOCOL_VERSION) { s_crc_errors++; return; }
             if (len < ESPNOW_HEADER_FIXED_SIZE + hdr->payload_len) { s_crc_errors++; return; }
 
-            int slot = sensor_registry_find_by_mac(mac);
+            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
 
             if (msg_type == ESPNOW_MSG_SENSOR_DATA) {
                 if (slot < 0) {
@@ -207,8 +208,13 @@ void espnow_handler_loop() {
             continue;
         }
 
-        sensor_registry_add(s_pending_pairs[i].mac, s_pending_pairs[i].sensor_type,
-                            free_slot, s_pending_pairs[i].name);
+        if (!sensor_registry_add(s_pending_pairs[i].mac, s_pending_pairs[i].sensor_type,
+                                 free_slot, s_pending_pairs[i].name)) {
+            int existing = sensor_registry_find_by_mac(s_pending_pairs[i].mac);
+            if (existing >= 0)
+                send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, existing);
+            continue;
+        }
         send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, free_slot);
         if (mqtt_client_is_connected())
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
