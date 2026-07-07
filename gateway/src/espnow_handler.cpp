@@ -4,6 +4,7 @@
 #include "mqtt_client.h"
 #include <espnow.h>
 #include <ESP8266WiFi.h>
+#include "log_buffer.h"
 #include <Arduino.h>
 
 static bool s_pairing_mode = false;
@@ -108,6 +109,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                 }
                 sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
                 send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+                log_add("info", "Dados recebidos slot %d seq %d", slot, hdr->sequence);
                 s_ack_count++;
                 queue_bridge_state(slot);
             } else {
@@ -216,6 +218,11 @@ void espnow_handler_loop() {
             continue;
         }
         send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, free_slot);
+        {
+            char mac_str[18];
+            mac_to_str(s_pending_pairs[i].mac, mac_str, sizeof(mac_str));
+            log_add("info", "Sensor %s pareado slot %d", mac_str, free_slot);
+        }
         if (mqtt_client_is_connected())
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
 
@@ -244,6 +251,7 @@ void espnow_handler_loop() {
                 unsigned long elapsed = millis() - s->last_seen;
                 if (s->online && elapsed > SENSOR_TIMEOUT_MS) {
                     s->online = false;
+                    log_add("warn", "Sensor slot %d offline", i);
                     Serial.printf("[ESP-NOW] Sensor slot %d offline (last seen %lu ms ago)\n", i, elapsed);
                 }
             }

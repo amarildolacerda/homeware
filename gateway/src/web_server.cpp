@@ -4,6 +4,7 @@
 #include "mqtt_client.h"
 #include "config.h"
 #include "pages.h"
+#include "log_buffer.h"
 #include <ESP8266WebServer.h>
 #include <uri/UriBraces.h>
 #include <WiFiManager.h>
@@ -155,6 +156,7 @@ void web_server_init() {
         if (espnow_is_pairing()) {
             s_server.send(409, "application/json", "{\"error\":\"already pairing\"}");
         } else if (espnow_start_pairing()) {
+            log_add("info", "Pareamento iniciado");
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else {
             s_server.send(400, "application/json", "{\"error\":\"max sensors reached\"}");
@@ -163,11 +165,13 @@ void web_server_init() {
     
     s_server.on("/api/pair/stop", HTTP_POST, []() {
         espnow_stop_pairing();
+        log_add("info", "Pareamento finalizado");
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
     s_server.on("/api/clear", HTTP_POST, []() {
         sensor_registry_clear_all();
+        log_add("warn", "Todos os sensores removidos");
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
     
@@ -197,6 +201,7 @@ void web_server_init() {
             s->name[sizeof(s->name) - 1] = '\0';
             sensor_registry_save();
             mqtt_client_publish_discovery(s);
+            log_add("info", "Sensor slot %d renomeado para \"%s\"", slot, name);
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else if (action == "command") {
             JsonDocument doc;
@@ -215,12 +220,14 @@ void web_server_init() {
                 s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }
-            if (espnow_send_command(s->mac, slot, state))
+            if (espnow_send_command(s->mac, slot, state)) {
+                log_add("info", "Comando %s enviado para slot %d", state ? "ON" : "OFF", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-            else
+            } else
                 s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "remove") {
             if (sensor_registry_remove(slot)) {
+                log_add("warn", "Sensor slot %d removido", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
@@ -246,6 +253,7 @@ void web_server_init() {
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {
+        log_add("warn", "Reiniciando via web");
         s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(500);
         ESP.restart();

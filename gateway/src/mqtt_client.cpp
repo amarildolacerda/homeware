@@ -5,6 +5,7 @@
 #include <ESP8266WiFi.h>
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
+#include "log_buffer.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -207,12 +208,14 @@ bool mqtt_client_connect() {
     if (ok) {
         s_mqtt_connected = true;
         s_should_reconnect = false;
+        log_add("info", "MQTT conectado a %s:%d", s_mqtt_host, s_mqtt_port);
         Serial.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
 
         s_mqtt.subscribe("homeassistant/switch/+/set");
 
         mqtt_client_publish_all();
     } else {
+        log_add("error", "MQTT falhou: rc=%d", s_mqtt.state());
         Serial.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
     }
 
@@ -222,6 +225,7 @@ bool mqtt_client_connect() {
 void mqtt_client_disconnect() {
     s_mqtt.disconnect();
     s_mqtt_connected = false;
+    log_add("warn", "MQTT desconectado");
 }
 
 void mqtt_client_loop() {
@@ -461,8 +465,43 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
     return true;
 }
 
+void mqtt_client_publish_gateway() {
+    const char *gw_id = get_gateway_device_id();
+
+    char entity[64];
+    snprintf(entity, sizeof(entity), "%s_ip", gw_id);
+    publish_entity_config("sensor", entity, "Gateway", "IP", "", "", false, gw_id, "gateway");
+
+    snprintf(entity, sizeof(entity), "%s_uptime", gw_id);
+    publish_entity_config("sensor", entity, "Gateway", "Uptime", "", "s", false, gw_id, "gateway");
+
+    snprintf(entity, sizeof(entity), "%s_paired", gw_id);
+    publish_entity_config("sensor", entity, "Gateway", "Pareados", "", "", false, gw_id, "gateway");
+
+    mqtt_client_publish_gateway_state();
+}
+
+void mqtt_client_publish_gateway_state() {
+    const char *gw_id = get_gateway_device_id();
+    char entity[64], val[32];
+
+    snprintf(entity, sizeof(entity), "%s_ip", gw_id);
+    snprintf(val, sizeof(val), "%s", WiFi.localIP().toString().c_str());
+    publish_entity_state("sensor", entity, val);
+
+    snprintf(entity, sizeof(entity), "%s_uptime", gw_id);
+    snprintf(val, sizeof(val), "%lu", millis() / 1000);
+    publish_entity_state("sensor", entity, val);
+
+    snprintf(entity, sizeof(entity), "%s_paired", gw_id);
+    snprintf(val, sizeof(val), "%d", sensor_registry_count_paired());
+    publish_entity_state("sensor", entity, val);
+}
+
 bool mqtt_client_publish_all() {
     if (!s_mqtt_connected) return false;
+
+    mqtt_client_publish_gateway();
 
     int count = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {

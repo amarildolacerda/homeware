@@ -8,6 +8,7 @@
 #include "mqtt_client.h"
 #include "web_server.h"
 #include "ota.h"
+#include "log_buffer.h"
 
 static const char *TAG = "esp8266_gateway";
 
@@ -60,6 +61,7 @@ void handle_serial() {
             
         case 'r':
         case 'R':
+            log_add("warn", "Reiniciando...");
             Serial.println("Reiniciando...");
             delay(100);
             ESP.restart();
@@ -130,6 +132,7 @@ void setup() {
     }
     
     espnow_handler_init();
+    log_buffer_init();
     web_server_init();
     
     mqtt_client_connect();
@@ -173,6 +176,8 @@ void loop() {
                       TAG, now / 1000, espnow_get_rx_count(), espnow_get_ack_count(),
                       sensor_registry_count_paired(), sensor_registry_count_online(),
                       mqtt_client_is_connected());
+        if (mqtt_client_is_connected())
+            mqtt_client_publish_gateway_state();
     }
     
     delay(1);
