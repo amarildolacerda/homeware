@@ -36,18 +36,28 @@ const char* log_get_json() {
     pos += snprintf(s_json + pos, sizeof(s_json) - pos, "{\"logs\":[");
     int start = (s_count < LOG_BUFFER_SIZE) ? 0 : s_head;
     int count = s_count;
+    bool first = true;
     for (int i = 0; i < count; i++) {
         int idx = (start + i) % LOG_BUFFER_SIZE;
-        if (pos > 9) {
+        if (!first) {
+            if (pos + 1 >= (int)sizeof(s_json)) break;
             s_json[pos++] = ',';
-            if (pos >= (int)sizeof(s_json)) break;
         }
+        first = false;
+        char esc[LOG_MSG_MAX * 2 + 1];
+        int ei = 0;
+        for (int si = 0; s_buffer[idx].msg[si] && ei < (int)sizeof(esc) - 2; si++) {
+            char c = s_buffer[idx].msg[si];
+            if (c == '"' || c == '\\') { esc[ei++] = '\\'; if (ei >= (int)sizeof(esc) - 2) break; }
+            esc[ei++] = c;
+        }
+        esc[ei] = '\0';
         pos += snprintf(s_json + pos, sizeof(s_json) - pos,
             "{\"t\":%lu,\"msg\":\"%s\",\"level\":\"%s\"}",
-            s_buffer[idx].time, s_buffer[idx].msg, s_buffer[idx].level);
+            s_buffer[idx].time, esc, s_buffer[idx].level);
         if (pos >= (int)sizeof(s_json)) break;
     }
     pos += snprintf(s_json + pos, sizeof(s_json) - pos, "]}");
-    s_json[pos] = '\0';
+    if (pos < (int)sizeof(s_json)) s_json[pos] = '\0';
     return s_json;
 }
