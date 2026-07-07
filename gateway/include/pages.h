@@ -194,6 +194,14 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .loading{padding:40px;text-align:center;color:var(--muted)}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:600px){.stats{grid-template-columns:1fr 1fr}}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
+.modal.show{display:flex}
+.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;min-height:44px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{filter:brightness(1.1)}
+.btn-secondary{background:var(--border);color:var(--text)}
+.btn-secondary:hover{background:var(--border-strong)}
 </style>
 <div class="stats">
 <div class="stat"><div class="stat-value" id="stat-paired">--</div><div class="stat-label">Pareados</div></div>
@@ -213,8 +221,22 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 <button class="filter-btn" data-type="8" onclick="filterSensors('8')">Interruptor</button>
 </div>
 <div id="sensors-grid" class="grid grid-2"><div class="loading">carregando...</div></div>
+
+<div class="modal" id="rename-modal">
+  <div class="modal-content" style="max-width:360px">
+    <h3 style="margin-bottom:12px;font-size:0.95rem">Renomear Sensor</h3>
+    <p style="font-size:0.8rem;color:var(--muted-subtle);margin-bottom:8px">Slot <span id="rename-slot"></span> &bull; <span id="rename-type"></span></p>
+    <input type="text" id="rename-input" maxlength="32" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text)">
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="confirmRename()" style="flex:1">Salvar</button>
+      <button class="btn btn-secondary" onclick="closeRename()" style="flex:1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var s_overviewLoading = false;
+var s_renameSlot = null;
 
 function typeName(type) {
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor'};
@@ -351,11 +373,33 @@ function toggleDetails(slot) {
 }
 
 async function renameSensor(slot) {
-  var name = prompt('Novo nome para o sensor slot '+slot+':');
-  if (!name || !name.trim()) return;
+  var d = document.getElementById('rename-input');
+  var slotLabel = document.getElementById('rename-slot');
+  var typeLabel = document.getElementById('rename-type');
+  if (!d || !slotLabel || !typeLabel) return;
+  slotLabel.textContent = slot;
+  var dev = document.querySelector('.device[data-slot="'+slot+'"]');
+  typeLabel.textContent = dev ? typeName(parseInt(dev.dataset.type)) : '';
+  d.value = '';
+  s_renameSlot = slot;
+  var modal = document.getElementById('rename-modal');
+  modal.classList.add('show');
+  modal.onclick = function(e) { if (e.target === modal) closeRename(); };
+  setTimeout(function() { d.focus(); }, 100);
+}
+
+function closeRename() {
+  document.getElementById('rename-modal').classList.remove('show');
+  s_renameSlot = null;
+}
+
+async function confirmRename() {
+  var name = document.getElementById('rename-input').value.trim();
+  if (!name) { showToast('Nome obrigatório', true); return; }
   try {
-    await api('/api/sensor/'+slot+'/name', {method:'POST', body:JSON.stringify({name: name.trim()})});
+    await api('/api/sensor/'+s_renameSlot+'/name', {method:'POST', body:JSON.stringify({name: name})});
     showToast('Nome atualizado');
+    closeRename();
     loadData();
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
@@ -554,7 +598,7 @@ async function loadLogs() {
       var sec = s%60;
       var ts = (h<10?'0':'')+h+':'+(m<10?'0':'')+m+':'+(sec<10?'0':'')+sec;
       var cls = l.level === 'error' ? 'error' : l.level === 'warn' ? 'warn' : 'info';
-      return '<div class="log-row '+cls+'"><span class="log-time">'+ts+'</span><span class="log-msg">'+l.msg+'</span></div>';
+      return '<div class="log-row '+cls+'"><span class="log-time">'+ts+'</span><span class="log-msg">'+(parent.escHtml||escHtml)(l.msg)+'</span></div>';
     }).join('') + '</div>';
   } catch(e) {
     document.getElementById('log-table').innerHTML = '<div class="log-empty" style="color:var(--danger)">Erro ao carregar logs</div>';
