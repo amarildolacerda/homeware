@@ -21,6 +21,17 @@ static bool s_should_reconnect = true;
 
 #define MQTT_TOPIC_PREFIX "homeassistant"
 #define MQTT_RECONNECT_INTERVAL 30000
+#define GW_MANUFACTURER "ESP-HA Bridge"
+
+static void build_device_info(JsonDocument &doc, const char *name, const char *bridge_id, const char *model) {
+    JsonObject device = doc.createNestedObject("device");
+    JsonArray identifiers = device.createNestedArray("identifiers");
+    identifiers.add(bridge_id);
+    device["name"] = name;
+    device["sw_version"] = FW_VERSION;
+    device["manufacturer"] = GW_MANUFACTURER;
+    device["model"] = model;
+}
 
 static bool is_valid_host() {
     if (strcmp(s_mqtt_host, "0.0.0.0") == 0) return false;
@@ -63,16 +74,17 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
 
 static void publish_entity_config(const char *component, const char *entity_id,
                                   const char *sensor_name, const char *entity_label,
-                                  const char *device_class, const char *unit, bool is_binary) {
+                                  const char *device_class, const char *unit, bool is_binary,
+                                  const char *bridge_id, const char *model) {
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/%s/%s/config", MQTT_TOPIC_PREFIX, component, entity_id);
 
     JsonDocument doc;
-    char friendly[64];
-    snprintf(friendly, sizeof(friendly), "%s - %s", sensor_name, entity_label);
-    doc["name"] = friendly;
+    doc["name"] = entity_label;
     doc["state_topic"] = String(MQTT_TOPIC_PREFIX "/") + component + "/" + entity_id + "/state";
     doc["unique_id"] = entity_id;
+
+    build_device_info(doc, sensor_name, bridge_id, model);
 
     if (is_binary) {
         doc["payload_on"] = "ON";
@@ -92,7 +104,10 @@ static void publish_entity_config(const char *component, const char *entity_id,
 
     String json;
     serializeJson(doc, json);
-    s_mqtt.publish(topic, json.c_str(), true);
+    if (s_mqtt.beginPublish(topic, json.length(), true)) {
+        s_mqtt.print(json.c_str());
+        s_mqtt.endPublish();
+    }
 }
 
 static void publish_entity_state(const char *component, const char *entity_id, const char *value) {
@@ -253,17 +268,18 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
 
     const char *id = sensor->bridge_device_id;
     const char *name = sensor->name;
+    const char *model = sensor_type_to_string(sensor->type);
 
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_temperature", id);
-            publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false);
+            publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.temp_hum.temperature, 1).c_str());
 
             snprintf(entity, sizeof(entity), "%s_humidity", id);
-            publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false);
+            publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.temp_hum.humidity, 0).c_str());
             break;
@@ -271,7 +287,7 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_CONTACT: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_contact", id);
-            publish_entity_config("binary_sensor", entity, name, "Contato", "door", "", true);
+            publish_entity_config("binary_sensor", entity, name, "Contato", "door", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.contact.contact_state ? "ON" : "OFF");
             break;
@@ -279,7 +295,7 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_MOTION: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_occupancy", id);
-            publish_entity_config("binary_sensor", entity, name, "Movimento", "occupancy", "", true);
+            publish_entity_config("binary_sensor", entity, name, "Movimento", "occupancy", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.motion.motion_state ? "ON" : "OFF");
             break;
@@ -287,12 +303,12 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_GAS: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_gas_level", id);
-            publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false);
+            publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.gas.gas_level).c_str());
 
             snprintf(entity, sizeof(entity), "%s_alarm", id);
-            publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true);
+            publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.gas.alarm ? "ON" : "OFF");
             break;
@@ -300,22 +316,22 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_DHT_GAS: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_temperature", id);
-            publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false);
+            publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.temperature, 1).c_str());
 
             snprintf(entity, sizeof(entity), "%s_humidity", id);
-            publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false);
+            publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.humidity, 0).c_str());
 
             snprintf(entity, sizeof(entity), "%s_gas_level", id);
-            publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false);
+            publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.gas_level).c_str());
 
             snprintf(entity, sizeof(entity), "%s_alarm", id);
-            publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true);
+            publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.dht_gas.alarm ? "ON" : "OFF");
             break;
@@ -323,12 +339,12 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_RAIN: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_rain_level", id);
-            publish_entity_config("sensor", entity, name, "Chuva", "moisture", "%", false);
+            publish_entity_config("sensor", entity, name, "Chuva", "moisture", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.rain.rain_level).c_str());
 
             snprintf(entity, sizeof(entity), "%s_rain", id);
-            publish_entity_config("binary_sensor", entity, name, "Chuva Digital", "moisture", "", true);
+            publish_entity_config("binary_sensor", entity, name, "Chuva Digital", "moisture", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.rain.rain_digital ? "ON" : "OFF");
             break;
@@ -336,7 +352,7 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_TANK: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_level", id);
-            publish_entity_config("sensor", entity, name, "Nível", "water", "%", false);
+            publish_entity_config("sensor", entity, name, "Nível", "water", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.tank.level_pct).c_str());
             break;
@@ -344,7 +360,7 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         case SENSOR_TYPE_ONOFF: {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_power", id);
-            publish_entity_config("switch", entity, name, "Interruptor", "", "", false);
+            publish_entity_config("switch", entity, name, "Interruptor", "", "", false, id, model);
             publish_entity_state("switch", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
