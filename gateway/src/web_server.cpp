@@ -17,41 +17,47 @@ static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;
 static unsigned long s_wifi_reconnect_deadline = 0;
 
+static void serve_pgm_page(const char* page) {
+    size_t total = strlen_P(page);
+    WiFiClient cl = s_server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+    PGM_P src = page;
+    char buf[256];
+    while (total > 0) {
+        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+        memcpy_P(buf, src, chunk);
+        cl.write((const uint8_t*)buf, chunk);
+        src += chunk;
+        total -= chunk;
+        yield();
+    }
+}
+
 void web_server_init() {
     s_server.on("/", HTTP_GET, []() {
-        size_t total = strlen_P(PAGE_DASHBOARD);
-        WiFiClient cl = s_server.client();
-        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-        cl.print(total);
-        cl.print(F("\r\nConnection: close\r\n\r\n"));
-        PGM_P src = PAGE_DASHBOARD;
-        char buf[256];
-        while (total > 0) {
-            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-            memcpy_P(buf, src, chunk);
-            cl.write((const uint8_t*)buf, chunk);
-            src += chunk;
-            total -= chunk;
-            yield();
-        }
+        serve_pgm_page(PAGE_SHELL);
+    });
+
+    s_server.on("/overview", HTTP_GET, []() {
+        serve_pgm_page(PAGE_OVERVIEW);
+    });
+
+    s_server.on("/settings", HTTP_GET, []() {
+        serve_pgm_page(PAGE_SETTINGS);
+    });
+
+    s_server.on("/logs", HTTP_GET, []() {
+        serve_pgm_page(PAGE_LOGS);
+    });
+
+    s_server.on("/api/logs", HTTP_GET, []() {
+        s_server.send(200, "application/json", log_get_json());
     });
 
     s_server.on("/docs", HTTP_GET, []() {
-        size_t total = strlen_P(PAGE_DOCS);
-        WiFiClient cl = s_server.client();
-        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-        cl.print(total);
-        cl.print(F("\r\nConnection: close\r\n\r\n"));
-        PGM_P src = PAGE_DOCS;
-        char buf[256];
-        while (total > 0) {
-            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-            memcpy_P(buf, src, chunk);
-            cl.write((const uint8_t*)buf, chunk);
-            src += chunk;
-            total -= chunk;
-            yield();
-        }
+        serve_pgm_page(PAGE_DOCS);
     });
     
     s_server.on("/api/info", HTTP_GET, []() {
