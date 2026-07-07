@@ -19,8 +19,16 @@ h1 { font-size:1.5rem; font-weight:600; }
 .badge-online { background:#064e3b; color:#6ee7b7; }
 .badge-offline { background:#450a0a; color:#fca5a5; }
 .badge-pairing { background:#451a03; color:#fcd34d; }
-.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
-.card h2 { font-size:1rem; font-weight:600; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:16px; }
+.card-header { font-size:1rem; font-weight:600; padding:20px; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); transition:background .2s; }
+.card-header:hover { background:#1a2744; }
+.card-header::before { content:"\25B6"; font-size:.65em; transition:transform .3s; }
+.card-header.open::before { transform:rotate(90deg); }
+.card-header-action { margin-left:auto; font-size:0.65rem; font-weight:400; color:var(--muted); background:var(--border); padding:3px 10px; border-radius:9999px; cursor:pointer; transition:color .2s,background .2s; }
+.card-header-action:hover { color:var(--text); background:#4b5563; }
+.card-body { overflow:hidden; max-height:0; transition:max-height .4s ease; }
+.card-body.open { max-height:9999px; }
+.card-body .card-inner { padding:20px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
 .sensor { background:#0c1222; border:1px solid var(--border); border-radius:8px; padding:16px; transition:border-color .2s; }
 .sensor:hover { border-color:var(--primary); }
@@ -31,7 +39,7 @@ h1 { font-size:1.5rem; font-weight:600; }
 .sensor-name { font-weight:600; font-size:0.95rem; }
 .sensor-type { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
 .sensor-meta { overflow:hidden; max-height:0; transition:max-height .3s ease; display:grid; grid-template-columns:repeat(2,1fr); gap:8px; font-size:0.8rem; }
-.sensor-meta.open { max-height:300px; }
+.sensor-meta.open { max-height:600px; }
 .sensor-meta div { display:flex; flex-direction:column; }
 .sensor-meta .label { color:var(--muted); font-size:0.65rem; }
 .sensor-meta .value { font-weight:500; }
@@ -94,7 +102,8 @@ h1 { font-size:1.5rem; font-weight:600; }
     .stat-value { font-size:1.2rem; }
     .sensor-meta { grid-template-columns:1fr; }
     .sensor { padding:12px; }
-    .card { padding:14px; }
+    .card-header { padding:14px; }
+    .card-body .card-inner { padding:14px; }
     .modal-content { padding:16px; }
 }
 @media (max-width:400px) {
@@ -123,22 +132,26 @@ h1 { font-size:1.5rem; font-weight:600; }
     </div>
 
     <div class="card">
-        <h2>Sensores Virtuais</h2>
-        <div id="sensors-grid" class="grid"><div class="loading">carregando</div></div>
+        <h2 class="card-header" onclick="toggleCard(this)">Sensores Virtuais <span class="card-header-action" onclick="event.stopPropagation();toggleAllDetails()">detalhes</span></h2>
+        <div class="card-body" id="card-sensors"><div class="card-inner">
+            <div id="sensors-grid" class="grid"><div class="loading">carregando</div></div>
+        </div></div>
     </div>
 
     <div class="card">
-        <h2>MQTT</h2>
-        <div id="mqtt-status">
-            <div class="row"><span class="label">Host</span><span class="value" id="mqtt-host">--</span></div>
-            <div class="row"><span class="label">Porta</span><span class="value" id="mqtt-port">--</span></div>
-            <div class="row"><span class="label">Usuário</span><span class="value" id="mqtt-user">--</span></div>
-            <div class="row"><span class="label">Status</span><span class="value" id="mqtt-status-tag">--</span></div>
-            <div class="row"><span class="label">Versão</span><span class="value" id="fw-version">--</span></div>
-        </div>
-        <div class="btn-group">
-            <button class="btn btn-primary" onclick="showMqttModal()">Configurar MQTT</button>
-        </div>
+        <h2 class="card-header" onclick="toggleCard(this)">MQTT</h2>
+        <div class="card-body" id="card-mqtt"><div class="card-inner">
+            <div id="mqtt-status">
+                <div class="row"><span class="label">Host</span><span class="value" id="mqtt-host">--</span></div>
+                <div class="row"><span class="label">Porta</span><span class="value" id="mqtt-port">--</span></div>
+                <div class="row"><span class="label">Usuário</span><span class="value" id="mqtt-user">--</span></div>
+                <div class="row"><span class="label">Status</span><span class="value" id="mqtt-status-tag">--</span></div>
+                <div class="row"><span class="label">Versão</span><span class="value" id="fw-version">--</span></div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="showMqttModal()">Configurar MQTT</button>
+            </div>
+        </div></div>
     </div>
 </div>
 
@@ -227,6 +240,25 @@ function fmtUptime(ms) {
     return Math.floor(s/86400)+'d '+Math.floor((s%86400)/3600)+'h';
 }
 
+let s_allDetailsOpen = false;
+
+function toggleAllDetails() {
+    s_allDetailsOpen = !s_allDetailsOpen;
+    document.querySelectorAll('.sensor-meta').forEach(el => {
+        const slot = el.id.replace('meta-', '');
+        const meta = document.getElementById('meta-'+slot);
+        const btns = document.getElementById('btns-'+slot);
+        const btn = document.getElementById('expand-'+slot);
+        if (meta && btns && btn) {
+            meta.classList.toggle('open', s_allDetailsOpen);
+            btns.classList.toggle('open', s_allDetailsOpen);
+            btn.innerHTML = s_allDetailsOpen ? '&#9660; detalhes' : '&#9654; detalhes';
+        }
+    });
+    const action = document.querySelector('.card-header-action');
+    if (action) action.textContent = s_allDetailsOpen ? 'recolher' : 'detalhes';
+}
+
 function toggleDetails(slot) {
     const meta = document.getElementById('meta-'+slot);
     const btns = document.getElementById('btns-'+slot);
@@ -234,6 +266,12 @@ function toggleDetails(slot) {
     const open = meta.classList.toggle('open');
     btns.classList.toggle('open', open);
     btn.innerHTML = open ? '&#9660; detalhes' : '&#9654; detalhes';
+}
+
+function toggleCard(header) {
+    const body = header.nextElementSibling;
+    const open = body.classList.toggle('open');
+    header.classList.toggle('open', open);
 }
 
 function typeName(type) {
@@ -247,6 +285,11 @@ function renderSensors(sensors) {
         grid.innerHTML = '<div class="empty">Nenhum sensor pareado. Clique em "Adicionar Sensor".</div>';
         return;
     }
+    const expandedSlots = new Set();
+    sensors.forEach(s => {
+        const meta = document.getElementById('meta-'+s.slot);
+        if (meta && meta.classList.contains('open')) expandedSlots.add(s.slot);
+    });
     grid.innerHTML = sensors.map(s => {
         const offlineClass = s.online ? '' : ' offline';
         if (s.type === 8) {
@@ -310,6 +353,16 @@ function renderSensors(sensors) {
             </div>
         </div>`;
     }).join('');
+    expandedSlots.forEach(slot => {
+        const meta = document.getElementById('meta-'+slot);
+        const btns = document.getElementById('btns-'+slot);
+        const btn = document.getElementById('expand-'+slot);
+        if (meta && btns && btn) {
+            meta.classList.add('open');
+            btns.classList.add('open');
+            btn.innerHTML = '&#9660; detalhes';
+        }
+    });
 }
 
 function renderState(s) {

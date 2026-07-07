@@ -76,7 +76,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     if (name && strlen(name) > 0) {
         strncpy(s->name, name, sizeof(s->name) - 1);
     } else {
-        snprintf(s->name, sizeof(s->name), "Sensor %d", slot + 1);
+        snprintf(s->name, sizeof(s->name), "%s %d", sensor_type_friendly_name(s->type), slot + 1);
     }
     s->name[sizeof(s->name) - 1] = '\0';
 
@@ -277,6 +277,20 @@ void sensor_registry_print_all() {
     }
     Serial.printf("Total: %d paired, %d online\n", sensor_registry_count_paired(), sensor_registry_count_online());
     Serial.println("========================\n");
+}
+
+const char* sensor_type_friendly_name(uint8_t type) {
+    switch (type) {
+        case SENSOR_TYPE_TEMP_HUM: return "Temp+Hum";
+        case SENSOR_TYPE_CONTACT: return "Contato";
+        case SENSOR_TYPE_MOTION: return "Movimento";
+        case SENSOR_TYPE_GAS: return "Gas";
+        case SENSOR_TYPE_DHT_GAS: return "DHT+Gas";
+        case SENSOR_TYPE_RAIN: return "Chuva";
+        case SENSOR_TYPE_ONOFF: return "Interruptor";
+        case SENSOR_TYPE_TANK: return "Tanque";
+        default: return "Sensor";
+    }
 }
 
 const char* sensor_type_to_string(uint8_t type) {
