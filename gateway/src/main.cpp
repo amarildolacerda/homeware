@@ -176,8 +176,7 @@ void loop() {
                       TAG, now / 1000, espnow_get_rx_count(), espnow_get_ack_count(),
                       sensor_registry_count_paired(), sensor_registry_count_online(),
                       mqtt_client_is_connected());
-        if (mqtt_client_is_connected())
-            mqtt_client_publish_gateway_state();
+
     }
     
     delay(1);

@@ -465,43 +465,8 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
     return true;
 }
 
-void mqtt_client_publish_gateway() {
-    const char *gw_id = get_gateway_device_id();
-
-    char entity[64];
-    snprintf(entity, sizeof(entity), "%s_ip", gw_id);
-    publish_entity_config("sensor", entity, "Gateway", "IP", "", "", false, gw_id, "gateway");
-
-    snprintf(entity, sizeof(entity), "%s_uptime", gw_id);
-    publish_entity_config("sensor", entity, "Gateway", "Uptime", "", "s", false, gw_id, "gateway");
-
-    snprintf(entity, sizeof(entity), "%s_paired", gw_id);
-    publish_entity_config("sensor", entity, "Gateway", "Pareados", "", "", false, gw_id, "gateway");
-
-    mqtt_client_publish_gateway_state();
-}
-
-void mqtt_client_publish_gateway_state() {
-    const char *gw_id = get_gateway_device_id();
-    char entity[64], val[32];
-
-    snprintf(entity, sizeof(entity), "%s_ip", gw_id);
-    snprintf(val, sizeof(val), "%s", WiFi.localIP().toString().c_str());
-    publish_entity_state("sensor", entity, val);
-
-    snprintf(entity, sizeof(entity), "%s_uptime", gw_id);
-    snprintf(val, sizeof(val), "%lu", millis() / 1000);
-    publish_entity_state("sensor", entity, val);
-
-    snprintf(entity, sizeof(entity), "%s_paired", gw_id);
-    snprintf(val, sizeof(val), "%d", sensor_registry_count_paired());
-    publish_entity_state("sensor", entity, val);
-}
-
 bool mqtt_client_publish_all() {
     if (!s_mqtt_connected) return false;
-
-    mqtt_client_publish_gateway();
 
     int count = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
