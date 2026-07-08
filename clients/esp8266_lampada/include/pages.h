@@ -213,3 +213,64 @@ td{padding:2px 4px;border-bottom:1px solid #2a2a4a;color:#aaa;font-family:monosp
 </body>
 </html>
 )=====";
+
+static const char PAGE_WIFI_CONFIG[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Configurar WiFi</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.card{background:#16213e;border-radius:16px;padding:24px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+h1{text-align:center;font-size:1.2em;color:#e94560;margin-bottom:16px}
+label{display:block;color:#888;font-size:.85em;margin-top:12px;margin-bottom:4px}
+input{width:100%;padding:8px 12px;border-radius:8px;border:1px solid #2a2a4a;background:#1a1a2e;color:#eee;font-size:.9em}
+input:focus{outline:none;border-color:#e94560}
+.btn{width:100%;padding:10px;border-radius:8px;border:none;background:#e94560;color:#fff;font-size:1em;cursor:pointer;margin-top:20px}
+.btn:active{transform:scale(.98)}
+.btn.loading{opacity:.6;pointer-events:none}
+.hint{color:#555;font-size:.75em;margin-top:4px}
+.msg{margin-top:12px;padding:8px;border-radius:8px;font-size:.85em;text-align:center}
+.msg.ok{background:rgba(39,166,68,.15);color:#4ade80}
+.msg.err{background:rgba(229,72,77,.15);color:#e5484d}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Configurar Rede WiFi</h1>
+<form id="wifiForm" onsubmit="return submitForm()">
+<label for="ssid">SSID</label>
+<input type="text" id="ssid" placeholder="Nome da rede WiFi" required>
+<label for="password">Senha</label>
+<input type="password" id="password" placeholder="Senha da rede WiFi">
+<label for="devName">Nome do Dispositivo</label>
+<input type="text" id="devName" placeholder="Ex: Sala">
+<label for="repeaterMac">Repeater MAC (opcional)</label>
+<input type="text" id="repeaterMac" placeholder="AA:BB:CC:DD:EE:FF">
+<div class="hint">Deixe em branco para uso normal (nao repeater)</div>
+<button type="submit" class="btn" id="submitBtn">Conectar</button>
+</form>
+<div id="msg" class="msg" style="display:none"></div>
+</div>
+<script>
+var currentName='';
+async function loadStatus(){try{var r=await fetch('/api/wifi');var d=await r.json();
+document.getElementById('devName').value=d.device_name||'';currentName=d.device_name||''}catch(e){}}
+function showMsg(t,c){var m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
+function loading(v){document.getElementById('submitBtn').className='btn'+(v?' loading':'');document.getElementById('submitBtn').disabled=v}
+async function submitForm(){var ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}
+var pass=document.getElementById('password').value;var name=document.getElementById('devName').value.trim();
+var rep=document.getElementById('repeaterMac').value.trim();loading(true);
+var body={ssid:ssid,password:pass};if(name)body.device_name=name;if(rep)body.repeater_mac=rep;
+try{var r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+var d=await r.json();if(d.status==='ok'){showMsg('Conectando a '+ssid+'...','ok');
+setTimeout(function(){showMsg('Se a conexao falhar, o AP sera reativado.','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
+catch(e){showMsg('Erro: '+e.message,'err');loading(false)}return false}
+loadStatus();
+</script>
+</body>
+</html>
+)=====";

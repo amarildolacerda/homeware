@@ -5,6 +5,7 @@
 #include "config.h"
 #include "pages.h"
 #include "log_buffer.h"
+#include "console.h"
 #include <ESP8266WebServer.h>
 #include <uri/UriBraces.h>
 #include <WiFiManager.h>
@@ -56,6 +57,11 @@ void web_server_init() {
         s_server.send(200, "application/json", log_get_json());
     });
 
+    s_server.on("/api/logs/clear", HTTP_POST, []() {
+        log_buffer_clear();
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
     s_server.on("/docs", HTTP_GET, []() {
         serve_pgm_page(PAGE_DOCS);
     });
@@ -70,15 +76,19 @@ void web_server_init() {
         doc["uptime_ms"] = millis();
         doc["pairing_mode"] = espnow_is_pairing();
         doc["pairing_window_sec"] = PAIRING_WINDOW_MS / 1000;
+        doc["pairing_remaining_sec"] = espnow_pairing_remaining_ms() / 1000;
         doc["mqtt_host"] = mqtt_client_get_host();
         doc["mqtt_port"] = mqtt_client_get_port();
         doc["mqtt_user"] = mqtt_client_get_user();
         doc["mqtt_connected"] = mqtt_client_is_connected();
+        doc["mqtt_connected_since"] = mqtt_client_connected_since();
         char mac_buf[18];
         mac_to_str(espnow_get_gateway_mac(), mac_buf, sizeof(mac_buf));
         doc["gateway_mac"] = mac_buf;
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
+        doc["free_heap"] = ESP.getFreeHeap();
+        doc["ip"] = WiFi.localIP().toString();
         
         String json;
         serializeJson(doc, json);
@@ -105,6 +115,7 @@ void web_server_init() {
                 obj["sequence"] = s->sequence;
                 obj["battery_pct"] = s->battery_pct;
                 obj["last_rssi"] = s->last_rssi;
+                obj["free_heap"] = s->free_heap;
                 obj["last_seen"] = (s->online && s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;
                 obj["online"] = s->online;
                 obj["paired"] = s->paired;
@@ -276,21 +287,21 @@ void web_server_init() {
     }, []() {
         HTTPUpload &upload = s_server.upload();
         if (upload.status == UPLOAD_FILE_START) {
-            Serial.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-            if (!Update.begin(upload.totalSize)) Update.printError(Serial);
+            console.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
+            if (!Update.begin(upload.totalSize)) Update.printError(console);
         } else if (upload.status == UPLOAD_FILE_WRITE) {
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
-                Update.printError(Serial);
+                Update.printError(console);
         } else if (upload.status == UPLOAD_FILE_END) {
             if (Update.end(true))
-                Serial.printf("[OTA] Success: %d bytes\n", upload.totalSize);
+                console.printf("[OTA] Success: %d bytes\n", upload.totalSize);
             else
-                Update.printError(Serial);
+                Update.printError(console);
         }
     });
     
     s_server.begin();
-    Serial.println("[WEB] Server started on port 80");
+    console.println("[WEB] Server started on port 80");
 }
 
 void web_server_loop() {
@@ -298,7 +309,7 @@ void web_server_loop() {
     ArduinoOTA.handle();
     
     if (s_wifi_config_mode && millis() - s_wifi_config_start > 300000) {
-        Serial.println("[WIFI] Config portal timeout, restarting...");
+        console.println("[WIFI] Config portal timeout, restarting...");
         ESP.restart();
     }
 }
@@ -310,16 +321,16 @@ bool web_server_wifi_setup(bool force_portal) {
     if (!force_portal && WiFi.SSID().length() > 0) {
         wifiManager.setTimeout(180);
         wifiManager.setConnectRetries(3);
-        Serial.printf("[WIFI] Connecting to saved: %s\n", WiFi.SSID().c_str());
+        console.printf("[WIFI] Connecting to saved: %s\n", WiFi.SSID().c_str());
         if (wifiManager.autoConnect()) {
-            Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+            console.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
             s_wifi_config_mode = false;
             return true;
         }
-        Serial.println("[WIFI] Failed to connect to saved WiFi");
+        console.println("[WIFI] Failed to connect to saved WiFi");
     }
     
-    Serial.println("[WIFI] Starting config portal...");
+    console.println("[WIFI] Starting config portal...");
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
     wifiManager.setConfigPortalTimeout(300);
@@ -342,7 +353,7 @@ bool web_server_wifi_setup(bool force_portal) {
         return true;
     }
     
-    Serial.println("[WIFI] Config portal timeout");
+    console.println("[WIFI] Config portal timeout");
     s_wifi_config_mode = false;
     return false;
 }
@@ -351,7 +362,7 @@ void web_server_maintain_wifi() {
     if (WiFi.status() == WL_CONNECTED) {
         if (s_wifi_reconnect_active) {
             s_wifi_reconnect_active = false;
-            Serial.printf("[WIFI] Reconnected! IP: %s\n", WiFi.localIP().toString().c_str());
+            console.printf("[WIFI] Reconnected! IP: %s\n", WiFi.localIP().toString().c_str());
         }
         return;
     }
@@ -361,12 +372,12 @@ void web_server_maintain_wifi() {
     if (!s_wifi_reconnect_active) {
         if (millis() - last_attempt < 30000) return;
         last_attempt = millis();
-        Serial.println("[WIFI] Reconnecting...");
+        console.println("[WIFI] Reconnecting...");
         WiFi.begin();
         s_wifi_reconnect_active = true;
         s_wifi_reconnect_deadline = millis() + 15000;
     } else if (millis() >= s_wifi_reconnect_deadline) {
-        Serial.println("[WIFI] Reconnect timeout");
+        console.println("[WIFI] Reconnect timeout");
         s_wifi_reconnect_active = false;
     }
 }

@@ -6,5 +6,6 @@
 void log_buffer_init();
 void log_add(const char *level, const char *fmt, ...);
 const char* log_get_json();
+void log_buffer_clear();
 
 #endif

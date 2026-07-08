@@ -19,6 +19,11 @@ void log_buffer_init() {
     log_add("info", "Gateway iniciado v" FW_VERSION);
 }
 
+void log_buffer_clear() {
+    s_head = 0;
+    s_count = 0;
+}
+
 void log_add(const char *level, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);

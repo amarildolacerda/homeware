@@ -19,6 +19,7 @@ typedef struct {
     bool paired;
     bool online;
     uint8_t ip[4];
+    uint16_t free_heap;
     union {
         struct { float temperature; float humidity; } temp_hum;
         struct { uint8_t contact_state; uint8_t tamper; } contact;

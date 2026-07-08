@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
+#include "console.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -17,6 +18,7 @@ static uint16_t s_mqtt_port = MQTT_PORT_DEFAULT;
 static char s_mqtt_user[32] = "";
 static char s_mqtt_pass[32] = "";
 static bool s_mqtt_connected = false;
+static unsigned long s_mqtt_connected_since = 0;
 static unsigned long s_last_reconnect = 0;
 static bool s_should_reconnect = true;
 
@@ -67,7 +69,7 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strcmp(s->bridge_device_id, dev_id.c_str()) == 0) {
             espnow_send_command(s->mac, s->slot, state);
-            Serial.printf("[MQTT] Command forwarded: %s -> slot %d state=%d\n", dev_id.c_str(), i, state);
+            console.printf("[MQTT] Command forwarded: %s -> slot %d state=%d\n", dev_id.c_str(), i, state);
             break;
         }
     }
@@ -157,7 +159,7 @@ bool mqtt_client_load_config() {
 
     EEPROM.end();
 
-    Serial.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
+    console.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
     return true;
 }
 
@@ -185,7 +187,7 @@ bool mqtt_client_save_config(const char *host, uint16_t port, const char *user, 
     strcpy(s_mqtt_pass, pass);
 
     s_should_reconnect = true;
-    Serial.printf("[MQTT] Config saved: %s:%d user='%s'\n", host, port, user);
+    console.printf("[MQTT] Config saved: %s:%d user='%s'\n", host, port, user);
     return true;
 }
 
@@ -207,16 +209,17 @@ bool mqtt_client_connect() {
 
     if (ok) {
         s_mqtt_connected = true;
+        s_mqtt_connected_since = millis();
         s_should_reconnect = false;
         log_add("info", "MQTT conectado a %s:%d", s_mqtt_host, s_mqtt_port);
-        Serial.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
+        console.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
 
         s_mqtt.subscribe("homeassistant/switch/+/set");
 
         mqtt_client_publish_all();
     } else {
         log_add("error", "MQTT falhou: rc=%d", s_mqtt.state());
-        Serial.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
+        console.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
     }
 
     return ok;
@@ -225,6 +228,7 @@ bool mqtt_client_connect() {
 void mqtt_client_disconnect() {
     s_mqtt.disconnect();
     s_mqtt_connected = false;
+    s_mqtt_connected_since = 0;
     log_add("warn", "MQTT desconectado");
 }
 
@@ -244,6 +248,7 @@ void mqtt_client_loop() {
 }
 
 bool mqtt_client_is_connected() { return s_mqtt_connected; }
+unsigned long mqtt_client_connected_since() { return s_mqtt_connected_since; }
 const char* mqtt_client_get_host() { return s_mqtt_host; }
 uint16_t mqtt_client_get_port() { return s_mqtt_port; }
 const char* mqtt_client_get_user() { return s_mqtt_user; }
@@ -475,6 +480,6 @@ bool mqtt_client_publish_all() {
             if (mqtt_client_publish_discovery(s)) count++;
         }
     }
-    Serial.printf("[MQTT] Published %d sensors to MQTT\n", count);
+    console.printf("[MQTT] Published %d sensors to MQTT\n", count);
     return count > 0;
 }

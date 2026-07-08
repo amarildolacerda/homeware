@@ -69,7 +69,7 @@
 #endif
 
 #ifndef ESP_NOW_CHANNEL
-#define ESP_NOW_CHANNEL 1
+#define ESP_NOW_CHANNEL 0
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.

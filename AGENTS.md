@@ -28,6 +28,7 @@
 - `monitor.py` — monitor serial Python, sai com `q` ou `Ctrl+C`
 - `erase.sh` — source + erase-flash
 - `erase.ps1 [-p <port>]` — erase flash no Windows
+- `scan.py` mostra os IPs com dispositivos e gateway conectados na LAN
 
 ## Arquitetura
 - Bridge (HA Python): servidor HTTP REST + HA + discovery UDP + MQTT Discovery

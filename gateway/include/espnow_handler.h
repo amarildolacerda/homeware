@@ -10,6 +10,7 @@ void espnow_handler_loop();
 bool espnow_start_pairing();
 void espnow_stop_pairing();
 bool espnow_is_pairing();
+unsigned long espnow_pairing_remaining_ms();
 unsigned long espnow_get_rx_count();
 unsigned long espnow_get_ack_count();
 unsigned long espnow_get_crc_errors();

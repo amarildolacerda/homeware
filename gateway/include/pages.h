@@ -111,6 +111,13 @@ async function api(path, opts) {
   }
 }
 
+function fmtBytes(b) {
+  if (b === undefined || b === null) return '--';
+  if (b < 1024) return b+' B';
+  if (b < 1048576) return (b/1024).toFixed(0)+' KB';
+  return (b/1048576).toFixed(1)+' MB';
+}
+
 function fmtUptime(ms) {
   var s = Math.floor(ms/1000);
   if (s < 60) return s+'s';
@@ -137,10 +144,10 @@ navigate('overview');
 
 const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 <style>
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
-.stat-value{font-size:1.4rem;font-weight:700;color:var(--primary)}
-.stat-label{font-size:0.7rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 6px;text-align:center}
+.stat-value{font-size:1.2rem;font-weight:700;color:var(--primary)}
+.stat-label{font-size:0.6rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
 .filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
 .filter-btn{padding:6px 14px;border:1px solid var(--border);border-radius:9999px;background:var(--surface);color:var(--muted);font-size:0.78rem;cursor:pointer;transition:all .15s;user-select:none}
 .filter-btn:hover{border-color:var(--primary-strong);color:var(--primary)}
@@ -150,6 +157,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .device{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s}
 .device:hover{border-color:var(--primary-strong)}
 .device.offline{border-color:var(--danger);opacity:.7}
+.stat.active .stat-value{color:var(--primary)}
 .device-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
 .device-icon{font-size:1.5rem;width:36px;text-align:center}
 .device-name{font-weight:600;font-size:0.9rem}
@@ -166,16 +174,15 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .metric-bar .bar .fill.green{background:var(--success)}
 .metric-bar .bar .fill.yellow{background:var(--warn)}
 .metric-bar .bar .fill.red{background:var(--danger)}
-.details{overflow:hidden;max-height:0;transition:max-height .3s}
-.details.open{max-height:500px}
-.details-inner{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.78rem;padding-top:8px;border-top:1px solid var(--border);margin-top:8px}
-.details-inner .label{color:var(--muted-subtle)}
-.details-inner .value{font-weight:500}
-.device-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.btn-sm{padding:6px 12px;font-size:0.75rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
-.btn-sm:hover{background:var(--surface-2)}
-.btn-sm.danger{color:var(--danger);border-color:var(--danger)}
-.btn-sm.danger:hover{background:#fef2f2}
+.device-actions{position:relative;display:inline-flex}
+.device-actions .menu-trigger{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:2px 6px;border-radius:6px;line-height:1}
+.device-actions .menu-trigger:hover{background:var(--border);color:var(--text)}
+.device-actions .menu-dropdown{display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:140px;overflow:hidden;z-index:20;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.device-actions .menu-dropdown.show{display:block}
+.device-actions .menu-dropdown button{display:block;width:100%;padding:10px 16px;border:none;background:transparent;color:var(--text);font-size:0.82rem;text-align:left;cursor:pointer}
+.device-actions .menu-dropdown button:hover{background:var(--primary-focus)}
+.device-actions .menu-dropdown button.danger{color:var(--danger)}
+.device-actions .menu-dropdown button.danger:hover{background:#fef2f2}
 .collapse-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem;padding:4px 0}
 .collapse-btn:hover{color:var(--primary)}
 .state-group{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
@@ -193,33 +200,32 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .btn-onoff.off:hover{background:var(--border-strong)}
 .loading{padding:40px;text-align:center;color:var(--muted)}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:600px){.stats{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr);gap:6px}}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
 .modal.show{display:flex}
 .modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px}
+.props-section{margin-bottom:14px}
+.props-section-title{font-size:0.75rem;font-weight:600;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.props-section .row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.82rem}
+.props-section .row:last-child{border-bottom:none}
+.props-section .row .label{color:var(--muted-subtle)}
+.props-section .row .value{font-weight:600}
 .btn{padding:10px 18px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;min-height:44px}
 .btn-primary{background:var(--primary);color:#fff}
 .btn-primary:hover{filter:brightness(1.1)}
 .btn-secondary{background:var(--border);color:var(--text)}
 .btn-secondary:hover{background:var(--border-strong)}
+.btn-pairing{background:var(--warn);color:#000;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 </style>
 <div class="stats">
-<div class="stat"><div class="stat-value" id="stat-paired">--</div><div class="stat-label">Pareados</div></div>
-<div class="stat"><div class="stat-value" id="stat-online">--</div><div class="stat-label">Online</div></div>
+<div class="stat" data-status="all" onclick="filterStatus('all')" style="cursor:pointer"><div class="stat-value" id="stat-paired">--</div><div class="stat-label">Pareados</div></div>
+<div class="stat" data-status="online" onclick="filterStatus('online')" style="cursor:pointer"><div class="stat-value" id="stat-online">--</div><div class="stat-label">Online</div></div>
+<div class="stat" data-status="offline" onclick="filterStatus('offline')" style="cursor:pointer"><div class="stat-value" id="stat-offline">--</div><div class="stat-label">Offline</div></div>
 <div class="stat"><div class="stat-value" id="stat-rx">--</div><div class="stat-label">RX Total</div></div>
 <div class="stat"><div class="stat-value" id="stat-uptime">--</div><div class="stat-label">Uptime</div></div>
 </div>
-<div class="filters">
-<button class="filter-btn active" data-type="all" onclick="filterSensors('all')">Todos</button>
-<button class="filter-btn" data-type="1" onclick="filterSensors('1')">Temp</button>
-<button class="filter-btn" data-type="2" onclick="filterSensors('2')">Contato</button>
-<button class="filter-btn" data-type="3" onclick="filterSensors('3')">Movimento</button>
-<button class="filter-btn" data-type="4" onclick="filterSensors('4')">Gás</button>
-<button class="filter-btn" data-type="5" onclick="filterSensors('5')">Chuva</button>
-<button class="filter-btn" data-type="6" onclick="filterSensors('6')">Tanque</button>
-<button class="filter-btn" data-type="7" onclick="filterSensors('7')">DHT+Gas</button>
-<button class="filter-btn" data-type="8" onclick="filterSensors('8')">Interruptor</button>
-</div>
+<div class="filters" id="filter-bar"></div>
 <div id="sensors-grid" class="grid grid-2"><div class="loading">carregando...</div></div>
 
 <div class="modal" id="rename-modal">
@@ -234,9 +240,22 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
   </div>
 </div>
 
+<div class="modal" id="props-modal">
+  <div class="modal-content" style="max-width:400px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:0.95rem;font-weight:600" id="props-title">Propriedades</h3>
+      <button onclick="closePropsModal()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted);padding:4px 8px">&times;</button>
+    </div>
+    <div id="props-body"></div>
+  </div>
+</div>
+
 <script>
 var s_overviewLoading = false;
 var s_renameSlot = null;
+var s_sensors = [];
+var s_activeFilter = 'all';
+var s_statusFilter = 'all';
 
 function typeName(type) {
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor'};
@@ -300,11 +319,6 @@ function renderSensors(sensors) {
     grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted-subtle)">Nenhum sensor pareado</div>';
     return;
   }
-  var expanded = {};
-  sensors.forEach(function(s) {
-    var d = document.getElementById('details-'+s.slot);
-    if (d && d.classList.contains('open')) expanded[s.slot] = true;
-  });
   grid.innerHTML = sensors.map(function(s) {
     var off = !s.online;
     var offClass = off ? ' offline' : '';
@@ -317,7 +331,17 @@ function renderSensors(sensors) {
           '<div class="device-name">'+escHtml(s.name||'Sem nome')+'</div>'+
           '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
         '</div>'+
-        '<div><span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span></div>'+
+        '<div style="display:flex;align-items:center;gap:4px">'+
+          '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
+          '<div class="device-actions">'+
+            '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
+            '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
+              '<button onclick="showPropsModal('+s.slot+')">Propriedades</button>'+
+              '<button onclick="renameSensor('+s.slot+')">Renomear</button>'+
+              '<button class="danger" onclick="removeSensor('+s.slot+')">Remover</button>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
       '</div>'+
       '<div class="metrics">'+
         batteryBar(s.battery_pct)+
@@ -327,49 +351,144 @@ function renderSensors(sensors) {
         (isType8
           ? '<button class="btn-onoff '+(onState?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'DESLIGAR':'LIGAR')+'</button>'
           : renderState(s))+
-      '</div>'+
-      '<div class="details" id="details-'+s.slot+'">'+
-        '<div class="details-inner">'+
-          '<div><span class="label">MAC</span><span class="value">'+escHtml(s.mac||'--')+'</span></div>'+
-          '<div><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
-          '<div><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
-          '<div><span class="label">Último</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'&mdash;')+'</span></div>'+
-          '<div><span class="label">Seq</span><span class="value">'+s.sequence+'</span></div>'+
-          '<div><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">'+escHtml(s.bridge_device_id||'&mdash;')+'</span></div>'+
-          (s.ip?'<div><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
-        '</div>'+
-      '</div>'+
-      '<div class="device-actions">'+
-        '<button class="btn-sm" onclick="renameSensor('+s.slot+')">Renomear</button>'+
-        '<button class="btn-sm danger" onclick="removeSensor('+s.slot+')">Remover</button>'+
-      '</div>'+
-      '<div style="text-align:center;margin-top:6px">'+
-        '<button class="collapse-btn" onclick="toggleDetails('+s.slot+')" id="expand-'+s.slot+'">&#9654; detalhes</button>'+
-      '</div>'+
-    '</div>';
+      '</div>'+          /* closes state-group */
+    '</div>';            /* closes device */
   }).join('');
-  Object.keys(expanded).forEach(function(slot) {
-    var d = document.getElementById('details-'+slot);
-    var e = document.getElementById('expand-'+slot);
-    if (d && e) { d.classList.add('open'); e.innerHTML = '&#9660; detalhes'; }
+}
+
+function updateFilters(sensors) {
+  var bar = document.getElementById('filter-bar');
+  if (!bar) return;
+  var types = {};
+  sensors.forEach(function(s) { types[s.type] = true; });
+  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor'};
+  var html = '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
+  Object.keys(types).sort().forEach(function(t) {
+    html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
   });
+  bar.innerHTML = html;
 }
 
 function filterSensors(type) {
+  s_activeFilter = !type ? 'all' : type;
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-  var btn = !type || type==='all' ? document.querySelector('.filter-btn[data-type="all"]') : document.querySelector('.filter-btn[data-type="'+type+'"]');
+  var btn = s_activeFilter==='all' ? document.querySelector('.filter-btn[data-type="all"]') : document.querySelector('.filter-btn[data-type="'+s_activeFilter+'"]');
   if (btn) btn.classList.add('active');
+  applyFilters();
+}
+
+function filterStatus(st) {
+  s_statusFilter = st;
+  document.querySelectorAll('.stat[data-status]').forEach(function(s) { s.classList.remove('active'); });
+  var el = document.querySelector('.stat[data-status="'+st+'"]');
+  if (el) el.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
   document.querySelectorAll('.device').forEach(function(d) {
-    d.style.display = (!type || type==='all' || d.dataset.type===type) ? '' : 'none';
+    var show = true;
+    if (s_activeFilter !== 'all' && d.dataset.type !== s_activeFilter) show = false;
+    if (s_statusFilter === 'online' && d.classList.contains('offline')) show = false;
+    if (s_statusFilter === 'offline' && !d.classList.contains('offline')) show = false;
+    d.style.display = show ? '' : 'none';
   });
 }
 
-function toggleDetails(slot) {
-  var d = document.getElementById('details-'+slot);
-  var e = document.getElementById('expand-'+slot);
-  if (!d || !e) return;
-  var open = d.classList.toggle('open');
-  e.innerHTML = open ? '&#9660; detalhes' : '&#9654; detalhes';
+var s_pairingTimer = null;
+var s_pairingWindowSec = 60;
+
+function startPairingUI(remainingSec) {
+  var btn = document.getElementById('btn-pair');
+  if (!btn) return;
+  if (s_pairingTimer) { clearInterval(s_pairingTimer); s_pairingTimer = null; }
+  btn.classList.add('btn-pairing');
+  btn.textContent = 'Cancelar ('+remainingSec+'s)';
+  s_pairingTimer = setInterval(function() {
+    remainingSec--;
+    if (remainingSec > 0) {
+      btn.textContent = 'Cancelar ('+remainingSec+'s)';
+    } else {
+      exitPairingMode();
+    }
+  }, 1000);
+}
+
+function enterPairingMode() {
+  if (s_pairingTimer) { exitPairingMode(); return; }
+  api('/api/pair/start', {method:'POST'}).then(function() {
+    startPairingUI(s_pairingWindowSec);
+  }).catch(function(e) {
+    showToast('Erro: '+e.message, true);
+  });
+}
+
+function exitPairingMode() {
+  if (s_pairingTimer) { clearInterval(s_pairingTimer); s_pairingTimer = null; }
+  api('/api/pair/stop', {method:'POST'}).catch(function(){});
+  var btn = document.getElementById('btn-pair');
+  if (btn) { btn.classList.remove('btn-pairing'); btn.textContent = '+ Adicionar Sensor'; }
+}
+
+function toggleDeviceMenu(slot) {
+  var m = document.getElementById('dmenu-'+slot);
+  if (!m) return;
+  var open = m.classList.contains('show');
+  document.querySelectorAll('.menu-dropdown').forEach(function(d) { d.classList.remove('show'); });
+  if (!open) m.classList.add('show');
+}
+
+function closeDeviceMenu(slot) {
+  var m = document.getElementById('dmenu-'+slot);
+  if (m) m.classList.remove('show');
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.menu-dropdown') || e.target.closest('.menu-trigger')) return;
+  document.querySelectorAll('.menu-dropdown').forEach(function(m) { m.classList.remove('show'); });
+});
+
+function showPropsModal(slot) {
+  closeDeviceMenu(slot);
+  var s = null;
+  for (var i = 0; i < s_sensors.length; i++) {
+    if (s_sensors[i].slot === slot) { s = s_sensors[i]; break; }
+  }
+  var body = document.getElementById('props-body');
+  var title = document.getElementById('props-title');
+  if (!s) { body.innerHTML = '<p style="color:var(--danger)">Sensor não encontrado</p>'; document.getElementById('props-modal').classList.add('show'); return; }
+  title.textContent = escHtml(s.name||'Sem nome')+' — '+typeName(s.type);
+  var st = s.state || {};
+  var stateHtml = '';
+  if (s.type === 1) stateHtml = '<div class="row"><span class="label">Temperatura</span><span class="value">'+(st.temperature||0).toFixed(1)+'&deg;C</span></div><div class="row"><span class="label">Umidade</span><span class="value">'+(st.humidity||0).toFixed(0)+'%</span></div>';
+  else if (s.type === 2) stateHtml = '<div class="row"><span class="label">Contato</span><span class="value">'+(st.contact?'Aberto':'Fechado')+'</span></div>'+(st.tamper!==undefined?'<div class="row"><span class="label">Tamper</span><span class="value">'+(st.tamper?'Sim':'Não')+'</span></div>':'');
+  else if (s.type === 3) stateHtml = '<div class="row"><span class="label">Movimento</span><span class="value">'+(st.occupancy?'Detectado':'Nenhum')+'</span></div>'+(st.duration!==undefined?'<div class="row"><span class="label">Duração</span><span class="value">'+st.duration+'s</span></div>':'');
+  else if (s.type === 4) stateHtml = '<div class="row"><span class="label">Gás</span><span class="value">'+(st.gas_level||0)+'%</span></div>'+(st.alarm?'<div class="row"><span class="label">Alarme</span><span class="value" style="color:var(--danger)">ATIVO</span></div>':'');
+  else if (s.type === 5) stateHtml = '<div class="row"><span class="label">Nível</span><span class="value">'+(st.rain_level||0)+'%</span></div><div class="row"><span class="label">Digital</span><span class="value">'+(st.rain_digital?'Chuva':'Seco')+'</span></div>';
+  else if (s.type === 6) stateHtml = '<div class="row"><span class="label">Nível</span><span class="value">'+(st.level_pct||0)+'%</span></div><div class="row"><span class="label">Distância</span><span class="value">'+(st.distance_cm||0)+' cm</span></div>';
+  else if (s.type === 7) stateHtml = '<div class="row"><span class="label">Temperatura</span><span class="value">'+(st.temperature||0).toFixed(1)+'&deg;C</span></div><div class="row"><span class="label">Umidade</span><span class="value">'+(st.humidity||0).toFixed(0)+'%</span></div><div class="row"><span class="label">Gás</span><span class="value">'+(st.gas_level||0)+'%</span></div>'+(st.alarm?'<div class="row"><span class="label">Alarme</span><span class="value" style="color:var(--danger)">ATIVO</span></div>':'');
+  else if (s.type === 8) stateHtml = '<div class="row"><span class="label">Estado</span><span class="value">'+(st.state?'Ligado':'Desligado')+'</span></div>';
+  body.innerHTML =
+    '<div class="props-section"><div class="props-section-title">Estado</div>'+
+    (stateHtml || '<div class="row"><span class="label">Dados</span><span class="value" style="color:var(--muted-subtle)">Aguardando...</span></div>')+
+    '</div>'+
+    '<div class="props-section"><div class="props-section-title">Dispositivo</div>'+
+    '<div class="row"><span class="label">MAC</span><span class="value" style="font-size:0.7rem">'+escHtml(s.mac||'--')+'</span></div>'+
+    '<div class="row"><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">'+escHtml(s.bridge_device_id||'&mdash;')+'</span></div>'+
+    (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
+    '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
+    '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
+    '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'&mdash;')+'</span></div>'+
+    '<div class="row"><span class="label">Sequência</span><span class="value">'+s.sequence+'</span></div>'+
+    (s.free_heap!==undefined && s.free_heap>0 ? '<div class="row"><span class="label">Mem. Livre</span><span class="value">'+fmtBytes(s.free_heap)+'</span></div>' : '')+
+    '</div>';
+  var modal = document.getElementById('props-modal');
+  modal.classList.add('show');
+  modal.onclick = function(e) { if (e.target === modal) closePropsModal(); };
+}
+
+function closePropsModal() {
+  document.getElementById('props-modal').classList.remove('show');
 }
 
 async function renameSensor(slot) {
@@ -429,12 +548,17 @@ async function loadData() {
     var info = data[0], sensors = data[1];
     document.getElementById('stat-paired').textContent = info.paired_count;
     document.getElementById('stat-online').textContent = info.online_count;
+    document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
     document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     sensors.forEach(function(s) { delete s.mac_bytes; });
+    s_sensors = sensors;
+    updateFilters(sensors);
     renderSensors(sensors);
+    filterSensors(s_activeFilter);
+    filterStatus(s_statusFilter);
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   } finally {
@@ -469,21 +593,24 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </style>
 <div style="max-width:500px">
 <div class="card">
+<h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">Bridge</h2>
+<div class="row"><span class="label">Device ID</span><span class="value" id="s-device" style="font-size:0.7rem">--</span></div>
+<div class="row"><span class="label">IP</span><span class="value" id="s-ip">--</span></div>
+<div class="row"><span class="label">Firmware</span><span class="value" id="s-fw">--</span></div>
+<div class="row"><span class="label">Uptime</span><span class="value" id="s-uptime">--</span></div>
+<div class="row"><span class="label">Mem. Livre</span><span class="value" id="s-free-heap">--</span></div>
+<button class="btn btn-primary" id="btn-pair" onclick="enterPairingMode()" style="margin-top:12px;width:100%">+ Adicionar Sensor</button>
+<button class="btn btn-primary" onclick="doRestart()" style="margin-top:8px;width:100%">Reiniciar</button>
+</div>
+<div class="card" style="margin-top:12px">
 <h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">MQTT</h2>
 <div class="row"><span class="label">Host</span><span class="value" id="s-host">--</span></div>
 <div class="row"><span class="label">Porta</span><span class="value" id="s-port">--</span></div>
 <div class="row"><span class="label">Usuário</span><span class="value" id="s-user">--</span></div>
 <div class="row"><span class="label">Status</span><span class="value" id="s-status">--</span></div>
+<div class="row"><span class="label">Conectado há</span><span class="value" id="s-mqtt-uptime">--</span></div>
 <button class="btn btn-primary" onclick="showMqttForm()" style="margin-top:12px">Configurar MQTT</button>
-</div>
-<div class="card" style="margin-top:12px">
-<h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">Bridge</h2>
-<div class="row"><span class="label">Device ID</span><span class="value" id="s-device">--</span></div>
-<div class="row"><span class="label">Firmware</span><span class="value" id="s-fw">--</span></div>
-</div>
-<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-<button class="btn btn-primary" onclick="doRestart()">Reiniciar</button>
-<button class="btn btn-secondary" onclick="doReregister()">Re-registrar</button>
+<button class="btn btn-secondary" onclick="doReregister()" style="margin-top:8px">Forçar re-registro</button>
 </div>
 </div>
 <div class="modal" id="mqtt-modal">
@@ -507,10 +634,17 @@ async function loadSettings() {
     document.getElementById('s-port').textContent = info.mqtt_port || '--';
     document.getElementById('s-user').textContent = info.mqtt_user || '--';
     document.getElementById('s-status').textContent = info.mqtt_connected ? 'Conectado' : 'Desconectado';
+    document.getElementById('s-mqtt-uptime').textContent = info.mqtt_connected && info.mqtt_connected_since ? fmtUptime(info.uptime_ms - info.mqtt_connected_since) : '--';
     document.getElementById('s-device').textContent = info.gateway_id || '--';
+    document.getElementById('s-ip').textContent = info.ip || '--';
     document.getElementById('s-fw').textContent = info.fw_version || '--';
+    document.getElementById('s-uptime').textContent = fmtUptime(info.uptime_ms);
+    document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
+    if (info.pairing_mode && info.pairing_remaining_sec > 0) {
+      startPairingUI(info.pairing_remaining_sec);
+    }
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   }
@@ -579,10 +713,21 @@ const char PAGE_LOGS[] PROGMEM = R"rawliteral(
 .log-empty{text-align:center;padding:40px;color:var(--muted-subtle)}
 </style>
 <div>
-<h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">Logs</h2>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+<h2 style="font-size:0.95rem;font-weight:600;color:var(--primary)">Logs</h2>
+<button class="clear-btn" onclick="clearLogs()" style="font-size:0.75rem;padding:4px 12px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Limpar</button>
+</div>
 <div id="log-table"><div class="log-loading">carregando...</div></div>
 </div>
 <script>
+async function clearLogs() {
+  try {
+    await fetch('/api/logs/clear', {method:'POST'});
+    loadLogs();
+  } catch(e) {
+    document.getElementById('log-table').innerHTML = '<div class="log-empty" style="color:var(--danger)">Erro ao limpar logs</div>';
+  }
+}
 async function loadLogs() {
   try {
     var d = await fetch('/api/logs').then(function(r) { return r.json(); });
