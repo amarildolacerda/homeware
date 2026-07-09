@@ -57,6 +57,9 @@ Cliente ESP8266 (Wemos D1 Mini) que controla um relé ON/OFF. Comunica com o Gat
 - `POST /api/pin` — escrita digital com `{"gpio":N,"state":0|1}`
 - `GET /api/settings` — configurações atuais
 - `POST /api/settings` — altera nome/pinos com `{"device_name":"...","relay_pin":N,"button_pin":N}`
+- `GET /api/timers` — lista timers configurados
+- `POST /api/timers` — cria/atualiza timer com `{"index":N,"hour":H,"minute":M,"action":0|1,"days_mask":N,"enabled":true|false}`
+- `GET /api/timer/next` — próximo timer a disparar `{"has_next":bool,"next_epoch":...,"next_action":...}`
 - `POST /api/restart` — reinicia o dispositivo
 - `POST /api/ota` — upload de firmware (multipart)
 
@@ -69,6 +72,7 @@ Cliente ESP8266 (Wemos D1 Mini) que controla um relé ON/OFF. Comunica com o Gat
 | `1` | Turn on |
 | `s` | Device status |
 | `p` | Reset pairing |
+| `t` | List timers |
 | `u` | OTA info |
 | `a` | Alexa device info |
 | `h` / `?` | Help |

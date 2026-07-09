@@ -27,6 +27,7 @@ Firmware for ESP8266 (Wemos D1 Mini) relay control with ESP-NOW sensor protocol.
 | `1` | Turn on |
 | `s` | Device status |
 | `p` | Reset pairing |
+| `t` | List timers |
 | `u` | OTA info |
 | `a` | Alexa device info |
 | `h` / `?` | Help |
@@ -62,6 +63,8 @@ O nome do dispositivo é o mesmo configurado via WiFiManager (padrão: `OnOff`).
 - `http://<ip>:80/api/state` — Full device JSON
 - `http://<ip>:80/api/relay` — GET (state) / POST (`{"state":true/false}`)
 - `http://<ip>:80/api/pin` — Direct GPIO control
+- `http://<ip>:80/api/timers` — GET (list) / POST (update timer config)
+- `http://<ip>:80/api/timer/next` — Next scheduled timer
 
 ## OTA
 
