@@ -80,6 +80,15 @@
 #define EEPROM_TIMEZONE_ADDR 160
 #define EEPROM_TIMER_BASE 161
 
+/* Pulse (auto-OFF timer like Tuya) */
+#define PULSE_DEFAULT_DURATION_MIN 60
+#ifndef PULSE_MIN_MINUTES
+#define PULSE_MIN_MINUTES 1
+#endif
+#ifndef PULSE_MAX_MINUTES
+#define PULSE_MAX_MINUTES 1440
+#endif
+
 #ifndef EEPROM_SIZE
 #define EEPROM_SIZE 256
 #endif

@@ -60,6 +60,8 @@ Cliente ESP8266 (Wemos D1 Mini) que controla um relé ON/OFF. Comunica com o Gat
 - `GET /api/timers` — lista timers configurados
 - `POST /api/timers` — cria/atualiza timer com `{"index":N,"hour":H,"minute":M,"action":0|1,"days_mask":N,"enabled":true|false}`
 - `GET /api/timer/next` — próximo timer a disparar `{"has_next":bool,"next_epoch":...,"next_action":...}`
+- `GET /api/pulse` — estado do pulse `{"enabled":bool,"duration_minutes":N,"remaining_s":N}`
+- `POST /api/pulse` — configura pulse `{"enabled":bool,"duration_minutes":N}`
 - `POST /api/restart` — reinicia o dispositivo
 - `POST /api/ota` — upload de firmware (multipart)
 
@@ -73,6 +75,7 @@ Cliente ESP8266 (Wemos D1 Mini) que controla um relé ON/OFF. Comunica com o Gat
 | `s` | Device status |
 | `p` | Reset pairing |
 | `t` | List timers |
+| `i` | Toggle pulse (auto-OFF) |
 | `u` | OTA info |
 | `a` | Alexa device info |
 | `h` / `?` | Help |
@@ -115,6 +118,20 @@ Nenhum `delay()` bloqueante no `loop()`. Todos os ciclos usam máquina de estado
 | `GET /api/timers` | Lista timers configurados |
 | `POST /api/timers` | Salva timers via JSON `{"timers":[...]}` |
 | `GET /api/timer/next` | Próximo timer a disparar `{"next_epoch":...,"next_action":...}` |
+
+### Pulse (Auto-OFF)
+
+- Quando habilitado, após ligar o relé inicia uma contagem regressiva
+- Ao expirar o tempo configurado, o relé desliga automaticamente
+- Se o relé for ligado novamente antes do fim, a contagem reinicia
+- Configuração persistida em EEPROM
+
+### API do Pulse
+
+| Endpoint | Descrição |
+|----------|-----------|
+| `GET /api/pulse` | Estado atual: `{"enabled":bool,"duration_minutes":N,"remaining_s":N}` |
+| `POST /api/pulse` | Atualiza pulse: `{"enabled":bool,"duration_minutes":N}` |
 
 ## LED Status
 

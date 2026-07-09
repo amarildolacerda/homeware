@@ -93,6 +93,12 @@ static unsigned long get_synced_epoch(void) {
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
 #define EEPROM_MAGIC 0xAA
+#define EEPROM_PULSE_ENABLED_ADDR 224
+#define EEPROM_PULSE_DURATION_ADDR 225
+
+static bool s_pulse_enabled = false;
+static uint16_t s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
+static unsigned long s_pulse_on_time = 0;
 
 static void set_relay(bool state);
 static bool espnow_send_data(void);
@@ -240,6 +246,30 @@ static void load_startup_mode(void)
         s_startup_mode = (int)val;
     else
         s_startup_mode = 0;
+}
+
+static void save_pulse_config(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_PULSE_ENABLED_ADDR, s_pulse_enabled ? 1 : 0);
+    EEPROM.write(EEPROM_PULSE_DURATION_ADDR, s_pulse_duration_min & 0xFF);
+    EEPROM.write(EEPROM_PULSE_DURATION_ADDR + 1, (s_pulse_duration_min >> 8) & 0xFF);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_pulse_config(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    s_pulse_enabled = EEPROM.read(EEPROM_PULSE_ENABLED_ADDR) ? true : false;
+    uint8_t lo = EEPROM.read(EEPROM_PULSE_DURATION_ADDR);
+    uint8_t hi = EEPROM.read(EEPROM_PULSE_DURATION_ADDR + 1);
+    EEPROM.end();
+    uint16_t val = (uint16_t)lo | ((uint16_t)hi << 8);
+    if (val >= PULSE_MIN_MINUTES && val <= PULSE_MAX_MINUTES)
+        s_pulse_duration_min = val;
+    else
+        s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
 }
 
 static void save_device_name(const char *name)
@@ -645,6 +675,8 @@ static void set_relay(bool state)
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
+    if (state && s_pulse_enabled)
+        s_pulse_on_time = millis();
     s_last_espnow_send = 0;
 }
 
@@ -901,6 +933,10 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["pulse_enabled"] = s_pulse_enabled;
+        doc["pulse_duration_min"] = s_pulse_duration_min;
+        if (s_pulse_enabled && s_relay_state)
+            doc["pulse_remaining_s"] = (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000;
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
@@ -1097,6 +1133,7 @@ static void handle_console(char c)
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
         console.printf("  t    - listar timers\n");
+        console.printf("  i    - ativar/desativar pulse\n");
         console.printf("  u    - info OTA\n");
         console.printf("  a    - info Alexa\n");
         console.printf("  h/?  - esta ajuda\n");
@@ -1119,8 +1156,16 @@ static void handle_console(char c)
         console.printf("  Protocolo:   Hue Bridge (SSDP + UPnP)\n");
         console.printf("  Dica:        \"Alexa, ligue %s\"\n", s_device_name);
         console.printf("               \"Alexa, desligue %s\"\n", s_device_name);
-        console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
+            console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
+        break;
+    case 'i':
+    case 'I':
+        s_pulse_enabled = !s_pulse_enabled;
+        if (s_pulse_enabled && s_relay_state)
+            s_pulse_on_time = millis();
+        save_pulse_config();
+        console.printf("[%s] Pulse %s (%d min)\n", TAG, s_pulse_enabled ? "ativado" : "desativado", s_pulse_duration_min);
         break;
     case 's':
     case 'S':
@@ -1159,6 +1204,9 @@ static void handle_console(char c)
         console.printf("  Uptime:      %lu s\n", up);
         console.printf("  Timers:      %d configurados\n", MAX_TIMERS);
         console.printf("  Epoch:       %lu\n", get_synced_epoch());
+        console.printf("  Pulse:       %s (%d min)\n", s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);
+        if (s_pulse_enabled && s_relay_state)
+            console.printf("  Pulso rest.: %lu s\n", (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000);
         console.printf("---------------\n\n");
         break;
     }
@@ -1385,6 +1433,47 @@ static void handle_api_timer_next(void)
     s_server.send(200, "application/json", json);
 }
 
+static void handle_api_pulse(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        String json;
+        JsonDocument doc;
+        doc["enabled"] = s_pulse_enabled;
+        doc["duration_minutes"] = s_pulse_duration_min;
+        doc["remaining_s"] = (s_pulse_enabled && s_relay_state) ?
+            ((s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000) : 0;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err) { s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}"); return; }
+        if (doc.containsKey("enabled"))
+            s_pulse_enabled = doc["enabled"];
+        if (doc.containsKey("duration_minutes"))
+        {
+            int val = doc["duration_minutes"];
+            if (val < PULSE_MIN_MINUTES) val = PULSE_MIN_MINUTES;
+            if (val > PULSE_MAX_MINUTES) val = PULSE_MAX_MINUTES;
+            s_pulse_duration_min = (uint16_t)val;
+        }
+        if (s_pulse_enabled && s_relay_state)
+            s_pulse_on_time = millis();
+        save_pulse_config();
+        String json;
+        JsonDocument resp;
+        resp["status"] = "ok";
+        resp["enabled"] = s_pulse_enabled;
+        resp["duration_minutes"] = s_pulse_duration_min;
+        serializeJson(resp, json);
+        s_server.send(200, "application/json", json);
+    }
+}
+
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1474,6 +1563,7 @@ void setup(void)
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/timer/next", handle_api_timer_next);
+    s_server.on("/api/pulse", HTTP_ANY, handle_api_pulse);
     /* s_server.begin() is called by Espalexa internally */
 
     ArduinoOTA.setHostname(s_device_id);
@@ -1511,6 +1601,8 @@ void setup(void)
 
     timer_init();
     console.printf("[%s] Timer module initialized\n", TAG);
+    load_pulse_config();
+    console.printf("[%s] Pulse: %s (%d min)\n", TAG, s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);
 
     console.printf("============================================\n");
     console.printf("  Pronto! Pressione 'h' para ajuda\n");
@@ -1621,6 +1713,18 @@ void loop(void)
         if (timer_action >= 0)
         {
             on_timer_fire((uint8_t)timer_action);
+        }
+    }
+
+    if (s_pulse_enabled && s_relay_state && (now - s_pulse_on_time > (unsigned long)s_pulse_duration_min * 60000))
+    {
+        console.printf("[%s] Pulse timeout (%d min), turning OFF\n", TAG, s_pulse_duration_min);
+        set_relay(false);
+        if (s_paired)
+        {
+            s_last_espnow_send = 0;
+            if (espnow_send_data())
+                s_last_send_ms = millis();
         }
     }
 

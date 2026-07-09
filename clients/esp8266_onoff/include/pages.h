@@ -83,6 +83,13 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <option value="1">ON</option>
 <option value="2">Último</option>
 </select></div>
+<div class="row"><span class="label">Pulse</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="pulseEnabledCheck" onchange="savePulse()"> auto-OFF</label></div>
+<div class="row"><span class="label">Duração</span>
+<span style="display:flex;gap:4px;align-items:center">
+<input type="number" id="pulseDurationInput" min="1" max="1440" style="width:60px;padding:4px 6px;border-radius:8px;border:1px solid var(--border);font-size:.82rem;outline:none;background:var(--surface);color:var(--text)">
+<span style="color:var(--muted-subtle);font-size:.75rem">min</span>
+</span>
+</div>
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
@@ -126,6 +133,14 @@ async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch(
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
 try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function savePulse(){let en=document.getElementById('pulseEnabledCheck').checked;let dur=parseInt(document.getElementById('pulseDurationInput').value)||60;
+try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
+async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
+document.getElementById('pulseEnabledCheck').checked=d.enabled;
+document.getElementById('pulseDurationInput').value=d.duration_minutes;
+let pe=document.getElementById('pulseEnabledCheck');
+pe.checked=d.enabled;
+}catch(e){}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
 gwMetric.textContent=d.gateway_connected?'Conectado':'Offline';gwMetric.className='metric-value'+(d.gateway_connected?' green':' red');
@@ -161,7 +176,7 @@ nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString(
 }catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-setInterval(fetchState,3000);fetchState();fetchSettings();fetchTimers();
+setInterval(fetchState,3000);fetchState();fetchSettings();fetchTimers();fetchPulse();
 </script>
 </body>
 </html>
