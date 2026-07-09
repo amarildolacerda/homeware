@@ -45,6 +45,8 @@ static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
+static uint32_t s_espnow_tx_count = 0;
+static uint32_t s_espnow_rx_count = 0;
 
 static char s_device_id[32];
 static char s_device_name[48] = DEVICE_NAME;
@@ -421,6 +423,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
+    s_espnow_tx_count++;
     if (status != 0)
     {
         char mac_str[18];
@@ -431,6 +434,7 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
+    s_espnow_rx_count++;
     if (!data || len < 1)
         return;
 
@@ -938,6 +942,22 @@ static void handle_api_state(void)
         doc["pulse_duration_min"] = s_pulse_duration_min;
         if (s_pulse_enabled && s_relay_state)
             doc["pulse_remaining_s"] = (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000;
+        doc["tx_count"] = s_espnow_tx_count;
+        doc["rx_count"] = s_espnow_rx_count;
+        doc["free_heap"] = ESP.getFreeHeap();
+        {
+            unsigned long epoch = get_synced_epoch();
+            unsigned long next_epoch = 0;
+            uint8_t next_action = 0;
+            if (epoch)
+                timer_get_next(epoch, s_timezone_offset, &next_epoch, &next_action);
+            doc["has_next_timer"] = (next_epoch > 0);
+            if (next_epoch > 0)
+            {
+                doc["next_timer_epoch"] = next_epoch;
+                doc["next_timer_action"] = next_action;
+            }
+        }
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);

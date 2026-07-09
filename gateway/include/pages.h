@@ -475,7 +475,7 @@ function showPropsModal(slot) {
     '<div class="props-section"><div class="props-section-title">Dispositivo</div>'+
     '<div class="row"><span class="label">MAC</span><span class="value" style="font-size:0.7rem">'+escHtml(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">'+escHtml(s.bridge_device_id||'&mdash;')+'</span></div>'+
-    (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
+    (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
     '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'&mdash;')+'</span></div>'+

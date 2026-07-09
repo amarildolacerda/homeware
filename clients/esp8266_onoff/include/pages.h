@@ -12,44 +12,38 @@ static const char PAGE_DASHBOARD[] PROGMEM = R"=====(
 <style>
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--success:#16a34a;--danger:#dc2626;--sidebar-w:180px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
 .sidebar{position:fixed;left:0;top:0;width:var(--sidebar-w);height:100%;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10}
-.nav{flex:1;padding:12px 0;overflow-y:auto}
+.sidebar-top{padding:16px 16px 8px;border-bottom:1px solid var(--border)}
+.sidebar-top .dev-name{font-size:.85rem;font-weight:600;color:var(--primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-top .dev-id{font-size:.65rem;color:var(--muted-subtle);margin-top:2px}
+.nav{flex:1;padding:8px 0;overflow-y:auto}
 .nav-item{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;font-size:.82rem;color:var(--muted);border-left:3px solid transparent;user-select:none}
 .nav-item:hover{color:var(--text);background:var(--surface-2)}
 .nav-item.active{color:var(--primary);border-left-color:var(--primary);font-weight:600;background:var(--primary-focus)}
 .nav-sub{padding-left:16px}
 .nav-sub .nav-item{font-size:.78rem;padding:7px 16px}
-.sidebar-bottom{padding:12px 16px;border-top:1px solid var(--border);font-size:.72rem;color:var(--muted-subtle)}
-.sb-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-.sb-row:last-child{margin-bottom:0}
-.sb-dot{width:7px;height:7px;border-radius:50%;background:var(--muted-subtle);flex-shrink:0}
-.sb-dot.online{background:var(--success)}
-.sb-dot.offline{background:var(--danger)}
-.main{margin-left:var(--sidebar-w);padding:20px;max-width:720px}
-.section{display:none}
-.section.active{display:block}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px;margin:0 auto}
-h1{text-align:center;font-size:1.15rem;color:var(--primary);margin-bottom:4px}
-.hero{text-align:center;padding:12px 0 4px}
+.sidebar-bottom{padding:12px 16px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted-subtle)}
+.main{flex:1;margin-left:var(--sidebar-w);display:flex;flex-direction:column;min-height:100vh}
+.stats-header{background:var(--surface);border-bottom:1px solid var(--border);padding:5px 20px;display:flex;align-items:center;gap:6px}
+.stats-header .back-link{color:var(--primary);text-decoration:none;font-size:.95rem;margin-right:2px}
+.stats-header .stat{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 2px;text-align:center}
+.stats-header .stat-value{font-size:.82rem;font-weight:700;color:var(--primary)}
+.stats-header .stat-label{font-size:.52rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.03em;margin-top:1px}
+.content{flex:1;padding:20px;max-width:480px;width:100%;margin:0 auto}
+.footer-bar{display:flex;align-items:center;gap:16px;padding:8px 20px;border-top:1px solid var(--border);background:var(--surface);font-size:.75rem;color:var(--muted-subtle);flex-wrap:wrap;justify-content:flex-end}
+.fb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.fb-dot.online{background:var(--success)}
+.fb-dot.offline{background:var(--danger)}
+.fb-sep{color:var(--border);user-select:none}
+h1{font-size:1.1rem;color:var(--primary);margin-bottom:12px;text-align:center}
+.hero{text-align:center;padding:16px 0 8px}
 .relay-btn{width:80px;height:80px;border-radius:50%;border:2px solid var(--border);font-size:2.2rem;cursor:pointer;transition:all .25s;background:var(--surface);color:var(--muted-subtle);display:inline-flex;align-items:center;justify-content:center}
 .relay-btn:hover{border-color:var(--primary)}
 .relay-btn.on{background:var(--primary);border-color:var(--primary-strong);color:#fff;box-shadow:0 0 0 4px var(--primary-focus)}
 .badge{display:inline-block;padding:3px 14px;border-radius:9999px;font-size:.75rem;font-weight:600}
 .badge.on{background:#dcfce7;color:var(--success)}
 .badge.off{background:#fef2f2;color:var(--danger)}
-.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 0}
-.metric{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
-.metric-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted-subtle);font-weight:500}
-.metric-value{font-size:.9rem;font-weight:600;color:var(--text);margin-top:2px}
-.metric-value.green{color:var(--success)}
-.metric-value.red{color:var(--danger)}
-.expand-header{display:flex;justify-content:space-between;align-items:center;padding:10px 0;cursor:pointer;color:var(--muted);font-size:.82rem;border-bottom:1px solid var(--border);user-select:none;margin-top:8px}
-.expand-header:hover{color:var(--primary)}
-.expand-icon{font-size:.75rem;transition:transform .2s}
-.expand-icon.open{transform:rotate(90deg)}
-.details{overflow:hidden;max-height:0;transition:max-height .25s ease}
-.details.open{max-height:400px}
 .row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
 .row:last-child{border-bottom:none}
 .label{color:var(--muted-subtle);font-size:.82rem}
@@ -66,11 +60,17 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 .footer{text-align:center;margin-top:12px;font-size:.72rem;color:var(--muted-subtle)}
 .loading{opacity:.5;pointer-events:none}
 .timer-add{display:flex;gap:4px;align-items:center;margin-top:8px;flex-wrap:wrap}
-@media(max-width:600px){.sidebar{width:48px}.nav-item{justify-content:center;padding:10px 4px;font-size:0}.nav-item span{display:none}.nav-sub{display:none}.main{margin-left:48px}.sidebar-bottom{display:none}}
+.section{display:none}
+.section.active{display:block}
+@media(max-width:600px){.sidebar{width:48px}.sidebar-top .dev-name,.sidebar-top .dev-id,.sidebar-bottom{display:none}.nav-item{justify-content:center;padding:10px 4px}.nav-item span{display:none}.nav-item span:first-child{display:inline;font-size:1.1rem}.nav-sub{display:none}.main{margin-left:48px}.stats-header{padding:5px 10px}.content{padding:12px}.footer-bar{padding:6px 12px;font-size:.7rem;gap:8px}}
 </style>
 </head>
 <body>
 <div class="sidebar">
+<div class="sidebar-top">
+<div class="dev-name" id="sbName">OnOff</div>
+<div class="dev-id" id="sbId">-</div>
+</div>
 <div class="nav">
 <div class="nav-item active" data-section="home" onclick="showSection('home')"><span>🏠</span><span>Home</span></div>
 <div class="nav-item" data-section="ciclo" onclick="toggleCiclo()"><span>🔄</span><span>Ciclo</span><span class="expand-icon" id="cicloIcon" style="margin-left:auto;font-size:.65rem">&#9654;</span></div>
@@ -79,40 +79,28 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="nav-item" data-section="pulse" onclick="showSection('pulse')"><span>⏱</span><span>Pulsação</span></div>
 <div class="nav-item" style="opacity:.4;cursor:default"><span>📅</span><span>Agenda</span></div>
 </div>
-<div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Config</span></div>
+<div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
+<div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
 </div>
-<div class="sidebar-bottom">
-<div class="sb-row"><span class="sb-dot" id="sbDot"></span><span id="sbGateway">-</span></div>
-<div class="sb-row" id="sbTimeRow"><span id="sbTime">--:--</span></div>
-<div class="sb-row"><span id="sbUptime">0m</span></div>
-</div>
+<div class="sidebar-bottom"><span id="sbVersion">v0.0.20</span></div>
 </div>
 <div class="main">
+<div class="stats-header">
+<a id="backBtn" href="#" class="back-link" style="display:none">&larr;</a>
+<div class="stat"><div class="stat-value" id="rxVal">0</div><div class="stat-label">RX</div></div>
+<div class="stat"><div class="stat-value" id="txVal">0</div><div class="stat-label">TX</div></div>
+<div class="stat"><div class="stat-value" id="memVal">-</div><div class="stat-label">Mem</div></div>
+<div class="stat"><div class="stat-value" id="proxVal">-</div><div class="stat-label">Próx</div></div>
+</div>
+<div class="content">
 <div class="section active" id="secHome">
-<div class="card">
-<h1 id="deviceName">OnOff</h1>
 <div class="hero">
 <button class="relay-btn" id="relayBtn" onclick="toggleRelay()">&#9889;</button>
 <div style="margin-top:6px"><span class="badge off" id="relayBadge">DESLIGADO</span></div>
 </div>
-<div class="summary">
-<div class="metric"><div class="metric-label">Gateway</div><div class="metric-value" id="gwMetric">-</div></div>
-<div class="metric"><div class="metric-label">RSSI</div><div class="metric-value" id="rssiMetric">-</div></div>
-<div class="metric"><div class="metric-label">Uptime</div><div class="metric-value" id="uptimeMetric">-</div></div>
-</div>
-<div class="expand-header" onclick="toggleDetails()"><span>Detalhes</span><span class="expand-icon" id="expandIcon">&#9654;</span></div>
-<div class="details" id="details">
-<div class="row"><span class="label">Alexa</span><span class="value" id="alexaStatus">-</span></div>
-<div class="row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
-<div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
-<div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
-<div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
-</div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
-</div>
 <div class="section" id="secTimer">
-<div class="card">
 <h1>Timer</h1>
 <div class="row"><span class="label">Próximo</span><span class="value" id="nextTimer">-</span></div>
 <div id="timerList"></div>
@@ -123,41 +111,56 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <button class="btn btn-primary btn-sm" onclick="addTimer()">+</button>
 </div>
 </div>
-</div>
 <div class="section" id="secPulse">
-<div class="card">
 <h1>Pulsação</h1>
 <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">Auto-OFF: liga o relé por um tempo configurado, desliga automaticamente ao expirar.</p>
 <div class="row"><span class="label">Ativado</span><label style="font-size:.82rem;color:var(--text)"><input type="checkbox" id="pulseEnabledCheck" onchange="savePulse()"> habilitado</label></div>
 <div class="row"><span class="label">Duração</span><span style="display:flex;gap:4px;align-items:center">
 <input type="number" id="pulseDurationInput" min="1" max="1440" style="width:70px">
-<span style="color:var(--muted-subtle);font-size:.75rem">min (1–1440)</span></span></div>
+<span style="color:var(--muted-subtle);font-size:.75rem">min</span></span></div>
 <div class="row"><span class="label">Restante</span><span class="value" id="pulseRemaining">-</span></div>
 <div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="savePulse()">Salvar</button></div>
 </div>
-</div>
 <div class="section" id="secConfig">
-<div class="card">
 <h1>Configuração</h1>
 <div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
 <div class="row"><span class="label">GPIO relé</span><select id="relayPinSelect"></select></div>
 <div class="row"><span class="label">GPIO botão</span><select id="buttonPinSelect"></select></div>
 <div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
-<div class="row"><span class="label">Iniciar relé</span><select id="startupModeSelect" onchange="savePins()">
+<div class="row"><span class="label">Estado ao Iniciar</span><select id="startupModeSelect" onchange="savePins()">
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
 </div>
 </div>
+<div class="section" id="secPropriedades">
+<h1>Propriedades</h1>
+<div class="row"><span class="label">Alexa</span><span class="value" id="alexaStatus">-</span></div>
+<div class="row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
+<div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
+<div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
+<div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
+</div>
+</div>
+<div class="footer-bar">
+<span style="display:flex;align-items:center;gap:4px"><span class="fb-dot" id="fbDot"></span><span id="fbGateway">-</span></span>
+<span class="fb-sep">|</span>
+<span id="fbTime">--:--</span>
+<span class="fb-sep">|</span>
+<span id="fbUptime">0m</span>
 </div>
 </div>
 <script>
+const p=new URLSearchParams(window.location.search);
+const gw=p.get('from');
+if(gw){document.getElementById('backBtn').href='http://'+gw;document.getElementById('backBtn').style.display='inline'}
 const btn=document.getElementById('relayBtn');
 const badge=document.getElementById('relayBadge');
-const gwMetric=document.getElementById('gwMetric');
-const rssiMetric=document.getElementById('rssiMetric');
-const uptimeMetric=document.getElementById('uptimeMetric');
+const rxVal=document.getElementById('rxVal');
+const txVal=document.getElementById('txVal');
+const memVal=document.getElementById('memVal');
+const proxVal=document.getElementById('proxVal');
 const alexaEl=document.getElementById('alexaStatus');
 const ipEl=document.getElementById('ipStatus');
 const batteryEl=document.getElementById('batteryStatus');
@@ -166,15 +169,14 @@ const slotEl=document.getElementById('slotStatus');
 const footerEl=document.getElementById('footer');
 const timerList=document.getElementById('timerList');
 const nextTimerEl=document.getElementById('nextTimer');
-const sbDot=document.getElementById('sbDot');
-const sbGateway=document.getElementById('sbGateway');
-const sbTime=document.getElementById('sbTime');
-const sbUptime=document.getElementById('sbUptime');
-let loading=false,expanded=false,cicloOpen=false,currentSection='home';
+const fbDot=document.getElementById('fbDot');
+const fbGateway=document.getElementById('fbGateway');
+const fbTime=document.getElementById('fbTime');
+const fbUptime=document.getElementById('fbUptime');
+let loading=false,cicloOpen=false,currentSection='home';
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
 document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
-function toggleDetails(){expanded=!expanded;document.getElementById('details').classList.toggle('open',expanded);document.getElementById('expandIcon').classList.toggle('open',expanded)}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
@@ -185,19 +187,25 @@ async function savePulse(){let en=document.getElementById('pulseEnabledCheck').c
 if(dur<1)dur=1;if(dur>1440)dur=1440;
 try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
-const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
-gwMetric.textContent=d.gateway_connected?'Conectado':'Offline';gwMetric.className='metric-value'+(d.gateway_connected?' green':' red');
-rssiMetric.textContent=(d.rssi||'-')+' dBm';
-let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
-uptimeMetric.textContent=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
+  const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
+  rxVal.textContent=d.rx_count||0;
+  txVal.textContent=d.tx_count||0;
+  memVal.textContent=d.free_heap||0;
+  proxVal.textContent=d.has_next_timer?new Date(d.next_timer_epoch*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+(d.next_timer_action?' ON':' OFF'):'-';
+  let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
+  let uptimeStr=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 alexaEl.textContent=d.alexa_connected?'Conectado':'-';alexaEl.className='value'+(d.alexa_connected?' green':'');
 ipEl.textContent=d.ip||'-';batteryEl.textContent=(d.battery||0)+'%';fwEl.textContent=d.fw_version||'-';
 slotEl.textContent=d.slot!==undefined&&d.slot!==null?d.slot:'-';
-document.getElementById('deviceName').textContent=d.device_name;document.getElementById('pageTitle').textContent=d.device_name;
+let name=d.device_name||'OnOff';
+document.getElementById('pageTitle').textContent=name;
+document.getElementById('sbName').textContent=name;
+document.getElementById('sbId').textContent=d.device_id||'';
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
-sbDot.className='sb-dot'+(d.gateway_connected?' online':' offline');sbGateway.textContent=d.gateway_connected?'Online':'Offline';
-sbUptime.textContent=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
-if(d.current_epoch){let t=new Date(d.current_epoch*1000);sbTime.textContent=t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
+fbGateway.textContent=d.gateway_connected?'Online':'Offline';
+fbUptime.textContent=uptimeStr;
+if(d.current_epoch){let t=new Date(d.current_epoch*1000);fbTime.textContent=t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
 }catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 document.getElementById('deviceNameInput').value=d.device_name;
@@ -210,8 +218,7 @@ let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.bu
 async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
 document.getElementById('pulseEnabledCheck').checked=d.enabled;
 document.getElementById('pulseDurationInput').value=d.duration_minutes;
-document.getElementById('pulseRemaining').textContent=d.remaining_s>0?d.remaining_s+'s':'-';
-}catch(e){}}
+document.getElementById('pulseRemaining').textContent=d.remaining_s>0?Math.floor(d.remaining_s/60)+'m '+d.remaining_s%60+'s':'-'}catch(e){}}
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
@@ -223,8 +230,7 @@ let lbl=document.createElement('span');lbl.className='label';lbl.textContent=('0
 let cb=document.createElement('input');cb.type='checkbox';cb.checked=t.enabled;cb.onchange=function(){t.enabled=cb.checked;fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,...t})})};
 div.appendChild(lbl);div.appendChild(cb);timerList.appendChild(div)})}else{timerList.innerHTML='<div class="row"><span class="label">Nenhum timer</span></div>'}
 let nr=await fetch('/api/timer/next');let nd=await nr.json();
-nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-';
-}catch(e){}}
+nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
 setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pulse')fetchPulse()},3000);
@@ -253,9 +259,6 @@ h1{color:var(--primary);font-size:1.2rem;margin-bottom:16px}
 .post{background:#fef2f2;color:var(--danger)}
 .path{font-family:monospace;font-size:.85rem;color:var(--text)}
 .desc{color:var(--muted);font-size:.78rem;margin-top:4px}
-table{width:100%;font-size:.75rem;border-collapse:collapse;margin-top:4px}
-th{text-align:left;color:var(--muted-subtle);padding:2px 4px;border-bottom:1px solid var(--border)}
-td{padding:2px 4px;border-bottom:1px solid var(--border);color:var(--text);font-family:monospace}
 </style>
 </head>
 <body>
