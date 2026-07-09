@@ -10,19 +10,35 @@ static const char PAGE_DASHBOARD[] PROGMEM = R"=====(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title id="pageTitle">OnOff</title>
 <style>
-:root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--border-strong:#d1d5db;--success:#16a34a;--danger:#dc2626;--info:#2563eb}
+:root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--success:#16a34a;--danger:#dc2626;--sidebar-w:180px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px}
-h1{text-align:center;font-size:1.2rem;color:var(--primary);margin-bottom:4px}
-.hero{text-align:center;padding:16px 0 8px}
-.relay-btn{width:88px;height:88px;border-radius:50%;border:2px solid var(--border);font-size:2.5rem;cursor:pointer;transition:all .25s;background:var(--surface);color:var(--muted-subtle);display:inline-flex;align-items:center;justify-content:center}
+body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.sidebar{position:fixed;left:0;top:0;width:var(--sidebar-w);height:100%;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10}
+.nav{flex:1;padding:12px 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;font-size:.82rem;color:var(--muted);border-left:3px solid transparent;user-select:none}
+.nav-item:hover{color:var(--text);background:var(--surface-2)}
+.nav-item.active{color:var(--primary);border-left-color:var(--primary);font-weight:600;background:var(--primary-focus)}
+.nav-sub{padding-left:16px}
+.nav-sub .nav-item{font-size:.78rem;padding:7px 16px}
+.sidebar-bottom{padding:12px 16px;border-top:1px solid var(--border);font-size:.72rem;color:var(--muted-subtle)}
+.sb-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.sb-row:last-child{margin-bottom:0}
+.sb-dot{width:7px;height:7px;border-radius:50%;background:var(--muted-subtle);flex-shrink:0}
+.sb-dot.online{background:var(--success)}
+.sb-dot.offline{background:var(--danger)}
+.main{margin-left:var(--sidebar-w);padding:20px;max-width:720px}
+.section{display:none}
+.section.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px;margin:0 auto}
+h1{text-align:center;font-size:1.15rem;color:var(--primary);margin-bottom:4px}
+.hero{text-align:center;padding:12px 0 4px}
+.relay-btn{width:80px;height:80px;border-radius:50%;border:2px solid var(--border);font-size:2.2rem;cursor:pointer;transition:all .25s;background:var(--surface);color:var(--muted-subtle);display:inline-flex;align-items:center;justify-content:center}
 .relay-btn:hover{border-color:var(--primary)}
 .relay-btn.on{background:var(--primary);border-color:var(--primary-strong);color:#fff;box-shadow:0 0 0 4px var(--primary-focus)}
 .badge{display:inline-block;padding:3px 14px;border-radius:9999px;font-size:.75rem;font-weight:600}
 .badge.on{background:#dcfce7;color:var(--success)}
 .badge.off{background:#fef2f2;color:var(--danger)}
-.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 0}
 .metric{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
 .metric-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted-subtle);font-weight:500}
 .metric-value{font-size:.9rem;font-weight:600;color:var(--text);margin-top:2px}
@@ -30,7 +46,7 @@ h1{text-align:center;font-size:1.2rem;color:var(--primary);margin-bottom:4px}
 .metric-value.red{color:var(--danger)}
 .expand-header{display:flex;justify-content:space-between;align-items:center;padding:10px 0;cursor:pointer;color:var(--muted);font-size:.82rem;border-bottom:1px solid var(--border);user-select:none;margin-top:8px}
 .expand-header:hover{color:var(--primary)}
-.expand-icon{font-size:.8rem;transition:transform .2s}
+.expand-icon{font-size:.75rem;transition:transform .2s}
 .expand-icon.open{transform:rotate(90deg)}
 .details{overflow:hidden;max-height:0;transition:max-height .25s ease}
 .details.open{max-height:400px}
@@ -39,8 +55,8 @@ h1{text-align:center;font-size:1.2rem;color:var(--primary);margin-bottom:4px}
 .label{color:var(--muted-subtle);font-size:.82rem}
 .value{font-weight:600;font-size:.82rem;color:var(--text)}
 .value.green{color:var(--success)}
-input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;width:100%;outline:none}
-input[type=text]:focus{border-color:var(--primary)}
+input[type=text],input[type=number]{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;outline:none;width:100%}
+input[type=text]:focus,input[type=number]:focus{border-color:var(--primary)}
 select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;outline:none}
 .btn{padding:6px 14px;border-radius:8px;border:1px solid var(--primary);background:var(--surface);color:var(--primary);font-size:.82rem;font-weight:500;cursor:pointer}
 .btn:active{transform:scale(.97)}
@@ -50,14 +66,34 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 .footer{text-align:center;margin-top:12px;font-size:.72rem;color:var(--muted-subtle)}
 .loading{opacity:.5;pointer-events:none}
 .timer-add{display:flex;gap:4px;align-items:center;margin-top:8px;flex-wrap:wrap}
+@media(max-width:600px){.sidebar{width:48px}.nav-item{justify-content:center;padding:10px 4px;font-size:0}.nav-item span{display:none}.nav-sub{display:none}.main{margin-left:48px}.sidebar-bottom{display:none}}
 </style>
 </head>
 <body>
-<div class="card" id="app">
+<div class="sidebar">
+<div class="nav">
+<div class="nav-item active" data-section="home" onclick="showSection('home')"><span>🏠</span><span>Home</span></div>
+<div class="nav-item" data-section="ciclo" onclick="toggleCiclo()"><span>🔄</span><span>Ciclo</span><span class="expand-icon" id="cicloIcon" style="margin-left:auto;font-size:.65rem">&#9654;</span></div>
+<div id="cicloSub" class="nav-sub" style="display:none">
+<div class="nav-item" data-section="timer" onclick="showSection('timer')"><span>⏰</span><span>Timer</span></div>
+<div class="nav-item" data-section="pulse" onclick="showSection('pulse')"><span>⏱</span><span>Pulsação</span></div>
+<div class="nav-item" style="opacity:.4;cursor:default"><span>📅</span><span>Agenda</span></div>
+</div>
+<div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Config</span></div>
+</div>
+<div class="sidebar-bottom">
+<div class="sb-row"><span class="sb-dot" id="sbDot"></span><span id="sbGateway">-</span></div>
+<div class="sb-row" id="sbTimeRow"><span id="sbTime">--:--</span></div>
+<div class="sb-row"><span id="sbUptime">0m</span></div>
+</div>
+</div>
+<div class="main">
+<div class="section active" id="secHome">
+<div class="card">
 <h1 id="deviceName">OnOff</h1>
 <div class="hero">
 <button class="relay-btn" id="relayBtn" onclick="toggleRelay()">&#9889;</button>
-<div style="margin-top:8px"><span class="badge off" id="relayBadge">DESLIGADO</span></div>
+<div style="margin-top:6px"><span class="badge off" id="relayBadge">DESLIGADO</span></div>
 </div>
 <div class="summary">
 <div class="metric"><div class="metric-label">Gateway</div><div class="metric-value" id="gwMetric">-</div></div>
@@ -72,42 +108,49 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
 </div>
-<div class="expand-header" onclick="toggleSettings()"><span>Configuração</span><span class="expand-icon" id="expandIcon2">&#9654;</span></div>
-<div class="details" id="settingsDetails">
-<div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
-<div class="row"><span class="label">GPIO relé</span><select id="relayPinSelect"></select></div>
-<div class="row"><span class="label">GPIO botao</span><select id="buttonPinSelect"></select></div>
-<div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
-<div class="row"><span class="label">Iniciar relé</span><select id="startupModeSelect" onchange="savePins()">
-<option value="0">OFF</option>
-<option value="1">ON</option>
-<option value="2">Último</option>
-</select></div>
-<div class="row"><span class="label">Pulse</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="pulseEnabledCheck" onchange="savePulse()"> auto-OFF</label></div>
-<div class="row"><span class="label">Duração</span>
-<span style="display:flex;gap:4px;align-items:center">
-<input type="number" id="pulseDurationInput" min="1" max="1440" style="width:60px;padding:4px 6px;border-radius:8px;border:1px solid var(--border);font-size:.82rem;outline:none;background:var(--surface);color:var(--text)">
-<span style="color:var(--muted-subtle);font-size:.75rem">min</span>
-</span>
-</div>
-<div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
-<button class="btn btn-primary" onclick="savePins()">Salvar</button>
-<button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
+<div class="footer" id="footer">Carregando...</div>
 </div>
 </div>
-<div class="expand-header" onclick="toggleTimers()"><span>Timer</span><span class="expand-icon" id="expandIcon3">&#9654;</span></div>
-<div class="details" id="timerDetails">
+<div class="section" id="secTimer">
+<div class="card">
+<h1>Timer</h1>
 <div class="row"><span class="label">Próximo</span><span class="value" id="nextTimer">-</span></div>
 <div id="timerList"></div>
 <div class="timer-add">
-<select id="timerHour" style="width:56px"></select><span style="color:var(--muted-subtle)">:</span>
-<select id="timerMin" style="width:56px"></select>
+<select id="timerHour" style="width:56px"></select><span style="color:var(--muted-subtle)">:</span><select id="timerMin" style="width:56px"></select>
 <select id="timerAction" style="width:62px"><option value="0">OFF</option><option value="1">ON</option></select>
 <select id="timerDays" style="width:74px"><option value="0">Todos</option><option value="127">Semana</option><option value="64">Fim de sem</option></select>
 <button class="btn btn-primary btn-sm" onclick="addTimer()">+</button>
 </div>
 </div>
-<div class="footer" id="footer">Carregando...</div>
+</div>
+<div class="section" id="secPulse">
+<div class="card">
+<h1>Pulsação</h1>
+<p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">Auto-OFF: liga o relé por um tempo configurado, desliga automaticamente ao expirar.</p>
+<div class="row"><span class="label">Ativado</span><label style="font-size:.82rem;color:var(--text)"><input type="checkbox" id="pulseEnabledCheck" onchange="savePulse()"> habilitado</label></div>
+<div class="row"><span class="label">Duração</span><span style="display:flex;gap:4px;align-items:center">
+<input type="number" id="pulseDurationInput" min="1" max="1440" style="width:70px">
+<span style="color:var(--muted-subtle);font-size:.75rem">min (1–1440)</span></span></div>
+<div class="row"><span class="label">Restante</span><span class="value" id="pulseRemaining">-</span></div>
+<div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="savePulse()">Salvar</button></div>
+</div>
+</div>
+<div class="section" id="secConfig">
+<div class="card">
+<h1>Configuração</h1>
+<div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
+<div class="row"><span class="label">GPIO relé</span><select id="relayPinSelect"></select></div>
+<div class="row"><span class="label">GPIO botão</span><select id="buttonPinSelect"></select></div>
+<div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
+<div class="row"><span class="label">Iniciar relé</span><select id="startupModeSelect" onchange="savePins()">
+<option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
+<div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+<button class="btn btn-primary" onclick="savePins()">Salvar</button>
+<button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
+</div>
+</div>
+</div>
 </div>
 <script>
 const btn=document.getElementById('relayBtn');
@@ -123,10 +166,15 @@ const slotEl=document.getElementById('slotStatus');
 const footerEl=document.getElementById('footer');
 const timerList=document.getElementById('timerList');
 const nextTimerEl=document.getElementById('nextTimer');
-let loading=false,expanded=false,expanded2=false,expanded3=false;
+const sbDot=document.getElementById('sbDot');
+const sbGateway=document.getElementById('sbGateway');
+const sbTime=document.getElementById('sbTime');
+const sbUptime=document.getElementById('sbUptime');
+let loading=false,expanded=false,cicloOpen=false,currentSection='home';
+function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
+document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s}
+function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 function toggleDetails(){expanded=!expanded;document.getElementById('details').classList.toggle('open',expanded);document.getElementById('expandIcon').classList.toggle('open',expanded)}
-function toggleSettings(){expanded2=!expanded2;document.getElementById('settingsDetails').classList.toggle('open',expanded2);document.getElementById('expandIcon2').classList.toggle('open',expanded2)}
-function toggleTimers(){expanded3=!expanded3;document.getElementById('timerDetails').classList.toggle('open',expanded3);document.getElementById('expandIcon3').classList.toggle('open',expanded3);if(expanded3)fetchTimers()}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
@@ -134,13 +182,8 @@ async function savePins(){let nm=document.getElementById('deviceNameInput').valu
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
 try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePulse(){let en=document.getElementById('pulseEnabledCheck').checked;let dur=parseInt(document.getElementById('pulseDurationInput').value)||60;
+if(dur<1)dur=1;if(dur>1440)dur=1440;
 try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
-async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
-document.getElementById('pulseEnabledCheck').checked=d.enabled;
-document.getElementById('pulseDurationInput').value=d.duration_minutes;
-let pe=document.getElementById('pulseEnabledCheck');
-pe.checked=d.enabled;
-}catch(e){}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
 gwMetric.textContent=d.gateway_connected?'Conectado':'Offline';gwMetric.className='metric-value'+(d.gateway_connected?' green':' red');
@@ -152,6 +195,9 @@ ipEl.textContent=d.ip||'-';batteryEl.textContent=(d.battery||0)+'%';fwEl.textCon
 slotEl.textContent=d.slot!==undefined&&d.slot!==null?d.slot:'-';
 document.getElementById('deviceName').textContent=d.device_name;document.getElementById('pageTitle').textContent=d.device_name;
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
+sbDot.className='sb-dot'+(d.gateway_connected?' online':' offline');sbGateway.textContent=d.gateway_connected?'Online':'Offline';
+sbUptime.textContent=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
+if(d.current_epoch){let t=new Date(d.current_epoch*1000);sbTime.textContent=t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
 }catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 document.getElementById('deviceNameInput').value=d.device_name;
@@ -161,6 +207,11 @@ let rps=document.getElementById('relayPinSelect');let bps=document.getElementByI
 d.available_pins.forEach(function(p){
 let ro=document.createElement('option');ro.value=p;ro.text='GPIO '+p;if(p===d.relay_pin)ro.selected=true;rps.appendChild(ro);
 let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.button_pin)bo.selected=true;bps.appendChild(bo)})}catch(e){}}
+async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
+document.getElementById('pulseEnabledCheck').checked=d.enabled;
+document.getElementById('pulseDurationInput').value=d.duration_minutes;
+document.getElementById('pulseRemaining').textContent=d.remaining_s>0?d.remaining_s+'s':'-';
+}catch(e){}}
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
@@ -176,7 +227,8 @@ nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString(
 }catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-setInterval(fetchState,3000);fetchState();fetchSettings();fetchTimers();fetchPulse();
+setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pulse')fetchPulse()},3000);
+fetchState();fetchSettings();fetchTimers();fetchPulse();
 </script>
 </body>
 </html>
@@ -208,74 +260,20 @@ td{padding:2px 4px;border-bottom:1px solid var(--border);color:var(--text);font-
 </head>
 <body>
 <h1>API OnOff</h1>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/</span></div>
-  <div class="desc">Dashboard</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/state</span></div>
-  <div class="desc">Estado completo do dispositivo</div>
-  <table><tr><th>Chave</th><th>Tipo</th></tr>
-  <tr><td>state</td><td>bool</td></tr>
-  <tr><td>button</td><td>bool</td></tr>
-  <tr><td>battery</td><td>int</td></tr>
-  <tr><td>device_id</td><td>string</td></tr>
-  <tr><td>device_name</td><td>string</td></tr>
-  <tr><td>gateway_connected</td><td>bool</td></tr>
-  <tr><td>paired</td><td>bool</td></tr>
-  <tr><td>ip</td><td>string</td></tr>
-  <tr><td>rssi</td><td>int</td></tr>
-  <tr><td>uptime_s</td><td>int</td></tr>
-  <tr><td>slot</td><td>int</td></tr>
-  <tr><td>alexa_connected</td><td>bool</td></tr>
-  <tr><td>fw_version</td><td>string</td></tr>
-  <tr><td>last_send_s</td><td>int</td></tr>
-</table>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/relay</span></div>
-  <div class="desc">Estado do relé <code>{"state":bool}</code></div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/relay</span></div>
-  <div class="desc">Controla relé <code>{"state":bool}</code></div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/pin?gpio=N</span></div>
-  <div class="desc">Leitura digital de um GPIO</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/pin</span></div>
-  <div class="desc">Escrita digital <code>{"gpio":N,"state":0|1}</code></div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div>
-  <div class="desc">Configurações do dispositivo</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div>
-  <div class="desc">Altera nome/pinos</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/timers</span></div>
-  <div class="desc">Lista timers configurados</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/timers</span></div>
-  <div class="desc">Atualiza timer</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method get">GET</span><span class="path">/api/timer/next</span></div>
-  <div class="desc">Próximo timer</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>
-  <div class="desc">Reinicia o dispositivo</div>
-</div>
-<div class="endpoint">
-  <div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div>
-  <div class="desc">OTA update (multipart)</div>
-</div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/</span></div><div class="desc">Dashboard</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/state</span></div><div class="desc">Estado completo</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/relay</span></div><div class="desc">Estado do relé</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/relay</span></div><div class="desc">Controla relé</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/pin</span></div><div class="desc">Escrita GPIO</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div><div class="desc">Configurações</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div><div class="desc">Altera nome/pinos</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timers</span></div><div class="desc">Lista timers</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/timers</span></div><div class="desc">Atualiza timer</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timer/next</span></div><div class="desc">Próximo timer</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/pulse</span></div><div class="desc">Estado do pulse</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/pulse</span></div><div class="desc">Configura pulse</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div><div class="desc">Reinicia</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div><div class="desc">OTA</div></div>
 </body>
 </html>
 )=====";
@@ -288,7 +286,7 @@ static const char PAGE_WIFI_CONFIG[] PROGMEM = R"=====(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Configurar WiFi</title>
 <style>
-:root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--border:#e5e7eb;--success:#16a34a;--danger:#dc2626}
+:root{--bg:#f4f4f4;--surface:#fff;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--border:#e5e7eb;--success:#16a34a;--danger:#dc2626}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:380px}
@@ -297,7 +295,6 @@ label{display:block;color:var(--muted);font-size:.82rem;margin-top:12px;margin-b
 input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:.85rem;outline:none}
 input:focus{border-color:var(--primary)}
 .btn{width:100%;padding:10px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-size:.9rem;font-weight:500;cursor:pointer;margin-top:20px}
-.btn:active{transform:scale(.98)}
 .hint{color:var(--muted-subtle);font-size:.72rem;margin-top:4px}
 .msg{margin-top:12px;padding:8px;border-radius:8px;font-size:.82rem;text-align:center}
 .msg.ok{background:#dcfce7;color:var(--success)}
@@ -311,7 +308,7 @@ input:focus{border-color:var(--primary)}
 <label for="ssid">SSID</label>
 <input type="text" id="ssid" placeholder="Nome da rede WiFi" required>
 <label for="password">Senha</label>
-<input type="password" id="password" placeholder="Senha da rede WiFi">
+<input type="password" id="password" placeholder="Senha">
 <label for="devName">Nome do Dispositivo</label>
 <input type="text" id="devName" placeholder="Ex: Sala">
 <label for="repeaterMac">Repeater MAC (opcional)</label>
@@ -329,7 +326,7 @@ async function submitForm(){let ssid=document.getElementById('ssid').value.trim(
 let pass=document.getElementById('password').value;let name=document.getElementById('devName').value.trim();let rep=document.getElementById('repeaterMac').value.trim();loading(true);
 let body={ssid:ssid,password:pass};if(name)body.device_name=name;if(rep)body.repeater_mac=rep;
 try{let r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();
-if(d.status==='ok'){showMsg('Conectando a '+ssid+'...','ok');setTimeout(function(){showMsg('AP reativado se falhar.','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
+if(d.status==='ok'){showMsg('Conectando...','ok');setTimeout(function(){showMsg('AP reativado se falhar','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
 catch(e){showMsg('Erro: '+e.message,'err');loading(false)}return false}
 loadStatus();
 </script>

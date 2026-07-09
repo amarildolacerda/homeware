@@ -933,6 +933,7 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["current_epoch"] = get_synced_epoch();
         doc["pulse_enabled"] = s_pulse_enabled;
         doc["pulse_duration_min"] = s_pulse_duration_min;
         if (s_pulse_enabled && s_relay_state)
