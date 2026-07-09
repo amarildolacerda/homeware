@@ -15,6 +15,9 @@ static const char *TAG = PLATFORM_PREFIX "_gateway";
 
 static unsigned long s_start_time = 0;
 static unsigned long s_last_telemetry = 0;
+static bool s_ntp_synced = false;
+static unsigned long s_last_ntp_retry = 0;
+static time_t s_ntp_epoch = 0;
 
 void print_help() {
     console.println("\n=== Comandos ===");
@@ -79,6 +82,7 @@ void handle_console(char c) {
             console.printf("MAC: %s\n", mac_buf);
             console.printf("FW: %s\n", FW_VERSION);
             console.printf("Uptime: %lu s\n", millis() / 1000);
+            console.printf("NTP: %s\n", s_ntp_synced ? "sincronizado" : "aguardando...");
             console.printf("Sensores: %d pareados, %d online\n", 
                           sensor_registry_count_paired(), sensor_registry_count_online());
             console.printf("ESP-NOW: RX=%lu ACK=%lu CRC_ERR=%lu\n",
@@ -134,6 +138,9 @@ void setup() {
     log_buffer_init();
     web_server_init();
     
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    console.printf("[%s] NTP: pool.ntp.org, non-blocking sync\n", TAG);
+    
     mqtt_client_connect();
     
     console.printf("============================================\n");
@@ -185,6 +192,26 @@ void loop() {
                       sensor_registry_count_paired(), sensor_registry_count_online(),
                       mqtt_client_is_connected());
 
+    }
+
+    if (!s_ntp_synced && millis() - s_last_ntp_retry > NTP_RETRY_INTERVAL_MS) {
+        s_last_ntp_retry = millis();
+        s_ntp_epoch = time(nullptr);
+        if (s_ntp_epoch > 100000) {
+            s_ntp_synced = true;
+            struct tm *ti = localtime(&s_ntp_epoch);
+            console.printf("[%s] NTP synced: %04d-%02d-%02d %02d:%02d:%02d\n",
+                TAG, ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
+                ti->tm_hour, ti->tm_min, ti->tm_sec);
+        } else {
+            console.printf("[%s] NTP sync failed, will retry in %d min\n",
+                TAG, NTP_RETRY_INTERVAL_MS / 60000);
+        }
+    }
+
+    /* Update s_ntp_epoch every loop tick while synced */
+    if (s_ntp_synced) {
+        s_ntp_epoch = time(nullptr);
     }
     
     delay(1);
