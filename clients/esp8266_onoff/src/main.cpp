@@ -1066,6 +1066,26 @@ static void handle_console(char c)
         console.printf("----------------\n\n");
         break;
     }
+    case 't':
+    case 'T':
+    {
+        console.printf("\n--- Timers ---\n");
+        timer_config_t cfg;
+        for (int i = 0; i < MAX_TIMERS; i++)
+        {
+            if (timer_get(i, &cfg))
+            {
+                const char *days = cfg.days_mask == 0 ? "todos" : "dias";
+                console.printf("  %d: %02d:%02d %s [%s] %s\n",
+                               i, cfg.hour, cfg.minute,
+                               cfg.action ? "ON " : "OFF",
+                               cfg.enabled ? "ativado" : "desativado",
+                               days);
+            }
+        }
+        console.printf("---------------\n\n");
+        break;
+    }
     case 'h':
     case 'H':
     case '?':
@@ -1076,6 +1096,7 @@ static void handle_console(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+        console.printf("  t    - listar timers\n");
         console.printf("  u    - info OTA\n");
         console.printf("  a    - info Alexa\n");
         console.printf("  h/?  - esta ajuda\n");
@@ -1136,6 +1157,8 @@ static void handle_console(char c)
         }
         console.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
         console.printf("  Uptime:      %lu s\n", up);
+        console.printf("  Timers:      %d configurados\n", MAX_TIMERS);
+        console.printf("  Epoch:       %lu\n", get_synced_epoch());
         console.printf("---------------\n\n");
         break;
     }
