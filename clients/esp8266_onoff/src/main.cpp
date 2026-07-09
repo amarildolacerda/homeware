@@ -7,6 +7,7 @@
 #include <Updater.h>
 #include <espnow.h>
 #include <Espalexa.h>
+#include <sys/time.h>
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
@@ -64,6 +65,13 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static unsigned long s_last_timer_check = 0;
 static int s_timezone_offset = -3;
+static unsigned long s_synced_epoch = 0;
+
+static unsigned long get_synced_epoch(void) {
+    if (s_synced_epoch > 0)
+        return s_synced_epoch + (millis() / 1000);
+    return 0;
+}
 
 
 // D1-MINI é invtido
@@ -433,6 +441,17 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             console.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
             set_relay(cmd->command ? true : false);
         }
+        break;
+    }
+    case ESPNOW_MSG_TIME_SYNC:
+    {
+        if (len < sizeof(espnow_time_sync_t))
+            return;
+        espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
+        s_synced_epoch = ts->epoch_seconds;
+        struct timeval tv = { (time_t)s_synced_epoch, 0 };
+        settimeofday(&tv, NULL);
+        console.printf("[%s] Time sync: epoch=%lu seq=%d\n", TAG, s_synced_epoch, ts->sequence);
         break;
     }
     case ESPNOW_MSG_ACK:
@@ -1482,7 +1501,8 @@ void loop(void)
     if (now - s_last_timer_check > TIMER_CHECK_INTERVAL_MS)
     {
         s_last_timer_check = now;
-        int8_t timer_action = timer_check(millis() / 1000 + 1700000000, s_timezone_offset);
+        unsigned long epoch = get_synced_epoch();
+        int8_t timer_action = epoch ? timer_check(epoch, s_timezone_offset) : -1;
         if (timer_action >= 0)
         {
             on_timer_fire((uint8_t)timer_action);
