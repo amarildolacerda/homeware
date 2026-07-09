@@ -1315,8 +1315,36 @@ static void handle_api_timers(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
-        if (timer_from_json(doc))
+        int timer_index = doc["index"] | -1;
+        bool ok;
+        if (timer_index >= 0) {
+            timer_config_t cfg;
+            cfg.hour = doc["hour"] | 0;
+            cfg.minute = doc["minute"] | 0;
+            cfg.action = doc["action"] | 0;
+            cfg.days_mask = doc["days_mask"] | 0;
+            cfg.enabled = doc["enabled"] | false;
+            ok = timer_set(timer_index, &cfg);
+        } else if (doc.containsKey("timers")) {
+            ok = timer_from_json(doc);
+        } else {
+            // single timer without index — find first empty slot or append
+            timer_config_t cfg;
+            cfg.hour = doc["hour"] | 0;
+            cfg.minute = doc["minute"] | 0;
+            cfg.action = doc["action"] | 0;
+            cfg.days_mask = doc["days_mask"] | 0;
+            cfg.enabled = doc["enabled"] | false;
+            for (timer_index = 0; timer_index < MAX_TIMERS; timer_index++) {
+                timer_config_t tmp;
+                timer_get(timer_index, &tmp);
+                if (!tmp.enabled) { ok = timer_set(timer_index, &cfg); break; }
+            }
+            if (timer_index >= MAX_TIMERS) ok = false;
+        }
+        if (ok)
         {
+            timer_save();
             String json;
             JsonDocument resp;
             resp["status"] = "ok";
