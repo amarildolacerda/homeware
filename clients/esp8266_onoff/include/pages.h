@@ -78,6 +78,15 @@ input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;bac
 <div style="text-align:center;margin-top:8px"><button class="save-btn" onclick="savePins()">Salvar</button></div>
 <div class="row"><span class="label"> </span><span><button class="save-btn" style="background:#ef4444" onclick="restartDevice()">Reiniciar</button></span></div>
 </div>
+<div class="expand-header" onclick="toggleTimers()"><span>Timer</span><span id="expandIcon3">&#9654;</span></div>
+<div class="details" id="timerDetails">
+<div class="row"><span class="label">Proximo</span><span class="value" id="nextTimer">-</span></div>
+<div id="timerList"></div>
+<select id="timerHour" style="width:60px"></select>:<select id="timerMin" style="width:60px"></select>
+<select id="timerAction" style="width:70px"><option value="0">OFF</option><option value="1">ON</option></select>
+<select id="timerDays" style="width:80px"><option value="0">Todos</option><option value="127">Dias semana</option><option value="64">Sab/Dom</option></select>
+<button class="save-btn" onclick="addTimer()">+Timer</button>
+</div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
 <script>
@@ -99,11 +108,19 @@ const relayPinSelect=document.getElementById('relayPinSelect');
 const buttonPinSelect=document.getElementById('buttonPinSelect');
 const ledEnabledCheck=document.getElementById('ledEnabledCheck');
 const startupModeSelect=document.getElementById('startupModeSelect');
+const timerDetails=document.getElementById('timerDetails');
+const timerList=document.getElementById('timerList');
+const nextTimerEl=document.getElementById('nextTimer');
+const expandIcon3=document.getElementById('expandIcon3');
 let loading=false;
 let expanded=false;
 let expanded2=false;
+let expanded3=false;
 function toggleDetails(){expanded=!expanded;details.classList.toggle('open',expanded);expandIcon.classList.toggle('open',expanded)}
 function toggleSettings(){expanded2=!expanded2;settingsDetails.classList.toggle('open',expanded2);expandIcon2.classList.toggle('open',expanded2)}
+function toggleTimers(){expanded3=!expanded3;timerDetails.classList.toggle('open',expanded3);expandIcon3.classList.toggle('open',expanded3);if(expanded3){fetchTimers()}}
+for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
+for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
 async function restartDevice(){if(!confirm('Reiniciar dispositivo?'))return;
 try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
 async function savePins(){let nm=deviceNameInput.value.trim();let rp=relayPinSelect.value;let bp=buttonPinSelect.value;if(!rp||!bp)return;
@@ -138,7 +155,23 @@ try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'appli
 let d=await r.json();const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';
 badge.className='badge '+(on?'on':'off');
 }catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
-setInterval(fetchState,3000);fetchState();fetchSettings();
+async function fetchTimers(){try{let r=await fetch('/api/timers');let d=await r.json();timerList.innerHTML='';
+if(d.timers&&d.timers.length){d.timers.forEach(function(t,i){
+let div=document.createElement('div');div.className='row';
+let lbl=document.createElement('span');lbl.className='label';lbl.textContent=('0'+t.hour).slice(-2)+':'+('0'+t.minute).slice(-2)+' '+(t.action?'ON':'OFF');
+let tog=document.createElement('input');tog.type='checkbox';tog.checked=t.enabled;tog.onchange=function(){t.enabled=tog.checked;updateTimer(i,t)};
+div.appendChild(lbl);div.appendChild(tog);timerList.appendChild(div)})}else{timerList.innerHTML='<div class="row"><span class="label">Nenhum timer configurado</span></div>'}
+let nr=await fetch('/api/timer/next');let nd=await nr.json();
+nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-';
+}catch(e){}}
+async function updateTimer(i,t){try{let r=await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,...t})});
+if(r.ok)console.log('Timer updated')}catch(e){}}
+async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;
+let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
+let t={hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true};
+try{let r=await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
+if(r.ok){fetchTimers()}}catch(e){}}
+setInterval(fetchState,3000);fetchState();fetchSettings();fetchTimers();
 </script>
 </body>
 </html>
