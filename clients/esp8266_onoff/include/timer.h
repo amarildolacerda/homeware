@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 #include <ArduinoJson.h>
-
-#define MAX_TIMERS 6
+#include "config.h"
 
 typedef struct __attribute__((packed)) {
     uint8_t hour;

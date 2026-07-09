@@ -84,7 +84,6 @@ static int s_timezone_offset = -3;
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
-#define EEPROM_SIZE 256
 #define EEPROM_MAGIC 0xAA
 
 static void set_relay(bool state);
@@ -375,7 +374,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
         j--;
     if (j == 0)
     {
-        strncpy(out, "Lampada", max - 1);
+        strncpy(out, "OnOff", max - 1);
         out[max - 1] = '\0';
         return;
     }
@@ -987,9 +986,9 @@ static void handle_console(char c)
     case 'l':
     case 'L':
     {
-        console.printf("\n--- Controle da Lampada ---\n");
+        console.printf("\n--- Controle do OnOff ---\n");
         toggle_relay();
-        console.printf("  Lampada: %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
+        console.printf("  OnOff: %s\n", s_relay_state ? "LIGADO" : "DESLIGADO");
         if (s_paired)
         {
             s_last_espnow_send = 0;
@@ -1052,7 +1051,7 @@ static void handle_console(char c)
     case 'H':
     case '?':
         console.printf("\n--- Comandos ---\n");
-        console.printf("  l    - liga/desliga lampada\n");
+        console.printf("  l    - liga/desliga onoff\n");
         console.printf("  0    - desligar\n");
         console.printf("  1    - ligar\n");
         console.printf("  r    - reset\n");
@@ -1090,7 +1089,7 @@ static void handle_console(char c)
         console.printf("\n--- Status ---\n");
         console.printf("  Dispositivo: %s\n", s_device_id);
         console.printf("  Nome:        %s\n", s_device_name);
-        console.printf("  Lampada:     %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
+        console.printf("  OnOff:       %s\n", s_relay_state ? "LIGADO" : "DESLIGADO");
         console.printf("  Bateria:     %d %%\n", s_battery);
 
 #ifdef LED_PIN

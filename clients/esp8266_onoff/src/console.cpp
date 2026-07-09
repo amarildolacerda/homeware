@@ -13,7 +13,7 @@ void ConsoleOutput::loop() {
         m_client = m_server.available();
         if (m_client) {
             m_client.setNoDelay(true);
-            m_client.printf("\r\n=== ESP8266 Lâmpada %s ===\r\n", FW_VERSION);
+            m_client.printf("\r\n=== ESP8266 OnOff %s ===\r\n", FW_VERSION);
             m_client.print("Console remoto conectado.\r\n");
         }
     }
