@@ -1,8 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "platform.h"
+
 #define FW_VERSION "v0.0.20"
-#define DEVICE_NAME "ESP8266_Gateway"
+#define DEVICE_NAME PLATFORM_PREFIX "_Gateway"
 
 #define ESP_NOW_CHANNEL 1
 #define MAX_VIRTUAL_SENSORS 20

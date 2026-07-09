@@ -2,7 +2,7 @@
 #include "config.h"
 #include "sensor_registry.h"
 #include "espnow_handler.h"
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
@@ -198,7 +198,7 @@ bool mqtt_client_connect() {
     s_mqtt.setCallback(mqtt_callback);
 
     char client_id[32];
-    snprintf(client_id, sizeof(client_id), "gateway_%06x", ESP.getChipId());
+    snprintf(client_id, sizeof(client_id), "gateway_%06x", chip_id());
 
     bool ok = false;
     if (strlen(s_mqtt_user) > 0) {
@@ -256,18 +256,18 @@ const char* mqtt_client_get_pass() { return s_mqtt_pass; }
 
 const char* get_gateway_device_id() {
     static char id[48];
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(id, sizeof(id), "esp8266_gateway_%06x", chip_id);
+    uint32_t cid = chip_id();
+    snprintf(id, sizeof(id), PLATFORM_PREFIX "_gateway_%06x", cid);
     return id;
 }
 
 void mqtt_client_generate_device_ids() {
-    uint32_t chip_id = ESP.getChipId();
+    uint32_t cid = chip_id();
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) == 0) {
             snprintf(s->bridge_device_id, sizeof(s->bridge_device_id),
-                     "esp8266_%06x_sensor_%d", chip_id, i);
+                     PLATFORM_PREFIX "_%06x_sensor_%d", cid, i);
         }
     }
 }

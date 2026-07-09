@@ -2,8 +2,7 @@
 #include "config.h"
 #include "sensor_registry.h"
 #include "mqtt_client.h"
-#include <espnow.h>
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include "log_buffer.h"
 #include <Arduino.h>
 #include "console.h"
@@ -148,10 +147,9 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&ack, sizeof(ack));
     if (ret != 0) {
         char mac_str[18];
@@ -176,10 +174,9 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&resp, sizeof(resp));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
@@ -196,7 +193,9 @@ bool espnow_handler_init() {
         return false;
     }
     
+#if !defined(ARDUINO_ARCH_ESP32)
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
+#endif
     esp_now_register_recv_cb(espnow_recv_cb);
     
     console.printf("[ESP-NOW] Initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X WiFi ch=%d\n",
@@ -310,10 +309,9 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));

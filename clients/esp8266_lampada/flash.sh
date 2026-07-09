@@ -1,19 +1,33 @@
 #!/bin/bash
-# Flash via OTA
-# Usage: ./flash.sh [IP_ADDRESS]
-
-IP="${1:-192.168.1.100}"
-
-if command -v pio &> /dev/null; then
-    pio run -t upload --upload-port "$IP"
-elif command -v platformio &> /dev/null; then
-    platformio run -t upload --upload-port "$IP"
-elif command -v espota.py &> /dev/null; then
-    echo "Using espota.py directly..."
-    pio run
-    espota.py -i "$IP" -p 8266 -f .pio/build/esp8266/firmware.bin
-else
-    echo "Error: PlatformIO CLI not found"
-    echo "Install: pip install platformio"
-    exit 1
+set -e
+PIOPATH="$HOME/.platformio/penv/bin"
+if [ -f "$PIOPATH/pio" ]; then
+    export PATH="$PIOPATH:$PATH"
 fi
+
+PORT="/dev/ttyUSB0"
+MODE="serial"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -p|--port) PORT="$2"; MODE="serial"; shift 2 ;;
+        -o|--ota)  PORT="$2"; MODE="ota"; shift 2 ;;
+        -h|--help)
+            echo "Uso: $0 [-p <porta>] [-o <ip>]"
+            echo "  -p, --port   Porta serial (default: /dev/ttyUSB0)"
+            echo "  -o, --ota    IP para upload OTA"
+            exit 0 ;;
+        *) echo "Opcao desconhecida: $1"; exit 1 ;;
+    esac
+done
+
+command -v pio >/dev/null 2>&1 || { echo "PlatformIO (pio) not found"; exit 1; }
+
+if [[ "$MODE" == "ota" ]]; then
+    echo "Building and uploading OTA to ${PORT}..."
+    pio run -e esp8266_ota --target upload --upload-port "$PORT"
+else
+    echo "Building and flashing on ${PORT}..."
+    pio run --target upload --upload-port "$PORT"
+fi
+echo "Done."

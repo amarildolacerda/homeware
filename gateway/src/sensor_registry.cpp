@@ -73,7 +73,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->paired = true;
     s->online = false;
     memset(&s->state, 0, sizeof(s->state));
-    snprintf(s->bridge_device_id, sizeof(s->bridge_device_id), "esp8266_gw_%02X%02X%02X_sensor_%d", mac[3], mac[4], mac[5], slot);
+    snprintf(s->bridge_device_id, sizeof(s->bridge_device_id), PLATFORM_PREFIX "_gw_%02X%02X%02X_sensor_%d", mac[3], mac[4], mac[5], slot);
     if (name && strlen(name) > 0) {
         strncpy(s->name, name, sizeof(s->name) - 1);
     } else {
@@ -254,7 +254,7 @@ void sensor_registry_load() {
             s_sensors[i].online = false;
             memset(&s_sensors[i].state, 0, sizeof(s_sensors[i].state));
             snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
-                     "esp8266_gw_%02X%02X%02X_sensor_%d",
+                     PLATFORM_PREFIX "_gw_%02X%02X%02X_sensor_%d",
                      s_sensors[i].mac[3], s_sensors[i].mac[4], s_sensors[i].mac[5], i);
         }
     }

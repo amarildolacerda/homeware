@@ -50,6 +50,8 @@ static char s_device_name[48] = DEVICE_NAME;
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
 static bool s_use_repeater = false;
+static bool s_led_enabled = true;
+static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
 static unsigned long s_wifi_connect_start = 0;
 static bool s_wifi_connected = false;
@@ -60,6 +62,12 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+
+// D1-MINI é invtido
+#define LED_ON  LOW   // GPIO2 acende com LOW
+#define LED_OFF HIGH  // GPIO2 apaga com HIGH
+
+
 #define EEPROM_GATEWAY_MAC_ADDR 0
 #define EEPROM_GATEWAY_MAC_SIZE 6
 #define EEPROM_NAME_ADDR 10
@@ -67,6 +75,8 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_RELAY_STATE_ADDR (EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1)
 #define EEPROM_RELAY_PIN_ADDR (EEPROM_RELAY_STATE_ADDR + 1)
 #define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
+#define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
+#define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
 #define EEPROM_SSID_ADDR 64
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
@@ -170,6 +180,44 @@ static void load_button_pin(void)
     }
 }
 
+static void save_led_enabled(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_LED_ENABLED_ADDR, s_led_enabled ? 1 : 0);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_led_enabled(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_LED_ENABLED_ADDR);
+    EEPROM.end();
+    if (val == 0)
+        s_led_enabled = false;
+    else
+        s_led_enabled = true;
+}
+
+static void save_startup_mode(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_STARTUP_MODE_ADDR, (uint8_t)s_startup_mode);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_startup_mode(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_STARTUP_MODE_ADDR);
+    EEPROM.end();
+    if (val <= 2)
+        s_startup_mode = (int)val;
+    else
+        s_startup_mode = 0;
+}
+
 static void save_device_name(const char *name)
 {
     EEPROM.begin(EEPROM_SIZE);
@@ -177,7 +225,8 @@ static void save_device_name(const char *name)
     for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
     {
         EEPROM.write(EEPROM_NAME_ADDR + 1 + i, name[i]);
-        if (name[i] == '\0') break;
+        if (name[i] == '\0')
+            break;
     }
     EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX, '\0');
     EEPROM.commit();
@@ -186,11 +235,13 @@ static void save_device_name(const char *name)
 
 static bool is_valid_name(const char *s)
 {
-    if (!s || s[0] == '\0') return false;
+    if (!s || s[0] == '\0')
+        return false;
     for (int i = 0; s[i]; i++)
     {
         char c = s[i];
-        if (c < 32 || c > 126) return false;
+        if (c < 32 || c > 126)
+            return false;
     }
     return true;
 }
@@ -205,7 +256,8 @@ static void load_device_name(void)
         for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
         {
             buf[i] = EEPROM.read(EEPROM_NAME_ADDR + 1 + i);
-            if (buf[i] == '\0') break;
+            if (buf[i] == '\0')
+                break;
         }
         buf[EEPROM_NAME_MAX - 1] = '\0';
         if (is_valid_name(buf))
@@ -225,13 +277,15 @@ static void save_wifi_credentials(const char *ssid, const char *pass)
     for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
     {
         EEPROM.write(EEPROM_SSID_ADDR + 1 + i, ssid[i]);
-        if (ssid[i] == '\0') break;
+        if (ssid[i] == '\0')
+            break;
     }
     EEPROM.write(EEPROM_SSID_ADDR + EEPROM_SSID_MAX - 1, '\0');
     for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
     {
         EEPROM.write(EEPROM_PASS_ADDR + 1 + i, pass[i]);
-        if (pass[i] == '\0') break;
+        if (pass[i] == '\0')
+            break;
     }
     EEPROM.write(EEPROM_PASS_ADDR + EEPROM_PASS_MAX - 1, '\0');
     EEPROM.commit();
@@ -249,7 +303,8 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
         for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
         {
             buf[i] = EEPROM.read(EEPROM_SSID_ADDR + 1 + i);
-            if (buf[i] == '\0') break;
+            if (buf[i] == '\0')
+                break;
         }
         buf[EEPROM_SSID_MAX - 1] = '\0';
         if (strlen(buf) > 0)
@@ -264,7 +319,8 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
             for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
             {
                 buf[i] = EEPROM.read(EEPROM_PASS_ADDR + 1 + i);
-                if (buf[i] == '\0') break;
+                if (buf[i] == '\0')
+                    break;
             }
             buf[EEPROM_PASS_MAX - 1] = '\0';
             strncpy(pass, buf, pass_size - 1);
@@ -298,7 +354,8 @@ static void name_to_ssid(const char *name, char *out, size_t max)
         if (c >= 32 && c <= 126 && c != '"' && c != '\\')
             out[j++] = c;
     }
-    while (j > 0 && out[j - 1] == ' ') j--;
+    while (j > 0 && out[j - 1] == ' ')
+        j--;
     if (j == 0)
     {
         strncpy(out, "Lampada", max - 1);
@@ -310,7 +367,8 @@ static void name_to_ssid(const char *name, char *out, size_t max)
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
-    if (status != 0) {
+    if (status != 0)
+    {
         char mac_str[18];
         mac_to_str(mac, mac_str, sizeof(mac_str));
         console.printf("[%s] ESPNOW send failed to %s: status=%d\n", TAG, mac_str, status);
@@ -319,63 +377,67 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
-    if (!data || len < 1) return;
+    if (!data || len < 1)
+        return;
 
     switch (data[0])
     {
-        case ESPNOW_MSG_PAIR_RESPONSE:
+    case ESPNOW_MSG_PAIR_RESPONSE:
+    {
+        if (len < sizeof(espnow_pair_response_t))
+            return;
+        espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
+        if (resp->status == PAIR_STATUS_OK)
         {
-            if (len < sizeof(espnow_pair_response_t)) return;
-            espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
-            if (resp->status == PAIR_STATUS_OK)
+            if (!s_use_repeater)
             {
-                if (!s_use_repeater)
-                {
-                    mac_copy(s_gateway_mac, mac);
-                    save_gateway_mac(mac);
-                }
-                s_assigned_slot = resp->assigned_slot;
-                s_paired = true;
-                s_gateway_connected = true;
-                char mac_str[18];
-                mac_to_str(mac, mac_str, sizeof(mac_str));
-                console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
+                mac_copy(s_gateway_mac, mac);
+                save_gateway_mac(mac);
             }
-            else
-            {
-                console.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
-            }
-            break;
+            s_assigned_slot = resp->assigned_slot;
+            s_paired = true;
+            s_gateway_connected = true;
+            char mac_str[18];
+            mac_to_str(mac, mac_str, sizeof(mac_str));
+            console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
         }
-        case ESPNOW_MSG_COMMAND:
+        else
         {
-            if (len < sizeof(espnow_command_t)) return;
-            espnow_command_t *cmd = (espnow_command_t *)data;
-            if (mac_equal(cmd->target_mac, s_my_mac))
-            {
-                console.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
-                set_relay(cmd->command ? true : false);
-            }
-            break;
+            console.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
         }
-        case ESPNOW_MSG_ACK:
+        break;
+    }
+    case ESPNOW_MSG_COMMAND:
+    {
+        if (len < sizeof(espnow_command_t))
+            return;
+        espnow_command_t *cmd = (espnow_command_t *)data;
+        if (mac_equal(cmd->target_mac, s_my_mac))
         {
-            if (len < sizeof(espnow_ack_t)) return;
-            espnow_ack_t *ack = (espnow_ack_t *)data;
-            console.printf("[%s] ACK received: status=%d seq=%d slot=%d\n", TAG, ack->status, ack->sequence, ack->assigned_slot);
-            if (ack->status == PAIR_STATUS_DENIED)
-            {
-                s_paired = false;
-                s_gateway_connected = false;
-                console.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
-            }
-            else
-            {
-                s_gateway_connected = true;
-            }
-            s_ack_received = true;
-            break;
+            console.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
+            set_relay(cmd->command ? true : false);
         }
+        break;
+    }
+    case ESPNOW_MSG_ACK:
+    {
+        if (len < sizeof(espnow_ack_t))
+            return;
+        espnow_ack_t *ack = (espnow_ack_t *)data;
+        console.printf("[%s] ACK received: status=%d seq=%d slot=%d\n", TAG, ack->status, ack->sequence, ack->assigned_slot);
+        if (ack->status == PAIR_STATUS_DENIED)
+        {
+            s_paired = false;
+            s_gateway_connected = false;
+            console.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
+        }
+        else
+        {
+            s_gateway_connected = true;
+        }
+        s_ack_received = true;
+        break;
+    }
     }
 
     /* Repeater: forward messages between clients and gateway */
@@ -411,7 +473,8 @@ static bool espnow_init_client(void)
 
 static bool espnow_add_peer(const uint8_t *mac)
 {
-    if (!s_espnow_ready) return false;
+    if (!s_espnow_ready)
+        return false;
     esp_now_del_peer((uint8_t *)mac);
     int ch = ESP_NOW_CHANNEL;
     int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
@@ -424,11 +487,12 @@ static bool espnow_add_peer(const uint8_t *mac)
     return (ret == 0);
 }
 
-#define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t*)0)->payload))
+#define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t *)0)->payload))
 
 static bool espnow_send_data(void)
 {
-    if (!s_paired || !s_espnow_ready) return false;
+    if (!s_paired || !s_espnow_ready)
+        return false;
 
     uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_onoff_t) + 4 + 2];
     memset(buf, 0, sizeof(buf));
@@ -484,7 +548,8 @@ static bool espnow_send_data(void)
 
 static bool espnow_send_heartbeat(void)
 {
-    if (!s_paired || !s_espnow_ready) return false;
+    if (!s_paired || !s_espnow_ready)
+        return false;
 
     uint8_t buf[ESPNOW_HEADER_FIXED_SIZE];
     memset(buf, 0, sizeof(buf));
@@ -499,7 +564,8 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_add_peer(s_gateway_mac)) return false;
+    if (!espnow_add_peer(s_gateway_mac))
+        return false;
 
     s_ack_received = false;
     return esp_now_send(s_gateway_mac, buf, sizeof(buf)) == 0;
@@ -507,7 +573,8 @@ static bool espnow_send_heartbeat(void)
 
 static bool espnow_send_pair_request(void)
 {
-    if (!s_espnow_ready) return false;
+    if (!s_espnow_ready)
+        return false;
 
     uint8_t buf[sizeof(espnow_pair_request_t)];
     memset(buf, 0, sizeof(buf));
@@ -525,7 +592,8 @@ static bool espnow_send_pair_request(void)
     strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
     req->device_name[sizeof(req->device_name) - 1] = '\0';
 
-    if (!espnow_add_peer(s_broadcast_mac)) return false;
+    if (!espnow_add_peer(s_broadcast_mac))
+        return false;
 
     s_ack_received = false;
     int ret = esp_now_send(s_broadcast_mac, buf, sizeof(buf));
@@ -567,14 +635,27 @@ static void init_hardware(void)
 {
     load_relay_pin();
     load_button_pin();
+    load_led_enabled();
+    load_startup_mode();
     pinMode(s_relay_pin, OUTPUT);
-    load_relay_state();
+    if (s_startup_mode == 0)
+    {
+        s_relay_state = false;
+    }
+    else if (s_startup_mode == 1)
+    {
+        s_relay_state = true;
+    }
+    else
+    {
+        load_relay_state();
+    }
     digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
     pinMode(s_button_pin, INPUT_PULLUP);
     s_button_last = digitalRead(s_button_pin);
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN, LED_OFF);
 #endif
 }
 
@@ -776,9 +857,14 @@ static void handle_api_state(void)
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
-        if (s_last_send_ms) doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
+        if (s_last_send_ms)
+            doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
+#ifdef LED_PIN
+        doc["led_enabled"] = (s_led_enabled ? "true" : "false");
+        doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
+#endif
         doc["fw_version"] = FW_VERSION;
         serializeJson(doc, json);
     }
@@ -903,12 +989,20 @@ static void handle_console(char c)
     case '0':
         set_relay(false);
         console.printf("[%s] Relay OFF\n", TAG);
-        if (s_paired) { s_last_espnow_send = 0; espnow_send_data(); }
+        if (s_paired)
+        {
+            s_last_espnow_send = 0;
+            espnow_send_data();
+        }
         break;
     case '1':
         set_relay(true);
         console.printf("[%s] Relay ON\n", TAG);
-        if (s_paired) { s_last_espnow_send = 0; espnow_send_data(); }
+        if (s_paired)
+        {
+            s_last_espnow_send = 0;
+            espnow_send_data();
+        }
         break;
     case 'u':
     case 'U':
@@ -981,12 +1075,17 @@ static void handle_console(char c)
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Lampada:     %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
         console.printf("  Bateria:     %d %%\n", s_battery);
+
+#ifdef LED_PIN
+        console.printf("  Led:         %s\n", digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
+#endif
+
         if (s_paired)
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
             console.printf("  Gateway:     %s (slot %d) %s\n", mac_str, s_assigned_slot,
-                          s_gateway_connected ? "conectado" : "desconectado");
+                           s_gateway_connected ? "conectado" : "desconectado");
         }
         else
         {
@@ -1012,7 +1111,8 @@ static bool is_valid_gpio(int pin)
 {
     for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
     {
-        if (AVAILABLE_GPIOS[i] == pin) return true;
+        if (AVAILABLE_GPIOS[i] == pin)
+            return true;
     }
     return false;
 }
@@ -1026,6 +1126,8 @@ static void handle_api_settings(void)
         doc["device_name"] = s_device_name;
         doc["relay_pin"] = s_relay_pin;
         doc["button_pin"] = s_button_pin;
+        doc["led_enabled"] = s_led_enabled;
+        doc["startup_mode"] = s_startup_mode;
         JsonArray pins = doc["available_pins"].to<JsonArray>();
         for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
             pins.add(AVAILABLE_GPIOS[i]);
@@ -1051,7 +1153,8 @@ static void handle_api_settings(void)
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 save_device_name(s_device_name);
-                if (s_alexa_dev) s_alexa_dev->setName(s_device_name);
+                if (s_alexa_dev)
+                    s_alexa_dev->setName(s_device_name);
                 console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
                 changed = true;
             }
@@ -1094,6 +1197,28 @@ static void handle_api_settings(void)
                 changed = true;
             }
         }
+        if (doc.containsKey("led_enabled"))
+        {
+            bool new_led = doc["led_enabled"];
+            if (new_led != s_led_enabled)
+            {
+                s_led_enabled = new_led;
+                save_led_enabled();
+                console.printf("[%s] LED %s\n", TAG, s_led_enabled ? "enabled" : "disabled");
+                changed = true;
+            }
+        }
+        if (doc.containsKey("startup_mode"))
+        {
+            int new_mode = doc["startup_mode"];
+            if (new_mode >= 0 && new_mode <= 2 && new_mode != s_startup_mode)
+            {
+                s_startup_mode = new_mode;
+                save_startup_mode();
+                console.printf("[%s] Startup mode set to %d\n", TAG, s_startup_mode);
+                changed = true;
+            }
+        }
         if (!changed)
         {
             s_server.send(200, "application/json", "{\"status\":\"no changes\"}");
@@ -1104,6 +1229,8 @@ static void handle_api_settings(void)
         resp["device_name"] = s_device_name;
         resp["relay_pin"] = s_relay_pin;
         resp["button_pin"] = s_button_pin;
+        resp["led_enabled"] = s_led_enabled;
+        resp["startup_mode"] = s_startup_mode;
         resp["status"] = "ok";
         serializeJson(resp, json);
         s_server.send(200, "application/json", json);
@@ -1172,7 +1299,7 @@ void setup(void)
     console.printf("  Device: %s\n", s_device_id);
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n");
-    
+
     randomSeed(analogRead(A0));
     init_hardware();
     console.printf("============================================\n");
@@ -1188,7 +1315,8 @@ void setup(void)
     console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
 
     s_server.on("/", handle_root);
-    s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
+    s_server.on("/docs", []()
+                { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
@@ -1199,14 +1327,14 @@ void setup(void)
     /* s_server.begin() is called by Espalexa internally */
 
     ArduinoOTA.setHostname(s_device_id);
-    ArduinoOTA.onStart([]() { console.printf("[%s] OTA update start\n", TAG); });
-    ArduinoOTA.onEnd([]() { console.printf("[%s] OTA update end\n", TAG); });
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        console.printf("[%s] OTA progress: %u%%\r", TAG, (progress * 100) / total);
-    });
-    ArduinoOTA.onError([](ota_error_t error) {
-        console.printf("[%s] OTA error: %d\n", TAG, error);
-    });
+    ArduinoOTA.onStart([]()
+                       { console.printf("[%s] OTA update start\n", TAG); });
+    ArduinoOTA.onEnd([]()
+                     { console.printf("[%s] OTA update end\n", TAG); });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+                          { console.printf("[%s] OTA progress: %u%%\r", TAG, (progress * 100) / total); });
+    ArduinoOTA.onError([](ota_error_t error)
+                       { console.printf("[%s] OTA error: %d\n", TAG, error); });
     ArduinoOTA.begin();
     console.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
 
@@ -1240,10 +1368,12 @@ void setup(void)
 void loop(void)
 {
     console.loop();
-    if (Serial.available() > 0) {
+    if (Serial.available() > 0)
+    {
         handle_console(Serial.read());
     }
-    if (console.telnet_available() > 0) {
+    if (console.telnet_available() > 0)
+    {
         handle_console(console.telnet_read());
     }
     handle_wifi();
@@ -1340,9 +1470,13 @@ void loop(void)
 
 #ifdef LED_PIN
     static unsigned long last_led = 0;
-    if (s_config_portal_active)
+    if (!s_led_enabled)
     {
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(LED_PIN, LED_OFF);
+    }
+    else if (s_config_portal_active)
+    {
+        digitalWrite(LED_PIN, LED_ON);
     }
     else if (WiFi.status() != WL_CONNECTED)
     {
@@ -1362,7 +1496,8 @@ void loop(void)
     }
     else
     {
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(LED_PIN, LED_OFF);
     }
 #endif
+
 }

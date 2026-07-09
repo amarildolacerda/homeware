@@ -6,13 +6,13 @@
 #include "pages.h"
 #include "log_buffer.h"
 #include "console.h"
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <uri/UriBraces.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
 
-static ESP8266WebServer s_server(80);
+static MyWebServer s_server(80);
 static bool s_wifi_config_mode = false;
 static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;

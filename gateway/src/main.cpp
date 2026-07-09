@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include "config.h"
@@ -11,7 +11,7 @@
 #include "log_buffer.h"
 #include "console.h"
 
-static const char *TAG = "esp8266_gateway";
+static const char *TAG = PLATFORM_PREFIX "_gateway";
 
 static unsigned long s_start_time = 0;
 static unsigned long s_last_telemetry = 0;
@@ -114,7 +114,7 @@ void setup() {
     
     console.printf("\n");
     console.printf("============================================\n");
-    console.printf("  ESP8266 ESP-NOW Gateway %s\n", FW_VERSION);
+    console.printf("  " PLATFORM_PREFIX " ESP-NOW Gateway %s\n", FW_VERSION);
     console.printf("  Device: %s\n", get_gateway_device_id());
     console.printf("============================================\n");
     

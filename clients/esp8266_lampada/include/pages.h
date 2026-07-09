@@ -65,6 +65,16 @@ input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a4a;bac
 <div class="row"><span class="label">GPIO botao</span>
 <span><select id="buttonPinSelect"></select></span>
 </div>
+<div class="row"><span class="label">LED habilitado</span>
+<span><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"></span>
+</div>
+<div class="row"><span class="label">Iniciar rele</span>
+<span><select id="startupModeSelect" onchange="savePins()">
+<option value="0">OFF</option>
+<option value="1">ON</option>
+<option value="2">Ultimo</option>
+</select></span>
+</div>
 <div style="text-align:center;margin-top:8px"><button class="save-btn" onclick="savePins()">Salvar</button></div>
 <div class="row"><span class="label"> </span><span><button class="save-btn" style="background:#ef4444" onclick="restartDevice()">Reiniciar</button></span></div>
 </div>
@@ -87,6 +97,8 @@ const expandIcon=document.getElementById('expandIcon');
 const expandIcon2=document.getElementById('expandIcon2');
 const relayPinSelect=document.getElementById('relayPinSelect');
 const buttonPinSelect=document.getElementById('buttonPinSelect');
+const ledEnabledCheck=document.getElementById('ledEnabledCheck');
+const startupModeSelect=document.getElementById('startupModeSelect');
 let loading=false;
 let expanded=false;
 let expanded2=false;
@@ -95,7 +107,7 @@ function toggleSettings(){expanded2=!expanded2;settingsDetails.classList.toggle(
 async function restartDevice(){if(!confirm('Reiniciar dispositivo?'))return;
 try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
 async function savePins(){let nm=deviceNameInput.value.trim();let rp=relayPinSelect.value;let bp=buttonPinSelect.value;if(!rp||!bp)return;
-let body={relay_pin:parseInt(rp),button_pin:parseInt(bp)};if(nm)body.device_name=nm;
+let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:ledEnabledCheck.checked,startup_mode:parseInt(startupModeSelect.value)};if(nm)body.device_name=nm;
 try{let r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
@@ -115,6 +127,8 @@ footerEl.textContent=d.device_id+(d.last_send_s?' Ultimo envio: '+d.last_send_s+
 }catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 deviceNameInput.value=d.device_name;
+ledEnabledCheck.checked=d.led_enabled;
+startupModeSelect.value=d.startup_mode;
 relayPinSelect.innerHTML='';buttonPinSelect.innerHTML='';
 d.available_pins.forEach(function(p){
 let ro=document.createElement('option');ro.value=p;ro.text='GPIO '+p;if(p===d.relay_pin)ro.selected=true;relayPinSelect.appendChild(ro);
