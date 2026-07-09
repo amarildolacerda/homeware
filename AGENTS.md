@@ -35,6 +35,9 @@
 - Gateway (ESP8266): recebe dados dos clients via ESP-NOW (canal 1), encaminha ao bridge via HTTP REST
 - Clients (ESP8266/Arduino): sensores/atuadores que se registram no gateway via ESP-NOW
 - Discovery UDP: broadcast porta 5000, service name `"esp-bridge"`
+- // D1-MINI é invtido
+#define LED_ON  LOW   // GPIO2 acende com LOW
+#define LED_OFF HIGH  // GPIO2 apaga com HIGH
 
 ## Terminal do Bridge (console serial)
 - `l` — lista devices registrados (com índices numéricos)
