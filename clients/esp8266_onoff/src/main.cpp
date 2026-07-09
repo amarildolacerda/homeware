@@ -1295,6 +1295,68 @@ static void handle_api_settings(void)
     }
 }
 
+static void handle_api_timers(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        String json;
+        JsonDocument doc;
+        timer_to_json(doc);
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err)
+        {
+            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+            return;
+        }
+        if (timer_from_json(doc))
+        {
+            String json;
+            JsonDocument resp;
+            resp["status"] = "ok";
+            serializeJson(resp, json);
+            s_server.send(200, "application/json", json);
+        }
+        else
+        {
+            s_server.send(400, "application/json", "{\"error\":\"invalid timer config\"}");
+        }
+    }
+}
+
+static void handle_api_timer_next(void)
+{
+    unsigned long epoch = get_synced_epoch();
+    if (!epoch)
+    {
+        s_server.send(503, "application/json", "{\"error\":\"no time sync\"}");
+        return;
+    }
+    unsigned long next_epoch = 0;
+    uint8_t next_action = 0;
+    timer_get_next(epoch, s_timezone_offset, &next_epoch, &next_action);
+    String json;
+    JsonDocument doc;
+    if (next_epoch > 0)
+    {
+        doc["has_next"] = true;
+        doc["next_epoch"] = next_epoch;
+        doc["next_action"] = next_action;
+    }
+    else
+    {
+        doc["has_next"] = false;
+    }
+    serializeJson(doc, json);
+    s_server.send(200, "application/json", json);
+}
+
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1382,6 +1444,8 @@ void setup(void)
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
+    s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
+    s_server.on("/api/timer/next", handle_api_timer_next);
     /* s_server.begin() is called by Espalexa internally */
 
     ArduinoOTA.setHostname(s_device_id);
