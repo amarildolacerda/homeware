@@ -18,6 +18,7 @@ static unsigned long s_last_telemetry = 0;
 static bool s_ntp_synced = false;
 static unsigned long s_last_ntp_retry = 0;
 static time_t s_ntp_epoch = 0;
+static unsigned long s_last_time_sync = 0;
 
 void print_help() {
     console.println("\n=== Comandos ===");
@@ -212,6 +213,11 @@ void loop() {
     /* Update s_ntp_epoch every loop tick while synced */
     if (s_ntp_synced) {
         s_ntp_epoch = time(nullptr);
+    }
+
+    if (s_ntp_synced && millis() - s_last_time_sync > TIME_SYNC_INTERVAL_MS) {
+        s_last_time_sync = millis();
+        espnow_broadcast_time_sync((uint32_t)s_ntp_epoch);
     }
     
     delay(1);

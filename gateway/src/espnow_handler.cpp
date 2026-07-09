@@ -323,6 +323,29 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     return false;
 }
 
+static uint8_t s_time_sync_sequence = 0;
+static const uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+void espnow_broadcast_time_sync(uint32_t epoch_seconds) {
+    espnow_time_sync_t ts;
+    memset(&ts, 0, sizeof(ts));
+    ts.msg_type = ESPNOW_MSG_TIME_SYNC;
+    ts.sequence = s_time_sync_sequence++;
+    mac_copy(ts.gateway_mac, s_gateway_mac);
+    ts.epoch_seconds = epoch_seconds;
+
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper((uint8_t*)s_broadcast_mac, ch);
+    int ret = esp_now_send((uint8_t*)s_broadcast_mac, (uint8_t*)&ts, sizeof(ts));
+    if (ret == 0) {
+        console.printf("[ESP-NOW] Time sync broadcast sent (epoch=%u seq=%d)\n",
+                      (unsigned)epoch_seconds, ts.sequence);
+    } else {
+        console.printf("[ESP-NOW] Time sync broadcast FAILED ret=%d\n", ret);
+    }
+}
+
 unsigned long espnow_get_rx_count() { return s_rx_count; }
 unsigned long espnow_get_ack_count() { return s_ack_count; }
 unsigned long espnow_get_crc_errors() { return s_crc_errors; }
