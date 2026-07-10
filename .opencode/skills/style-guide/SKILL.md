@@ -12,23 +12,25 @@ description: >-
 
 ```css
 :root {
-  --bg: #010102;           /* canvas fundo da página */
-  --surface: #0f1011;      /* surface-1: cartões */
-  --surface-2: #141516;    /* surface-2: device list item bg */
-  --text: #f7f8f8;         /* ink: texto principal */
-  --muted: #d0d6e0;        /* ink-muted: texto secundário */
-  --muted-subtle: #8a8f98; /* ink-subtle: labels, meta */
+  --bg: #f4f4f4;           /* canvas fundo da página */
+  --surface: #ffffff;      /* surface-1: cartões */
+  --surface-2: #f9fafb;    /* surface-2: device list item bg */
+  --text: #1f2937;         /* ink: texto principal */
+  --muted: #6b7280;        /* ink-muted: texto secundário */
+  --muted-subtle: #9ca3af; /* ink-subtle: labels, meta */
   --primary: #5e6ad2;      /* lavender-blue destaque */
   --primary-strong: #828fff;
-  --primary-focus: #5e69d1;
-  --border: #23252a;       /* hairline */
-  --border-strong: #34343a;
-  --success: #27a644;      /* verde online/ligado */
-  --danger: #e5484d;       /* vermelho offline/desligado */
+  --primary-focus: #eef0ff;
+  --border: #e5e7eb;       /* hairline */
+  --border-strong: #d1d5db;
+  --success: #16a34a;      /* verde online/ligado */
+  --danger: #dc2626;       /* vermelho offline/desligado */
+  --warn: #f59e0b;         /* amarelo alerta */
+  --info: #2563eb;         /* azul informação */
 }
 ```
 
-> Linear-style dark theme. Sem sombras — hierarquia via surface ladder + hairline borders.
+> Tema claro, minimalista. Cards brancos com bordas suaves, sem sombras.
 
 ## Componentes
 
@@ -81,7 +83,10 @@ description: >-
 - `.btn`: surface + border `1px solid var(--primary)`, radius `8px`, padding `10px 16px`
 - `0.85rem`, weight `500`, cor `var(--primary)`
 - Hover: bg `var(--primary)`, cor `#fff`
-- `.btn-danger`: border/cor `var(--danger)`, hover bg `var(--danger)`
+- `.btn-primary`: bg `var(--primary)`, cor `#fff`, hover filter brightness 1.1
+- `.btn-secondary`: bg `var(--border)`, cor `var(--text)`, hover bg `var(--border-strong)`
+- `.btn-success`: bg `var(--success)`, cor `#fff`
+- `.btn-danger`: border/cor `var(--danger)`, hover bg `var(--danger)`, cor `#fff`
 - `.btn:disabled`: opacity `0.5`, cursor not-allowed
 
 ### Copy Button (`.cpy`)
@@ -97,7 +102,7 @@ description: >-
 ## Background do Body
 ```css
 body {
-  background: var(--bg);  /* #010102 — flat, sem gradientes */
+  background: var(--bg);  /* #f4f4f4 — fundo cinza claro */
 }
 ```
 
@@ -144,3 +149,4 @@ body {
   <div class="info" id="info"></div>
 </div>
 ```
+

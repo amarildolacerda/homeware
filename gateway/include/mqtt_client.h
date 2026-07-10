@@ -12,6 +12,7 @@ uint16_t mqtt_client_get_port();
 const char* mqtt_client_get_user();
 const char* mqtt_client_get_pass();
 bool mqtt_client_is_connected();
+unsigned long mqtt_client_connected_since();
 bool mqtt_client_connect();
 void mqtt_client_disconnect();
 void mqtt_client_loop();

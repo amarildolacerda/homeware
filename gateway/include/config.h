@@ -1,8 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define FW_VERSION "v0.0.20"
-#define DEVICE_NAME "ESP8266_Gateway"
+#include "platform.h"
+
+#define FW_VERSION "v0.0.21"
+#define DEVICE_NAME PLATFORM_PREFIX "_Gateway"
 
 #define ESP_NOW_CHANNEL 1
 #define MAX_VIRTUAL_SENSORS 20
@@ -11,6 +13,11 @@
 #define SENSOR_TIMEOUT_MS 300000
 #define PAIR_BUTTON_GPIO 0
 #define STATUS_LED_GPIO 2
+#define LOG_BUFFER_SIZE 50
+#define LOG_MSG_MAX 64
+
+#define TIME_SYNC_INTERVAL_MS 300000
+#define NTP_RETRY_INTERVAL_MS 1800000
 
 #define MQTT_HOST_DEFAULT "0.0.0.0"
 #define MQTT_PORT_DEFAULT 1883

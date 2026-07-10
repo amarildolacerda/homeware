@@ -2,9 +2,10 @@
 #include "config.h"
 #include "sensor_registry.h"
 #include "mqtt_client.h"
-#include <espnow.h>
-#include <ESP8266WiFi.h>
+#include "platform.h"
+#include "log_buffer.h"
 #include <Arduino.h>
+#include "console.h"
 
 static bool s_pairing_mode = false;
 static unsigned long s_pairing_start = 0;
@@ -49,7 +50,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
     uint8_t msg_type = data[0];
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    Serial.printf("[ESP-NOW] RX msg_type=%d len=%d from=%s pairing=%d\n",
+    console.printf("[ESP-NOW] RX msg_type=%d len=%d from=%s pairing=%d\n",
                   msg_type, len, mac_str, s_pairing_mode);
 
     switch (msg_type) {
@@ -62,15 +63,15 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             int existing_slot = sensor_registry_find_by_mac(req->sensor_mac);
             if (existing_slot >= 0) {
                 send_pair_response(mac, req->sequence, existing_slot);
-                Serial.printf("[ESP-NOW] Re-paired known sensor %s slot=%d\n", sensor_mac_str, existing_slot);
+                console.printf("[ESP-NOW] Re-paired known sensor %s slot=%d\n", sensor_mac_str, existing_slot);
                 return;
             }
 
-            if (!s_pairing_mode) { Serial.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
+            if (!s_pairing_mode) { console.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
 
             for (int i = 0; i < PENDING_PAIR_MAX; i++) {
                 if (s_pending_pairs[i].active && mac_equal(s_pending_pairs[i].mac, req->sensor_mac)) {
-                    Serial.printf("[ESP-NOW] Pair request already pending for %s\n", sensor_mac_str);
+                    console.printf("[ESP-NOW] Pair request already pending for %s\n", sensor_mac_str);
                     return;
                 }
             }
@@ -80,9 +81,10 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                     mac_copy(s_pending_pairs[i].mac, req->sensor_mac);
                     s_pending_pairs[i].sensor_type = req->sensor_type;
                     s_pending_pairs[i].sequence = req->sequence;
-                    s_pending_pairs[i].name[0] = '\0';
+                    strncpy(s_pending_pairs[i].name, req->device_name, sizeof(s_pending_pairs[i].name) - 1);
+                    s_pending_pairs[i].name[sizeof(s_pending_pairs[i].name) - 1] = '\0';
                     s_pending_pairs[i].active = true;
-                    Serial.printf("[ESP-NOW] Pair request queued from %s type=%d seq=%d slot=%d\n",
+                    console.printf("[ESP-NOW] Pair request queued from %s type=%d seq=%d slot=%d\n",
                                   sensor_mac_str, req->sensor_type, req->sequence, i);
                     break;
                 }
@@ -100,6 +102,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             if (len < ESPNOW_HEADER_FIXED_SIZE + hdr->payload_len) { s_crc_errors++; return; }
 
             int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
+            {
+                char sender_str[18], sensor_str[18];
+                mac_to_str(mac, sender_str, sizeof(sender_str));
+                mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
+                console.printf("[ESP-NOW] %s: sender=%s sensor=%s type=%d len=%d slot=%d\n",
+                    msg_type == ESPNOW_MSG_SENSOR_DATA ? "DATA" : "HB",
+                    sender_str, sensor_str, hdr->sensor_type, len, slot);
+            }
 
             if (msg_type == ESPNOW_MSG_SENSOR_DATA) {
                 if (slot < 0) {
@@ -108,6 +118,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                 }
                 sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
                 send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+                log_add("info", "Dados recebidos slot %d seq %d", slot, hdr->sequence);
                 s_ack_count++;
                 queue_bridge_state(slot);
             } else {
@@ -136,15 +147,18 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&ack, sizeof(ack));
     if (ret != 0) {
         char mac_str[18];
         mac_to_str(mac, mac_str, sizeof(mac_str));
-        Serial.printf("[ESP-NOW] ACK send failed to %s ret=%d\n", mac_str, ret);
+        console.printf("[ESP-NOW] ACK send failed to %s ret=%d\n", mac_str, ret);
+    } else {
+        char mac_str[18];
+        mac_to_str(mac, mac_str, sizeof(mac_str));
+        console.printf("[ESP-NOW] ACK sent to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
     }
 }
 
@@ -160,14 +174,13 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&resp, sizeof(resp));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    Serial.printf("[ESP-NOW] Pair response sent to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
+    console.printf("[ESP-NOW] Pair response sent to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
 }
 
 bool espnow_handler_init() {
@@ -176,14 +189,16 @@ bool espnow_handler_init() {
     WiFi.macAddress(s_gateway_mac);
     
     if (esp_now_init() != 0) {
-        Serial.println("[ESP-NOW] Init failed");
+        console.println("[ESP-NOW] Init failed");
         return false;
     }
     
+#if !defined(ARDUINO_ARCH_ESP32)
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
+#endif
     esp_now_register_recv_cb(espnow_recv_cb);
     
-    Serial.printf("[ESP-NOW] Initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X WiFi ch=%d\n",
+    console.printf("[ESP-NOW] Initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X WiFi ch=%d\n",
                   s_gateway_mac[0], s_gateway_mac[1], s_gateway_mac[2],
                   s_gateway_mac[3], s_gateway_mac[4], s_gateway_mac[5],
                   WiFi.channel());
@@ -194,7 +209,7 @@ void espnow_handler_loop() {
     if (s_pairing_mode && millis() - s_pairing_start > PAIRING_WINDOW_MS) {
         s_pairing_mode = false;
         digitalWrite(STATUS_LED_GPIO, HIGH);
-        Serial.println("[ESP-NOW] Pairing mode timeout");
+        console.println("[ESP-NOW] Pairing mode timeout");
     }
 
     for (int i = 0; i < PENDING_PAIR_MAX; i++) {
@@ -216,10 +231,15 @@ void espnow_handler_loop() {
             continue;
         }
         send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, free_slot);
+        {
+            char mac_str[18];
+            mac_to_str(s_pending_pairs[i].mac, mac_str, sizeof(mac_str));
+            log_add("info", "Sensor %s pareado slot %d", mac_str, free_slot);
+        }
         if (mqtt_client_is_connected())
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
 
-        Serial.printf("[ESP-NOW] Paired sensor slot %d: %02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
+        console.printf("[ESP-NOW] Paired sensor slot %d: %02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
                       free_slot,
                       s_pending_pairs[i].mac[0], s_pending_pairs[i].mac[1],
                       s_pending_pairs[i].mac[2], s_pending_pairs[i].mac[3],
@@ -244,7 +264,8 @@ void espnow_handler_loop() {
                 unsigned long elapsed = millis() - s->last_seen;
                 if (s->online && elapsed > SENSOR_TIMEOUT_MS) {
                     s->online = false;
-                    Serial.printf("[ESP-NOW] Sensor slot %d offline (last seen %lu ms ago)\n", i, elapsed);
+                    log_add("warn", "Sensor slot %d offline", i);
+                    console.printf("[ESP-NOW] Sensor slot %d offline (last seen %lu ms ago)\n", i, elapsed);
                 }
             }
         }
@@ -253,24 +274,31 @@ void espnow_handler_loop() {
 
 bool espnow_start_pairing() {
     if (sensor_registry_count_paired() >= MAX_VIRTUAL_SENSORS) {
-        Serial.println("[ESP-NOW] Max sensors reached");
+        console.println("[ESP-NOW] Max sensors reached");
         return false;
     }
     s_pairing_mode = true;
     s_pairing_start = millis();
     digitalWrite(STATUS_LED_GPIO, LOW);
-    Serial.printf("[ESP-NOW] Pairing mode started (%us)\n", PAIRING_WINDOW_MS / 1000);
+    console.printf("[ESP-NOW] Pairing mode started (%us)\n", PAIRING_WINDOW_MS / 1000);
     return true;
 }
 
 void espnow_stop_pairing() {
     s_pairing_mode = false;
     digitalWrite(STATUS_LED_GPIO, HIGH);
-    Serial.println("[ESP-NOW] Pairing mode stopped");
+    console.println("[ESP-NOW] Pairing mode stopped");
 }
 
 bool espnow_is_pairing() {
     return s_pairing_mode;
+}
+
+unsigned long espnow_pairing_remaining_ms() {
+    if (!s_pairing_mode) return 0;
+    unsigned long elapsed = millis() - s_pairing_start;
+    if (elapsed >= PAIRING_WINDOW_MS) return 0;
+    return PAIRING_WINDOW_MS - elapsed;
 }
 
 bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
@@ -281,19 +309,41 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    esp_now_del_peer((uint8_t*)mac);
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    esp_now_add_peer((uint8_t*)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
+    espnow_add_peer_wrapper(mac, ch);
     int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {
-        Serial.printf("[ESP-NOW] Command sent to %s slot=%d state=%d\n", mac_str, slot, state);
+        console.printf("[ESP-NOW] Command sent to %s slot=%d state=%d\n", mac_str, slot, state);
         return true;
     }
-    Serial.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
+    console.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
     return false;
+}
+
+static uint8_t s_time_sync_sequence = 0;
+static const uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+void espnow_broadcast_time_sync(uint32_t epoch_seconds) {
+    espnow_time_sync_t ts;
+    memset(&ts, 0, sizeof(ts));
+    ts.msg_type = ESPNOW_MSG_TIME_SYNC;
+    ts.sequence = s_time_sync_sequence++;
+    mac_copy(ts.gateway_mac, s_gateway_mac);
+    ts.epoch_seconds = epoch_seconds;
+
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper((uint8_t*)s_broadcast_mac, ch);
+    int ret = esp_now_send((uint8_t*)s_broadcast_mac, (uint8_t*)&ts, sizeof(ts));
+    if (ret == 0) {
+        console.printf("[ESP-NOW] Time sync broadcast sent (epoch=%u seq=%d)\n",
+                      (unsigned)epoch_seconds, ts.sequence);
+    } else {
+        console.printf("[ESP-NOW] Time sync broadcast FAILED ret=%d\n", ret);
+    }
 }
 
 unsigned long espnow_get_rx_count() { return s_rx_count; }

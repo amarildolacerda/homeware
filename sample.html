@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gateway ESP-NOW</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --accent: #5e6ad2;
+      --text: #2c3e50;
+      --muted: #7a8ba3;
+      --success: #2e7d32;
+      --danger: #c62828;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+    }
+
+    header {
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 12px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    nav {
+      background: #e8ecf7;
+      width: 180px;
+      position: fixed;
+      top: 50px;
+      bottom: 0;
+      padding: 12px;
+    }
+
+    nav a {
+      display: block;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 6px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 500;
+      cursor: pointer;
+    }
+    nav a:hover { background: var(--accent); color: #fff; }
+
+    main {
+      margin-left: 200px;
+      padding: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 { margin-top: 0; color: var(--accent); }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+
+    footer {
+      background: var(--surface);
+      box-shadow: 0 -1px 3px rgba(0,0,0,0.1);
+      padding: 10px;
+      text-align: center;
+      font-size: 12px;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+    }
+
+    /* Ocultar seções por padrão */
+    .section { display: none; }
+    .section.active { display: block; }
+  </style>
+</head>
+<body>
+  <header>📊 Estatísticas | Temp: 25.4°C | Umidade: 60% | Pacotes: 1284</header>
+
+  <nav>
+    <a onclick="showSection('status')">Status</a>
+    <a onclick="showSection('sensores')">Sensores</a>
+    <a onclick="showSection('config')">Configuração</a>
+    <a onclick="showSection('logs')">Logs</a>
+  </nav>
+
+  <main>
+    <!-- Status -->
+    <div id="status" class="section active">
+      <div class="card">
+        <h2>Status do Sistema</h2>
+        <p><strong>Dispositivos Online:</strong> 8</p>
+        <p><strong>RSSI Médio:</strong> -70 dBm</p>
+        <p><strong>Uptime:</strong> 5h 23m</p>
+      </div>
+    </div>
+
+    <!-- Sensores -->
+    <div id="sensores" class="section">
+      <div class="card">
+        <h2>Sensores</h2>
+        <p><strong>Temperatura:</strong> 25.4 °C</p>
+        <p><strong>Umidade:</strong> 60%</p>
+        <p><strong>Última atualização:</strong> 10s atrás</p>
+      </div>
+    </div>
+
+    <!-- Configuração -->
+    <div id="config" class="section">
+      <div class="card">
+        <h2>Configuração</h2>
+        <form>
+          <label>SSID Wi-Fi:</label><br>
+          <input type="text" value="MinhaRede"><br><br>
+          <label>Senha:</label><br>
+          <input type="password"><br><br>
+          <button class="btn btn-primary">Salvar</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div id="logs" class="section">
+      <div class="card">
+        <h2>Logs</h2>
+        <pre>
+[12:01] Dispositivo 01 conectado
+[12:05] Pacote recebido de Dispositivo 02
+[12:10] RSSI atualizado: -72 dBm
+        </pre>
+      </div>
+    </div>
+  </main>
+
+  <footer>🔌 Status: Conectado | IP: 192.168.1.100 | RSSI: -70 dBm</footer>
+
+  <script>
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+  </script>
+</body>
+</html>

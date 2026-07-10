@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.0.20"
+#define FW_VERSION "v0.0.21"
 #endif
 
 #ifndef DEVICE_NAME
@@ -69,13 +69,33 @@
 #endif
 
 #ifndef ESP_NOW_CHANNEL
-#define ESP_NOW_CHANNEL 1
+#define ESP_NOW_CHANNEL 0
 #endif
 
 /* Repeater MAC override. Se definido, o cliente usa o repeater em vez do gateway direto.
    Formato: "AA:BB:CC:DD:EE:FF". Deixe vazio para modo normal. */
 #ifndef REPEATER_MAC
 #define REPEATER_MAC ""
+#endif
+
+#ifndef MAX_TIMERS
+#define MAX_TIMERS 6
+#endif
+
+#ifndef TIMER_CHECK_INTERVAL_MS
+#define TIMER_CHECK_INTERVAL_MS 10000
+#endif
+
+#ifndef EEPROM_TIMEZONE_ADDR
+#define EEPROM_TIMEZONE_ADDR 160
+#endif
+
+#ifndef EEPROM_TIMER_BASE
+#define EEPROM_TIMER_BASE 161
+#endif
+
+#ifndef EEPROM_SIZE
+#define EEPROM_SIZE 256
 #endif
 
 /* Pinos GPIO disponiveis para configuracao do relé */

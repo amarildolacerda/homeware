@@ -2,9 +2,11 @@
 #include "config.h"
 #include "sensor_registry.h"
 #include "espnow_handler.h"
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
+#include "log_buffer.h"
+#include "console.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -16,6 +18,7 @@ static uint16_t s_mqtt_port = MQTT_PORT_DEFAULT;
 static char s_mqtt_user[32] = "";
 static char s_mqtt_pass[32] = "";
 static bool s_mqtt_connected = false;
+static unsigned long s_mqtt_connected_since = 0;
 static unsigned long s_last_reconnect = 0;
 static bool s_should_reconnect = true;
 
@@ -66,7 +69,7 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strcmp(s->bridge_device_id, dev_id.c_str()) == 0) {
             espnow_send_command(s->mac, s->slot, state);
-            Serial.printf("[MQTT] Command forwarded: %s -> slot %d state=%d\n", dev_id.c_str(), i, state);
+            console.printf("[MQTT] Command forwarded: %s -> slot %d state=%d\n", dev_id.c_str(), i, state);
             break;
         }
     }
@@ -156,7 +159,7 @@ bool mqtt_client_load_config() {
 
     EEPROM.end();
 
-    Serial.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
+    console.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
     return true;
 }
 
@@ -184,7 +187,7 @@ bool mqtt_client_save_config(const char *host, uint16_t port, const char *user, 
     strcpy(s_mqtt_pass, pass);
 
     s_should_reconnect = true;
-    Serial.printf("[MQTT] Config saved: %s:%d user='%s'\n", host, port, user);
+    console.printf("[MQTT] Config saved: %s:%d user='%s'\n", host, port, user);
     return true;
 }
 
@@ -195,7 +198,7 @@ bool mqtt_client_connect() {
     s_mqtt.setCallback(mqtt_callback);
 
     char client_id[32];
-    snprintf(client_id, sizeof(client_id), "gateway_%06x", ESP.getChipId());
+    snprintf(client_id, sizeof(client_id), "gateway_%06x", chip_id());
 
     bool ok = false;
     if (strlen(s_mqtt_user) > 0) {
@@ -206,14 +209,17 @@ bool mqtt_client_connect() {
 
     if (ok) {
         s_mqtt_connected = true;
+        s_mqtt_connected_since = millis();
         s_should_reconnect = false;
-        Serial.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
+        log_add("info", "MQTT conectado a %s:%d", s_mqtt_host, s_mqtt_port);
+        console.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
 
         s_mqtt.subscribe("homeassistant/switch/+/set");
 
         mqtt_client_publish_all();
     } else {
-        Serial.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
+        log_add("error", "MQTT falhou: rc=%d", s_mqtt.state());
+        console.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
     }
 
     return ok;
@@ -222,6 +228,8 @@ bool mqtt_client_connect() {
 void mqtt_client_disconnect() {
     s_mqtt.disconnect();
     s_mqtt_connected = false;
+    s_mqtt_connected_since = 0;
+    log_add("warn", "MQTT desconectado");
 }
 
 void mqtt_client_loop() {
@@ -240,6 +248,7 @@ void mqtt_client_loop() {
 }
 
 bool mqtt_client_is_connected() { return s_mqtt_connected; }
+unsigned long mqtt_client_connected_since() { return s_mqtt_connected_since; }
 const char* mqtt_client_get_host() { return s_mqtt_host; }
 uint16_t mqtt_client_get_port() { return s_mqtt_port; }
 const char* mqtt_client_get_user() { return s_mqtt_user; }
@@ -247,18 +256,18 @@ const char* mqtt_client_get_pass() { return s_mqtt_pass; }
 
 const char* get_gateway_device_id() {
     static char id[48];
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(id, sizeof(id), "esp8266_gateway_%06x", chip_id);
+    uint32_t cid = chip_id();
+    snprintf(id, sizeof(id), PLATFORM_PREFIX "_gateway_%06x", cid);
     return id;
 }
 
 void mqtt_client_generate_device_ids() {
-    uint32_t chip_id = ESP.getChipId();
+    uint32_t cid = chip_id();
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) == 0) {
             snprintf(s->bridge_device_id, sizeof(s->bridge_device_id),
-                     "esp8266_%06x_sensor_%d", chip_id, i);
+                     PLATFORM_PREFIX "_%06x_sensor_%d", cid, i);
         }
     }
 }
@@ -365,6 +374,14 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_LIGHT: {
+            char entity[64];
+            snprintf(entity, sizeof(entity), "%s_light", id);
+            publish_entity_config("light", entity, name, "Lâmpada", "", "", false, id, model);
+            publish_entity_state("light", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
     }
 
     return true;
@@ -456,6 +473,13 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_LIGHT: {
+            char entity[64];
+            snprintf(entity, sizeof(entity), "%s_light", id);
+            publish_entity_state("light", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
     }
 
     return true;
@@ -471,6 +495,6 @@ bool mqtt_client_publish_all() {
             if (mqtt_client_publish_discovery(s)) count++;
         }
     }
-    Serial.printf("[MQTT] Published %d sensors to MQTT\n", count);
+    console.printf("[MQTT] Published %d sensors to MQTT\n", count);
     return count > 0;
 }

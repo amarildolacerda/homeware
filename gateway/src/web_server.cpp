@@ -4,53 +4,66 @@
 #include "mqtt_client.h"
 #include "config.h"
 #include "pages.h"
-#include <ESP8266WebServer.h>
+#include "log_buffer.h"
+#include "console.h"
+#include "platform.h"
 #include <uri/UriBraces.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
 
-static ESP8266WebServer s_server(80);
+static MyWebServer s_server(80);
 static bool s_wifi_config_mode = false;
 static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;
 static unsigned long s_wifi_reconnect_deadline = 0;
 
+static void serve_pgm_page(const char* page) {
+    size_t total = strlen_P(page);
+    WiFiClient cl = s_server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+    PGM_P src = page;
+    char buf[256];
+    while (total > 0) {
+        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+        memcpy_P(buf, src, chunk);
+        cl.write((const uint8_t*)buf, chunk);
+        src += chunk;
+        total -= chunk;
+        yield();
+    }
+}
+
 void web_server_init() {
     s_server.on("/", HTTP_GET, []() {
-        size_t total = strlen_P(PAGE_DASHBOARD);
-        WiFiClient cl = s_server.client();
-        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-        cl.print(total);
-        cl.print(F("\r\nConnection: close\r\n\r\n"));
-        PGM_P src = PAGE_DASHBOARD;
-        char buf[256];
-        while (total > 0) {
-            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-            memcpy_P(buf, src, chunk);
-            cl.write((const uint8_t*)buf, chunk);
-            src += chunk;
-            total -= chunk;
-            yield();
-        }
+        serve_pgm_page(PAGE_SHELL);
+    });
+
+    s_server.on("/overview", HTTP_GET, []() {
+        serve_pgm_page(PAGE_OVERVIEW);
+    });
+
+    s_server.on("/settings", HTTP_GET, []() {
+        serve_pgm_page(PAGE_SETTINGS);
+    });
+
+    s_server.on("/logs", HTTP_GET, []() {
+        serve_pgm_page(PAGE_LOGS);
+    });
+
+    s_server.on("/api/logs", HTTP_GET, []() {
+        s_server.send(200, "application/json", log_get_json());
+    });
+
+    s_server.on("/api/logs/clear", HTTP_POST, []() {
+        log_buffer_clear();
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
     s_server.on("/docs", HTTP_GET, []() {
-        size_t total = strlen_P(PAGE_DOCS);
-        WiFiClient cl = s_server.client();
-        cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-        cl.print(total);
-        cl.print(F("\r\nConnection: close\r\n\r\n"));
-        PGM_P src = PAGE_DOCS;
-        char buf[256];
-        while (total > 0) {
-            size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-            memcpy_P(buf, src, chunk);
-            cl.write((const uint8_t*)buf, chunk);
-            src += chunk;
-            total -= chunk;
-            yield();
-        }
+        serve_pgm_page(PAGE_DOCS);
     });
     
     s_server.on("/api/info", HTTP_GET, []() {
@@ -63,15 +76,19 @@ void web_server_init() {
         doc["uptime_ms"] = millis();
         doc["pairing_mode"] = espnow_is_pairing();
         doc["pairing_window_sec"] = PAIRING_WINDOW_MS / 1000;
+        doc["pairing_remaining_sec"] = espnow_pairing_remaining_ms() / 1000;
         doc["mqtt_host"] = mqtt_client_get_host();
         doc["mqtt_port"] = mqtt_client_get_port();
         doc["mqtt_user"] = mqtt_client_get_user();
         doc["mqtt_connected"] = mqtt_client_is_connected();
+        doc["mqtt_connected_since"] = mqtt_client_connected_since();
         char mac_buf[18];
         mac_to_str(espnow_get_gateway_mac(), mac_buf, sizeof(mac_buf));
         doc["gateway_mac"] = mac_buf;
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
+        doc["free_heap"] = ESP.getFreeHeap();
+        doc["ip"] = WiFi.localIP().toString();
         
         String json;
         serializeJson(doc, json);
@@ -98,6 +115,7 @@ void web_server_init() {
                 obj["sequence"] = s->sequence;
                 obj["battery_pct"] = s->battery_pct;
                 obj["last_rssi"] = s->last_rssi;
+                obj["free_heap"] = s->free_heap;
                 obj["last_seen"] = (s->online && s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;
                 obj["online"] = s->online;
                 obj["paired"] = s->paired;
@@ -140,6 +158,7 @@ void web_server_init() {
                         state["alarm"] = s->state.dht_gas.alarm;
                         break;
                     case SENSOR_TYPE_ONOFF:
+                    case SENSOR_TYPE_LIGHT:
                         state["state"] = s->state.onoff.state;
                         break;
                 }
@@ -155,6 +174,7 @@ void web_server_init() {
         if (espnow_is_pairing()) {
             s_server.send(409, "application/json", "{\"error\":\"already pairing\"}");
         } else if (espnow_start_pairing()) {
+            log_add("info", "Pareamento iniciado");
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else {
             s_server.send(400, "application/json", "{\"error\":\"max sensors reached\"}");
@@ -163,11 +183,13 @@ void web_server_init() {
     
     s_server.on("/api/pair/stop", HTTP_POST, []() {
         espnow_stop_pairing();
+        log_add("info", "Pareamento finalizado");
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
     s_server.on("/api/clear", HTTP_POST, []() {
         sensor_registry_clear_all();
+        log_add("warn", "Todos os sensores removidos");
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
     
@@ -197,6 +219,7 @@ void web_server_init() {
             s->name[sizeof(s->name) - 1] = '\0';
             sensor_registry_save();
             mqtt_client_publish_discovery(s);
+            log_add("info", "Sensor slot %d renomeado para \"%s\"", slot, name);
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else if (action == "command") {
             JsonDocument doc;
@@ -211,16 +234,18 @@ void web_server_init() {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
-            if (s->type != SENSOR_TYPE_ONOFF) {
+            if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
                 s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }
-            if (espnow_send_command(s->mac, slot, state))
+            if (espnow_send_command(s->mac, slot, state)) {
+                log_add("info", "Comando %s enviado para slot %d", state ? "ON" : "OFF", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-            else
+            } else
                 s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "remove") {
             if (sensor_registry_remove(slot)) {
+                log_add("warn", "Sensor slot %d removido", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
@@ -246,6 +271,7 @@ void web_server_init() {
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {
+        log_add("warn", "Reiniciando via web");
         s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(500);
         ESP.restart();
@@ -262,21 +288,21 @@ void web_server_init() {
     }, []() {
         HTTPUpload &upload = s_server.upload();
         if (upload.status == UPLOAD_FILE_START) {
-            Serial.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-            if (!Update.begin(upload.totalSize)) Update.printError(Serial);
+            console.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
+            if (!Update.begin(upload.totalSize)) Update.printError(console);
         } else if (upload.status == UPLOAD_FILE_WRITE) {
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
-                Update.printError(Serial);
+                Update.printError(console);
         } else if (upload.status == UPLOAD_FILE_END) {
             if (Update.end(true))
-                Serial.printf("[OTA] Success: %d bytes\n", upload.totalSize);
+                console.printf("[OTA] Success: %d bytes\n", upload.totalSize);
             else
-                Update.printError(Serial);
+                Update.printError(console);
         }
     });
     
     s_server.begin();
-    Serial.println("[WEB] Server started on port 80");
+    console.println("[WEB] Server started on port 80");
 }
 
 void web_server_loop() {
@@ -284,7 +310,7 @@ void web_server_loop() {
     ArduinoOTA.handle();
     
     if (s_wifi_config_mode && millis() - s_wifi_config_start > 300000) {
-        Serial.println("[WIFI] Config portal timeout, restarting...");
+        console.println("[WIFI] Config portal timeout, restarting...");
         ESP.restart();
     }
 }
@@ -296,16 +322,16 @@ bool web_server_wifi_setup(bool force_portal) {
     if (!force_portal && WiFi.SSID().length() > 0) {
         wifiManager.setTimeout(180);
         wifiManager.setConnectRetries(3);
-        Serial.printf("[WIFI] Connecting to saved: %s\n", WiFi.SSID().c_str());
+        console.printf("[WIFI] Connecting to saved: %s\n", WiFi.SSID().c_str());
         if (wifiManager.autoConnect()) {
-            Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+            console.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
             s_wifi_config_mode = false;
             return true;
         }
-        Serial.println("[WIFI] Failed to connect to saved WiFi");
+        console.println("[WIFI] Failed to connect to saved WiFi");
     }
     
-    Serial.println("[WIFI] Starting config portal...");
+    console.println("[WIFI] Starting config portal...");
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
     wifiManager.setConfigPortalTimeout(300);
@@ -328,7 +354,7 @@ bool web_server_wifi_setup(bool force_portal) {
         return true;
     }
     
-    Serial.println("[WIFI] Config portal timeout");
+    console.println("[WIFI] Config portal timeout");
     s_wifi_config_mode = false;
     return false;
 }
@@ -337,7 +363,7 @@ void web_server_maintain_wifi() {
     if (WiFi.status() == WL_CONNECTED) {
         if (s_wifi_reconnect_active) {
             s_wifi_reconnect_active = false;
-            Serial.printf("[WIFI] Reconnected! IP: %s\n", WiFi.localIP().toString().c_str());
+            console.printf("[WIFI] Reconnected! IP: %s\n", WiFi.localIP().toString().c_str());
         }
         return;
     }
@@ -347,12 +373,12 @@ void web_server_maintain_wifi() {
     if (!s_wifi_reconnect_active) {
         if (millis() - last_attempt < 30000) return;
         last_attempt = millis();
-        Serial.println("[WIFI] Reconnecting...");
+        console.println("[WIFI] Reconnecting...");
         WiFi.begin();
         s_wifi_reconnect_active = true;
         s_wifi_reconnect_deadline = millis() + 15000;
     } else if (millis() >= s_wifi_reconnect_deadline) {
-        Serial.println("[WIFI] Reconnect timeout");
+        console.println("[WIFI] Reconnect timeout");
         s_wifi_reconnect_active = false;
     }
 }

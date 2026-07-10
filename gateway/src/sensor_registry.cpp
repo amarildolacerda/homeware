@@ -2,6 +2,7 @@
 #include "config.h"
 #include <EEPROM.h>
 #include <Arduino.h>
+#include "console.h"
 
 static virtual_sensor_t s_sensors[MAX_VIRTUAL_SENSORS];
 static bool s_initialized = false;
@@ -11,7 +12,7 @@ bool sensor_registry_init() {
     sensor_registry_load();
     EEPROM.end();
     s_initialized = true;
-    Serial.printf("[Gateway] Sensor registry initialized: %d paired\n", sensor_registry_count_paired());
+    console.printf("[Gateway] Sensor registry initialized: %d paired\n", sensor_registry_count_paired());
     return true;
 }
 
@@ -72,7 +73,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->paired = true;
     s->online = false;
     memset(&s->state, 0, sizeof(s->state));
-    snprintf(s->bridge_device_id, sizeof(s->bridge_device_id), "esp8266_gw_%02X%02X%02X_sensor_%d", mac[3], mac[4], mac[5], slot);
+    snprintf(s->bridge_device_id, sizeof(s->bridge_device_id), PLATFORM_PREFIX "_gw_%02X%02X%02X_sensor_%d", mac[3], mac[4], mac[5], slot);
     if (name && strlen(name) > 0) {
         strncpy(s->name, name, sizeof(s->name) - 1);
     } else {
@@ -81,7 +82,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->name[sizeof(s->name) - 1] = '\0';
 
     sensor_registry_save();
-    Serial.printf("[Gateway] Added sensor slot %d: MAC=%02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
+    console.printf("[Gateway] Added sensor slot %d: MAC=%02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
                   slot, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], type);
     return true;
 }
@@ -92,7 +93,7 @@ bool sensor_registry_remove(int slot) {
 
     memset(&s_sensors[slot], 0, sizeof(virtual_sensor_t));
     sensor_registry_save();
-    Serial.printf("[Gateway] Removed sensor slot %d\n", slot);
+    console.printf("[Gateway] Removed sensor slot %d\n", slot);
     return true;
 }
 
@@ -163,7 +164,8 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
-        case SENSOR_TYPE_ONOFF: {
+        case SENSOR_TYPE_ONOFF:
+        case SENSOR_TYPE_LIGHT: {
             if (payload_len >= sizeof(payload_onoff_t)) {
                 payload_onoff_t *p = (payload_onoff_t*)payload;
                 s->state.onoff.state = p->state;
@@ -181,16 +183,21 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_DHT_GAS:  expected = sizeof(payload_dht_gas_t); break;
         case SENSOR_TYPE_RAIN:     expected = sizeof(payload_rain_t); break;
         case SENSOR_TYPE_TANK:     expected = sizeof(payload_tank_t); break;
-        case SENSOR_TYPE_ONOFF:    expected = sizeof(payload_onoff_t); break;
+        case SENSOR_TYPE_ONOFF:
+        case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
     }
-    if (expected && payload_len >= expected + 4)
+    if (expected && payload_len >= expected + 6) {
+        memcpy(s->ip, payload + payload_len - 6, 4);
+        memcpy(&s->free_heap, payload + payload_len - 2, sizeof(s->free_heap));
+    } else if (expected && payload_len >= expected + 4) {
         memcpy(s->ip, payload + payload_len - 4, 4);
+    }
 
     return true;
 }
 
 bool sensor_registry_save() {
-    Serial.println("[EEPROM] Saving sensors...");
+    console.println("[EEPROM] Saving sensors...");
     EEPROM.begin(EEPROM_SIZE);
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         int addr = EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE;
@@ -207,22 +214,22 @@ bool sensor_registry_save() {
                     EEPROM.write(addr + 9 + j, 0);
             }
             EEPROM.write(addr + 41, 0);
-            Serial.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
+            console.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
         }
     }
     bool ok = EEPROM.commit();
     EEPROM.end();
-    Serial.printf("[EEPROM] commit=%s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
+    console.printf("[EEPROM] commit=%s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
     return ok;
 }
 
 void sensor_registry_load() {
-    Serial.print("[EEPROM] Dump markers:");
+    console.print("[EEPROM] Dump markers:");
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         uint8_t m = EEPROM.read(EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE);
-        Serial.printf(" %02X", m);
+        console.printf(" %02X", m);
     }
-    Serial.println();
+    console.println();
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         int addr = EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE;
         uint8_t marker = EEPROM.read(addr);
@@ -249,7 +256,7 @@ void sensor_registry_load() {
             s_sensors[i].online = false;
             memset(&s_sensors[i].state, 0, sizeof(s_sensors[i].state));
             snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
-                     "esp8266_gw_%02X%02X%02X_sensor_%d",
+                     PLATFORM_PREFIX "_gw_%02X%02X%02X_sensor_%d",
                      s_sensors[i].mac[3], s_sensors[i].mac[4], s_sensors[i].mac[5], i);
         }
     }
@@ -260,23 +267,23 @@ void sensor_registry_clear_all() {
         memset(&s_sensors[i], 0, sizeof(virtual_sensor_t));
     }
     sensor_registry_save();
-    Serial.println("[Gateway] All sensors cleared");
+    console.println("[Gateway] All sensors cleared");
 }
 
 void sensor_registry_print_all() {
-    Serial.println("\n=== Sensor Registry ===");
+    console.println("\n=== Sensor Registry ===");
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         if (s_sensors[i].paired) {
             char mac_str[18];
             mac_to_str(s_sensors[i].mac, mac_str, sizeof(mac_str));
-            Serial.printf("  Slot %d: %s | MAC=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
+            console.printf("  Slot %d: %s | MAC=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
                           i, s_sensors[i].name, mac_str, s_sensors[i].type,
                           s_sensors[i].sequence, s_sensors[i].battery_pct,
                           s_sensors[i].last_rssi, s_sensors[i].online ? "Yes" : "No");
         }
     }
-    Serial.printf("Total: %d paired, %d online\n", sensor_registry_count_paired(), sensor_registry_count_online());
-    Serial.println("========================\n");
+    console.printf("Total: %d paired, %d online\n", sensor_registry_count_paired(), sensor_registry_count_online());
+    console.println("========================\n");
 }
 
 const char* sensor_type_friendly_name(uint8_t type) {
@@ -288,6 +295,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
         case SENSOR_TYPE_DHT_GAS: return "DHT+Gas";
         case SENSOR_TYPE_RAIN: return "Chuva";
         case SENSOR_TYPE_ONOFF: return "Interruptor";
+        case SENSOR_TYPE_LIGHT: return "Lâmpada";
         case SENSOR_TYPE_TANK: return "Tanque";
         default: return "Sensor";
     }
@@ -302,6 +310,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_DHT_GAS: return "dht_gas";
         case SENSOR_TYPE_RAIN: return "rain";
         case SENSOR_TYPE_ONOFF: return "onoff";
+        case SENSOR_TYPE_LIGHT: return "light";
         case SENSOR_TYPE_TANK: return "tanque";
         default: return "unknown";
     }
