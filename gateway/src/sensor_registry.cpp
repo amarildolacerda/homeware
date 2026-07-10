@@ -164,7 +164,8 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
-        case SENSOR_TYPE_ONOFF: {
+        case SENSOR_TYPE_ONOFF:
+        case SENSOR_TYPE_LIGHT: {
             if (payload_len >= sizeof(payload_onoff_t)) {
                 payload_onoff_t *p = (payload_onoff_t*)payload;
                 s->state.onoff.state = p->state;
@@ -182,7 +183,8 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_DHT_GAS:  expected = sizeof(payload_dht_gas_t); break;
         case SENSOR_TYPE_RAIN:     expected = sizeof(payload_rain_t); break;
         case SENSOR_TYPE_TANK:     expected = sizeof(payload_tank_t); break;
-        case SENSOR_TYPE_ONOFF:    expected = sizeof(payload_onoff_t); break;
+        case SENSOR_TYPE_ONOFF:
+        case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
     }
     if (expected && payload_len >= expected + 6) {
         memcpy(s->ip, payload + payload_len - 6, 4);
@@ -293,6 +295,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
         case SENSOR_TYPE_DHT_GAS: return "DHT+Gas";
         case SENSOR_TYPE_RAIN: return "Chuva";
         case SENSOR_TYPE_ONOFF: return "Interruptor";
+        case SENSOR_TYPE_LIGHT: return "Lâmpada";
         case SENSOR_TYPE_TANK: return "Tanque";
         default: return "Sensor";
     }
@@ -307,6 +310,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_DHT_GAS: return "dht_gas";
         case SENSOR_TYPE_RAIN: return "rain";
         case SENSOR_TYPE_ONOFF: return "onoff";
+        case SENSOR_TYPE_LIGHT: return "light";
         case SENSOR_TYPE_TANK: return "tanque";
         default: return "unknown";
     }

@@ -78,6 +78,26 @@
 #define REPEATER_MAC ""
 #endif
 
+#ifndef MAX_TIMERS
+#define MAX_TIMERS 6
+#endif
+
+#ifndef TIMER_CHECK_INTERVAL_MS
+#define TIMER_CHECK_INTERVAL_MS 10000
+#endif
+
+#ifndef EEPROM_TIMEZONE_ADDR
+#define EEPROM_TIMEZONE_ADDR 160
+#endif
+
+#ifndef EEPROM_TIMER_BASE
+#define EEPROM_TIMER_BASE 161
+#endif
+
+#ifndef EEPROM_SIZE
+#define EEPROM_SIZE 256
+#endif
+
 /* Pinos GPIO disponiveis para configuracao do relé */
 static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};
 static const int AVAILABLE_GPIOS_COUNT = 9;

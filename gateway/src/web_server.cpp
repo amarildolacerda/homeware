@@ -158,6 +158,7 @@ void web_server_init() {
                         state["alarm"] = s->state.dht_gas.alarm;
                         break;
                     case SENSOR_TYPE_ONOFF:
+                    case SENSOR_TYPE_LIGHT:
                         state["state"] = s->state.onoff.state;
                         break;
                 }
@@ -233,7 +234,7 @@ void web_server_init() {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
-            if (s->type != SENSOR_TYPE_ONOFF) {
+            if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
                 s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }

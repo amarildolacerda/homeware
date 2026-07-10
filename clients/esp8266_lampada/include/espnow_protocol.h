@@ -30,6 +30,7 @@ typedef enum {
     SENSOR_TYPE_TANK = 6,
     SENSOR_TYPE_DHT_GAS = 7,
     SENSOR_TYPE_ONOFF = 8,
+    SENSOR_TYPE_LIGHT = 9,
 } sensor_type_t;
 
 typedef struct __attribute__((packed)) {

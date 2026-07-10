@@ -77,7 +77,6 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div id="cicloSub" class="nav-sub" style="display:none">
 <div class="nav-item" data-section="timer" onclick="showSection('timer')"><span>⏰</span><span>Timer</span></div>
 <div class="nav-item" data-section="pulse" onclick="showSection('pulse')"><span>⏱</span><span>Pulsação</span></div>
-<div class="nav-item" style="opacity:.4;cursor:default"><span>📅</span><span>Agenda</span></div>
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
@@ -90,7 +89,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="stat"><div class="stat-value" id="rxVal">0</div><div class="stat-label">RX</div></div>
 <div class="stat"><div class="stat-value" id="txVal">0</div><div class="stat-label">TX</div></div>
 <div class="stat"><div class="stat-value" id="memVal">-</div><div class="stat-label">Mem</div></div>
-<div class="stat"><div class="stat-value" id="proxVal">-</div><div class="stat-label">Próx</div></div>
+<div class="stat"><div class="stat-value" id="onVal">0</div><div class="stat-label">Liga</div></div>
 </div>
 <div class="content">
 <div class="section active" id="secHome">
@@ -160,7 +159,7 @@ const badge=document.getElementById('relayBadge');
 const rxVal=document.getElementById('rxVal');
 const txVal=document.getElementById('txVal');
 const memVal=document.getElementById('memVal');
-const proxVal=document.getElementById('proxVal');
+const onVal=document.getElementById('onVal');
 const alexaEl=document.getElementById('alexaStatus');
 const ipEl=document.getElementById('ipStatus');
 const batteryEl=document.getElementById('batteryStatus');
@@ -191,7 +190,7 @@ async function fetchState(){try{let r=await fetch('/api/state');let d=await r.js
   rxVal.textContent=d.rx_count||0;
   txVal.textContent=d.tx_count||0;
   memVal.textContent=d.free_heap||0;
-  proxVal.textContent=d.has_next_timer?new Date(d.next_timer_epoch*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+(d.next_timer_action?' ON':' OFF'):'-';
+  onVal.textContent=d.on_count||0;
   let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
   let uptimeStr=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 alexaEl.textContent=d.alexa_connected?'Conectado':'-';alexaEl.className='value'+(d.alexa_connected?' green':'');
@@ -205,7 +204,7 @@ footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
 fbUptime.textContent=uptimeStr;
-if(d.current_epoch){let t=new Date(d.current_epoch*1000);fbTime.textContent=t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+fbTime.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
 }catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 document.getElementById('deviceNameInput').value=d.device_name;

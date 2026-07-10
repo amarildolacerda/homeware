@@ -47,6 +47,7 @@ static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
 static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
+static uint32_t s_on_count = 0;
 
 static char s_device_id[32];
 static char s_device_name[48] = DEVICE_NAME;
@@ -676,6 +677,8 @@ static bool espnow_send_pair_request(void)
 
 static void set_relay(bool state)
 {
+    if (state && !s_relay_state)
+        s_on_count++;
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
@@ -945,19 +948,7 @@ static void handle_api_state(void)
         doc["tx_count"] = s_espnow_tx_count;
         doc["rx_count"] = s_espnow_rx_count;
         doc["free_heap"] = ESP.getFreeHeap();
-        {
-            unsigned long epoch = get_synced_epoch();
-            unsigned long next_epoch = 0;
-            uint8_t next_action = 0;
-            if (epoch)
-                timer_get_next(epoch, s_timezone_offset, &next_epoch, &next_action);
-            doc["has_next_timer"] = (next_epoch > 0);
-            if (next_epoch > 0)
-            {
-                doc["next_timer_epoch"] = next_epoch;
-                doc["next_timer_action"] = next_action;
-            }
-        }
+        doc["on_count"] = s_on_count;
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);

@@ -374,6 +374,14 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_LIGHT: {
+            char entity[64];
+            snprintf(entity, sizeof(entity), "%s_light", id);
+            publish_entity_config("light", entity, name, "Lâmpada", "", "", false, id, model);
+            publish_entity_state("light", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
     }
 
     return true;
@@ -462,6 +470,13 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
             char entity[64];
             snprintf(entity, sizeof(entity), "%s_power", id);
             publish_entity_state("switch", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
+        case SENSOR_TYPE_LIGHT: {
+            char entity[64];
+            snprintf(entity, sizeof(entity), "%s_light", id);
+            publish_entity_state("light", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }

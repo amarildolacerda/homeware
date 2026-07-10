@@ -11,6 +11,7 @@
 #include "pages.h"
 #include "espnow_protocol.h"
 #include "console.h"
+#include "timer.h"
 
 static const char *TAG = "esp8266-lampada";
 
@@ -43,6 +44,14 @@ static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
+
+static uint32_t s_espnow_tx_count = 0;
+static uint32_t s_espnow_rx_count = 0;
+static uint32_t s_on_count = 0;
+
+static int s_timezone_offset = -3;
+static unsigned long s_synced_epoch = 0;
+static bool s_tz_changed = false;
 
 static char s_device_id[32];
 static char s_device_name[48] = DEVICE_NAME;
@@ -81,7 +90,6 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
-#define EEPROM_SIZE 256
 #define EEPROM_MAGIC 0xAA
 
 static void save_gateway_mac(const uint8_t *mac)
@@ -367,6 +375,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
+    s_espnow_tx_count++;
     if (status != 0)
     {
         char mac_str[18];
@@ -377,6 +386,7 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
+    s_espnow_rx_count++;
     if (!data || len < 1)
         return;
 
@@ -417,6 +427,15 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             console.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
             set_relay(cmd->command ? true : false);
         }
+        break;
+    }
+    case ESPNOW_MSG_TIME_SYNC:
+    {
+        if (len < sizeof(espnow_time_sync_t))
+            return;
+        espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
+        s_synced_epoch = ts->epoch_seconds;
+        console.printf("[%s] Time sync: epoch=%lu seq=%d\n", TAG, s_synced_epoch, ts->sequence);
         break;
     }
     case ESPNOW_MSG_ACK:
@@ -502,7 +521,7 @@ static bool espnow_send_data(void)
     hdr->msg_type = ESPNOW_MSG_SENSOR_DATA;
     hdr->sequence = s_sequence++;
     WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_ONOFF;
+    hdr->sensor_type = SENSOR_TYPE_LIGHT;
     hdr->battery_pct = (uint8_t)s_battery;
     hdr->rssi = (int16_t)WiFi.RSSI();
 
@@ -559,7 +578,7 @@ static bool espnow_send_heartbeat(void)
     hdr->msg_type = ESPNOW_MSG_HEARTBEAT;
     hdr->sequence = s_sequence++;
     WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_ONOFF;
+    hdr->sensor_type = SENSOR_TYPE_LIGHT;
     hdr->battery_pct = (uint8_t)s_battery;
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
@@ -583,7 +602,7 @@ static bool espnow_send_pair_request(void)
     req->msg_type = ESPNOW_MSG_PAIR_REQUEST;
     req->sequence = s_sequence++;
     WiFi.macAddress(req->sensor_mac);
-    req->sensor_type = SENSOR_TYPE_ONOFF;
+    req->sensor_type = SENSOR_TYPE_LIGHT;
     uint32_t ver = 0x000A000B;
     req->firmware_version[0] = (uint8_t)(ver >> 24);
     req->firmware_version[1] = (uint8_t)(ver >> 16);
@@ -610,6 +629,8 @@ static void set_relay(bool state)
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
     save_relay_state();
+    if (state)
+        s_on_count++;
     s_last_espnow_send = 0;
 }
 
@@ -866,6 +887,12 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["tx_count"] = s_espnow_tx_count;
+        doc["rx_count"] = s_espnow_rx_count;
+        doc["on_count"] = s_on_count;
+        doc["free_heap"] = ESP.getFreeHeap();
+        if (s_tz_changed)
+            doc["timezone"] = s_timezone_offset;
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
@@ -1237,6 +1264,112 @@ static void handle_api_settings(void)
     }
 }
 
+static void apply_timer(int action)
+{
+    console.printf("[%s] Timer action: %s\n", TAG, action ? "ON" : "OFF");
+    set_relay(action == 1);
+}
+
+static unsigned long get_epoch(void)
+{
+    if (s_synced_epoch > 0)
+        return s_synced_epoch + (millis() / 1000);
+    return 0;
+}
+
+static void handle_api_timers(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        String json;
+        JsonDocument doc;
+        timer_to_json(doc);
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err)
+        {
+            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+            return;
+        }
+        if (doc.containsKey("index"))
+        {
+            int idx = doc["index"];
+            if (idx >= 0 && idx < MAX_TIMERS)
+            {
+                timer_config_t cfg;
+                cfg.hour = doc["hour"] | 0;
+                cfg.minute = doc["minute"] | 0;
+                cfg.action = doc["action"] | 0;
+                cfg.days_mask = doc["days_mask"] | 0;
+                cfg.enabled = doc["enabled"] | true;
+                timer_set(idx, &cfg);
+                timer_save();
+                console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
+                               cfg.action ? "ON" : "OFF");
+            }
+        }
+        else if (doc.containsKey("hour"))
+        {
+            int idx = -1;
+            for (int i = 0; i < MAX_TIMERS; i++)
+            {
+                timer_config_t tmp;
+                if (timer_get(i, &tmp) && !tmp.enabled)
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx < 0) idx = 0;
+            timer_config_t cfg;
+            cfg.hour = doc["hour"] | 0;
+            cfg.minute = doc["minute"] | 0;
+            cfg.action = doc["action"] | 0;
+            cfg.days_mask = doc["days_mask"] | 0;
+            cfg.enabled = doc["enabled"] | true;
+            timer_set(idx, &cfg);
+            timer_save();
+            console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
+                           cfg.action ? "ON" : "OFF");
+        }
+        else
+        {
+            timer_from_json(doc);
+            timer_save();
+        }
+        String json;
+        JsonDocument resp;
+        resp["status"] = "ok";
+        serializeJson(resp, json);
+        s_server.send(200, "application/json", json);
+    }
+}
+
+static void handle_api_timer_next(void)
+{
+    unsigned long next_epoch = 0;
+    uint8_t next_action = 0;
+    timer_get_next(get_epoch(), s_timezone_offset, &next_epoch, &next_action);
+    String json;
+    JsonDocument doc;
+    doc["has_next"] = (next_epoch > 0);
+    if (next_epoch > 0)
+    {
+        doc["next_epoch"] = next_epoch;
+        doc["next_action"] = next_action;
+        time_t t = (time_t)next_epoch;
+        doc["next_local"] = ctime(&t);
+    }
+    serializeJson(doc, json);
+    s_server.send(200, "application/json", json);
+}
+
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1322,6 +1455,8 @@ void setup(void)
     s_server.on("/api/relay", handle_api_relay);
     s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
+    s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
+    s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
     /* s_server.begin() is called by Espalexa internally */
@@ -1358,6 +1493,10 @@ void setup(void)
     {
         console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
+
+    timer_init();
+    timer_load();
+    console.printf("  Timers:  %d configurados\n", MAX_TIMERS);
 
     console.printf("============================================\n");
     console.printf("  Pronto! Pressione 'h' para ajuda\n");
@@ -1466,6 +1605,23 @@ void loop(void)
         console.printf("[%s] RSSI=%d dBm  up=%lus\n", TAG, WiFi.RSSI(), (millis() - s_start_time) / 1000);
         if (s_paired)
             espnow_send_heartbeat();
+    }
+
+    {
+        static unsigned long last_timer_check = 0;
+        if (now - last_timer_check > TIMER_CHECK_INTERVAL_MS)
+        {
+            last_timer_check = now;
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                int action = timer_check(get_epoch(), s_timezone_offset);
+                if (action >= 0)
+                {
+                    apply_timer(action);
+                    s_last_espnow_send = 0;
+                }
+            }
+        }
     }
 
 #ifdef LED_PIN
