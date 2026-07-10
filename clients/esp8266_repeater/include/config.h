@@ -35,3 +35,15 @@
 #define EEPROM_SIZE 64
 #define EEPROM_MAGIC 0xBB
 #define EEPROM_GATEWAY_MAC_ADDR 0
+
+#ifdef STATIC_WIFI
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS ""
+#endif
+#ifndef GATEWAY_MAC
+#define GATEWAY_MAC ""
+#endif
+#endif
