@@ -923,6 +923,20 @@ static void handle_api_state(void)
         doc["rx_count"] = s_espnow_rx_count;
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
+        doc["repeater_active"] = s_use_repeater;
+        if (s_use_repeater)
+        {
+            doc["repeater_fwd"] = s_repeater_fwd;
+            JsonArray rep_clients = doc["repeater_clients"].to<JsonArray>();
+            for (int i = 0; i < s_rep_client_num; i++)
+            {
+                JsonObject obj = rep_clients.add<JsonObject>();
+                char mac_str[18];
+                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                obj["mac"] = mac_str;
+                obj["packets"] = s_rep_clients[i].pkt_count;
+            }
+        }
         if (s_tz_changed)
             doc["timezone"] = s_timezone_offset;
         serializeJson(doc, json);
