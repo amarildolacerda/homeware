@@ -1114,6 +1114,8 @@ static void handle_console(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+        console.printf("  x    - repeater stats\n");
+        console.printf("  c    - zerar contadores\n");
         console.printf("  u    - info OTA\n");
         console.printf("  a    - info Alexa\n");
         console.printf("  h/?  - esta ajuda\n");
@@ -1138,6 +1140,36 @@ static void handle_console(char c)
         console.printf("               \"Alexa, desligue %s\"\n", s_device_name);
         console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
+        break;
+    case 'x':
+    case 'X':
+        if (s_use_repeater)
+        {
+            console.printf("\n--- Repeater Stats ---\n");
+            console.printf("  Forwarded: %lu\n", s_repeater_fwd);
+            console.printf("  Clients:   %d\n", s_rep_client_num);
+            for (int i = 0; i < s_rep_client_num; i++)
+            {
+                char mac_str[18];
+                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, s_rep_clients[i].pkt_count);
+            }
+            console.printf("----------------------\n\n");
+        }
+        else
+        {
+            console.printf("[%s] Repeater mode disabled\n", TAG);
+        }
+        break;
+    case 'c':
+    case 'C':
+        s_espnow_tx_count = 0;
+        s_espnow_rx_count = 0;
+        s_on_count = 0;
+        s_repeater_fwd = 0;
+        for (int i = 0; i < s_rep_client_num; i++)
+            s_rep_clients[i].pkt_count = 0;
+        console.printf("[%s] Contadores zerados\n", TAG);
         break;
     case 's':
     case 'S':
