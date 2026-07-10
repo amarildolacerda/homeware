@@ -80,7 +80,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
 </div>
-<div class="sidebar-bottom"><span id="sbVersion">v0.0.20</span></div>
+<div class="sidebar-bottom"><span id="sbVersion">v0.0.21</span></div>
 </div>
 <div class="main">
 <div class="stats-header">

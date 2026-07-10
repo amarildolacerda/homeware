@@ -870,7 +870,7 @@ h1{font-size:1.1rem}
 <div class="desc">Upload de firmware via OTA (multipart/form-data)</div>
 </div>
 
-<p class="footer">ESP-NOW Gateway &mdash; <span id="v">v0.0.20</span></p>
+<p class="footer">ESP-NOW Gateway &mdash; <span id="v">v0.0.21</span></p>
 </body>
 </html>
 )rawliteral";
