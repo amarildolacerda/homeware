@@ -495,11 +495,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         {
             /* From gateway → broadcast (other devices check target_mac) */
             esp_now_send(s_broadcast_mac, data, len);
+            s_repeater_fwd++;
         }
         else
         {
             /* From client → forward to gateway */
+            track_repeater_client(mac);
             esp_now_send(s_gateway_mac, data, len);
+            s_repeater_fwd++;
         }
     }
 }
