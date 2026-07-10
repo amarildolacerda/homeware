@@ -49,6 +49,17 @@ static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
+#define MAX_REPEATER_CLIENTS 5
+
+typedef struct {
+    uint8_t mac[6];
+    uint32_t pkt_count;
+} repeater_client_t;
+
+static repeater_client_t s_rep_clients[MAX_REPEATER_CLIENTS];
+static int s_rep_client_num = 0;
+static uint32_t s_repeater_fwd = 0;
+
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 static bool s_tz_changed = false;
@@ -70,6 +81,24 @@ static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+static void track_repeater_client(const uint8_t *mac)
+{
+    for (int i = 0; i < s_rep_client_num; i++)
+    {
+        if (memcmp(s_rep_clients[i].mac, mac, 6) == 0)
+        {
+            s_rep_clients[i].pkt_count++;
+            return;
+        }
+    }
+    if (s_rep_client_num < MAX_REPEATER_CLIENTS)
+    {
+        memcpy(s_rep_clients[s_rep_client_num].mac, mac, 6);
+        s_rep_clients[s_rep_client_num].pkt_count = 1;
+        s_rep_client_num++;
+    }
+}
 
 
 // D1-MINI é invtido

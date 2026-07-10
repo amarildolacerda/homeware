@@ -24,7 +24,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .footer-nav{padding:12px 20px;border-top:1px solid var(--border);font-size:0.7rem;color:var(--muted-subtle)}
 .main{margin-left:200px;flex:1;padding:24px;max-width:960px}
 #page{min-height:calc(100vh - 80px)}
-.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;gap:8px;font-size:0.78rem;z-index:10}
+.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:flex-end;gap:8px;font-size:0.78rem;z-index:10}
 .mqtt-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .mqtt-footer .dot.on{background:var(--success)}
 .mqtt-footer .dot.off{background:var(--danger)}
@@ -195,12 +195,36 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .state-rain{color:var(--info)}
 .state-tank{color:var(--success)}
 .btn-onoff{width:100%;padding:14px;font-size:1rem;font-weight:700;border:none;border-radius:8px;cursor:pointer;min-height:48px;margin:10px 0}
+.device-toggle{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;vertical-align:middle;margin-left:6px;transition:all .2s}
+.device-toggle.on{background:rgba(22,163,74,0.12);color:var(--success)}
+.device-toggle.off{background:var(--border);color:var(--muted)}
+@media(max-width:700px){.device-toggle{font-size:0.65rem;padding:2px 6px}}
 .btn-onoff.on{background:var(--success);color:#fff}
 .btn-onoff.off{background:var(--border);color:var(--text)}
 .btn-onoff.off:hover{background:var(--border-strong)}
 .loading{padding:40px;text-align:center;color:var(--muted)}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr);gap:6px}}
+@media(max-width:700px){
+  .stats{grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}
+  .stat{padding:6px 2px}
+  .stat-value{font-size:0.9rem}
+  .stat-label{font-size:0.5rem}
+  .filters{gap:4px;margin-bottom:10px}
+  .filter-btn{padding:4px 10px;font-size:0.7rem}
+  .device .metrics,.device .device-type{display:none}
+  .device{padding:8px 10px}
+  .device-head{margin-bottom:2px}
+  .device-icon{font-size:1.1rem;width:24px}
+  .device-name{font-size:0.8rem;display:flex;align-items:center;gap:4px;min-width:0}
+  .device-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .device-actions .menu-trigger{font-size:1.1rem;padding:2px 4px}
+  .device-actions .menu-dropdown{min-width:120px}
+  .state-group{margin:4px 0 0}
+  .btn-onoff{padding:8px;font-size:0.85rem;margin:2px 0}
+  .grid-2{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+  .badge{font-size:0.6rem;padding:1px 5px;min-width:auto}
+}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
 .modal.show{display:flex}
 .modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px}
@@ -329,7 +353,9 @@ function renderSensors(sensors) {
       '<div class="device-head">'+
         '<div>'+
           '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
-          '<div class="device-name">'+escHtml(s.name||'Sem nome')+'</div>'+
+          '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
+            (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
+          '</div>'+
           '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:4px">'+
@@ -349,9 +375,7 @@ function renderSensors(sensors) {
         rssiBar(s.last_rssi)+
       '</div>'+
       '<div class="state-group">'+
-        (isType8
-          ? '<button class="btn-onoff '+(onState?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'DESLIGAR':'LIGAR')+'</button>'
-          : renderState(s))+
+        (isType8 ? '' : renderState(s))+
       '</div>'+          /* closes state-group */
     '</div>';            /* closes device */
   }).join('');
@@ -432,6 +456,7 @@ function exitPairingMode() {
 }
 
 function toggleDeviceMenu(slot) {
+  if (window.innerWidth <= 700) { showPropsModal(slot); return; }
   var m = document.getElementById('dmenu-'+slot);
   if (!m) return;
   var open = m.classList.contains('show');
