@@ -23,6 +23,9 @@ static int s_forwarded = 0;
 static int s_received = 0;
 static bool s_monitor = false;
 static unsigned long s_last_gateway_comm = 0; // last successful comm with gateway
+static char s_device_name[48] = DEVICE_NAME;
+static uint32_t s_espnow_tx_count = 0;
+static uint32_t s_espnow_rx_count = 0;
 
 typedef struct {
     uint16_t sequence;
@@ -43,6 +46,7 @@ static bool load_gateway_mac(void);
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
+    s_espnow_tx_count++;
     if (status != 0)
         console.printf("[%s] Send fail to %02X:%02X:%02X:%02X:%02X:%02X status=%d\n",
                       TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], status);
@@ -98,6 +102,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
     if (!data || len < 1) return;
 
+    s_espnow_rx_count++;
     s_last_activity = millis();
     s_has_activity = true;
     s_received++;
@@ -249,6 +254,53 @@ static void save_gateway_mac(void)
     console.printf("[%s] Gateway MAC saved: %s\n", TAG, mac_str);
 }
 
+static bool is_valid_name(const char *s)
+{
+    if (!s || s[0] == '\0') return false;
+    for (int i = 0; s[i]; i++)
+    {
+        char c = s[i];
+        if (c < 32 || c > 126) return false;
+    }
+    return true;
+}
+
+static void save_device_name(const char *name)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_NAME_ADDR, 0xFF);
+    for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
+    {
+        EEPROM.write(EEPROM_NAME_ADDR + 1 + i, name[i]);
+        if (name[i] == '\0') break;
+    }
+    EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX, '\0');
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_device_name(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t marker = EEPROM.read(EEPROM_NAME_ADDR);
+    if (marker == 0xFF)
+    {
+        char buf[EEPROM_NAME_MAX];
+        for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
+        {
+            buf[i] = EEPROM.read(EEPROM_NAME_ADDR + 1 + i);
+            if (buf[i] == '\0') break;
+        }
+        buf[EEPROM_NAME_MAX - 1] = '\0';
+        if (is_valid_name(buf))
+        {
+            strncpy(s_device_name, buf, sizeof(s_device_name) - 1);
+            s_device_name[sizeof(s_device_name) - 1] = '\0';
+        }
+    }
+    EEPROM.end();
+}
+
 static bool wifi_setup(bool force_portal = false)
 {
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
@@ -361,6 +413,36 @@ static void send_gw_discover(void)
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 
+static void handle_api_settings(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        JsonDocument doc;
+        doc["device_name"] = s_device_name;
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        JsonDocument doc;
+        deserializeJson(doc, s_server.arg("plain"));
+        if (doc.containsKey("device_name"))
+        {
+            String name = doc["device_name"].as<String>();
+            if (name.length() > 0)
+            {
+                save_device_name(name.c_str());
+                strncpy(s_device_name, name.c_str(), sizeof(s_device_name) - 1);
+                s_device_name[sizeof(s_device_name) - 1] = '\0';
+                s_server.send(200, "application/json", "{\"ok\":true}");
+                return;
+            }
+        }
+        s_server.send(400, "application/json", "{\"error\":\"invalid\"}");
+    }
+}
+
 static void handle_root(void)
 {
     s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
@@ -379,6 +461,8 @@ static void handle_api_status(void)
     doc["received"] = s_received;
     doc["forwarded"] = s_forwarded;
     doc["clients"] = s_client_count;
+    doc["tx_count"] = s_espnow_tx_count;
+    doc["rx_count"] = s_espnow_rx_count;
     doc["last_activity_s"] = s_has_activity ? (int)((millis() - s_last_activity) / 1000) : -1;
     JsonArray arr = doc["client_list"].to<JsonArray>();
     for (int i = 0; i < s_client_count; i++)
@@ -476,6 +560,8 @@ void setup(void)
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
 
+    load_device_name();
+
 #ifdef STATIC_WIFI
     if (strlen(GATEWAY_MAC) > 0 && parse_mac(GATEWAY_MAC, s_gateway_mac))
     {
@@ -495,7 +581,9 @@ void setup(void)
     if (has_wifi)
     {
         s_server.on("/", handle_root);
+        s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
         s_server.on("/api/status", handle_api_status);
+        s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
         s_server.begin();
         console.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
     }

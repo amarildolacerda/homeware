@@ -32,9 +32,11 @@
 #define WIFI_CONFIG_PORTAL_PASS "password123"
 #endif
 
-#define EEPROM_SIZE 64
+#define EEPROM_SIZE 128
 #define EEPROM_MAGIC 0xBB
 #define EEPROM_GATEWAY_MAC_ADDR 0
+#define EEPROM_NAME_ADDR 10
+#define EEPROM_NAME_MAX 48
 
 #ifdef STATIC_WIFI
 #ifndef WIFI_SSID

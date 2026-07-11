@@ -50,3 +50,33 @@ setInterval(u,3000);u();
 </body>
 </html>
 )=====";
+
+static const char PAGE_DOCS[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Docs</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#010102;color:#f7f8f8;padding:20px}
+h1{color:#5e6ad2;margin-bottom:16px}
+h2{color:#8a8f98;margin:16px 0 8px;font-size:1rem}
+code{background:#141516;padding:2px 6px;border-radius:4px;font-size:.9rem}
+pre{background:#141516;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0;border:1px solid #23252a}
+a{color:#5e6ad2}
+</style>
+</head>
+<body>
+<h1>ESP-NOW Repeater - API Docs</h1>
+<h2>GET /api/status</h2>
+<p>Returns repeater status (gateway, uptime, channel, RSSI, clients, counters).</p>
+<h2>GET /api/settings</h2>
+<p>Returns device name.</p>
+<h2>POST /api/settings</h2>
+<p>Save settings. Body: <code>{"device_name":"..."}</code></p>
+<p><a href="/">Back to dashboard</a></p>
+</body>
+</html>
+)rawliteral";
