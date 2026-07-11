@@ -21,6 +21,7 @@ static bool s_has_activity = false;
 static int s_forwarded = 0;
 static int s_received = 0;
 static bool s_monitor = false;
+static unsigned long s_last_gateway_comm = 0; // last successful comm with gateway
 
 typedef struct {
     uint16_t sequence;
@@ -154,6 +155,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     if (s_gateway_configured && mac_equal(mac, s_gateway_mac))
     {
         /* From gateway → forward to client */
+        s_last_gateway_comm = millis();
         uint8_t client_mac[6];
         if (lookup_sequence(sequence, client_mac))
         {
@@ -184,6 +186,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         cache_sequence(sequence, mac);
         esp_now_send(s_gateway_mac, data, len);
         s_forwarded++;
+        s_last_gateway_comm = millis();
         if (s_monitor)
         {
             char m1[18], m2[18];
@@ -532,6 +535,19 @@ void loop(void)
             esp_now_del_peer(s_gateway_mac);
             esp_now_add_peer(s_gateway_mac, ESP_NOW_ROLE_COMBO, WiFi.channel(), NULL, 0);
         }
+    }
+
+    /* Gateway timeout: if no communication for 60s, clear config and rediscover */
+    if (s_gateway_configured && s_last_gateway_comm > 0 && (now - s_last_gateway_comm > 60000))
+    {
+        Serial.printf("[%s] Gateway timeout (no comm for 5min), clearing config\n", TAG);
+        s_gateway_configured = false;
+        memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
+        /* Clear from EEPROM */
+        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, 0);
+        EEPROM.commit();
+        EEPROM.end();
     }
 
     /* Gateway discovery: broadcast if no gateway configured */
