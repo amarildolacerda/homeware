@@ -49,6 +49,8 @@ static bool s_sensor_error = false;
 static bool s_dht_valid = false;
 static int s_battery = 100;
 static unsigned long s_start_time = 0;
+static uint32_t s_espnow_tx_count = 0;
+static uint32_t s_espnow_rx_count = 0;
 static unsigned long s_last_send_ms = 0;
 
 static char s_device_id[32];
@@ -147,10 +149,12 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
     (void)status;
+    s_espnow_tx_count++;
 }
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
+    s_espnow_rx_count++;
     if (!data || len < 1) return;
 
     switch (data[0])
@@ -496,6 +500,37 @@ static void check_config_portal_timeout(void)
     }
 }
 
+static void handle_api_settings(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        DynamicJsonDocument doc(256);
+        doc["device_name"] = s_device_name;
+        JsonArray pins = doc["available_pins"].to<JsonArray>();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        DynamicJsonDocument doc(256);
+        deserializeJson(doc, s_server.arg("plain"));
+        if (doc.containsKey("device_name"))
+        {
+            String name = doc["device_name"].as<String>();
+            if (name.length() > 0)
+            {
+                save_device_name(name.c_str());
+                strncpy(s_device_name, name.c_str(), sizeof(s_device_name) - 1);
+                s_device_name[sizeof(s_device_name) - 1] = '\0';
+                s_server.send(200, "application/json", "{\"ok\":true}");
+                return;
+            }
+        }
+        s_server.send(400, "application/json", "{\"error\":\"invalid\"}");
+    }
+}
+
 static void handle_root(void)
 {
     s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
@@ -534,6 +569,9 @@ static void handle_api_state(void)
         doc["alert_led_state"] = digitalRead(GAS_LED_ALERT_PIN);
         doc["alarm_led_state"] = digitalRead(GAS_LED_ALARM_PIN);
         doc["slot"] = s_assigned_slot;
+        doc["tx_count"] = s_espnow_tx_count;
+        doc["rx_count"] = s_espnow_rx_count;
+        doc["free_heap"] = ESP.getFreeHeap();
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
@@ -783,7 +821,9 @@ void setup(void)
     espnow_init_client();
 
     s_server.on("/", handle_root);
+    s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
     s_server.on("/api/state", handle_api_state);
+    s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/pin", handle_api_pin);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
     s_server.begin();
