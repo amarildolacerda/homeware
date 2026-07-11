@@ -540,7 +540,7 @@ void loop(void)
     /* Gateway timeout: if no communication for 60s, clear config and rediscover */
     if (s_gateway_configured && s_last_gateway_comm > 0 && (now - s_last_gateway_comm > 60000))
     {
-        Serial.printf("[%s] Gateway timeout (no comm for 5min), clearing config\n", TAG);
+        Serial.printf("[%s] Gateway timeout (no comm for 1min), clearing config\n", TAG);
         s_gateway_configured = false;
         memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
         /* Clear from EEPROM */

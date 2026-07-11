@@ -42,7 +42,7 @@ static void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t s
 static void send_gw_announce(const uint8_t *mac);
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
-    if (!data || len < 2) {
+    if (!data || len < 1) {
         s_crc_errors++;
         return;
     }
