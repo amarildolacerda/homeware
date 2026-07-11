@@ -411,6 +411,37 @@ static void send_gw_discover(void)
     console.printf("[%s] GW_DISCOVER sent\n", TAG);
 }
 
+static void send_repeater_status(void)
+{
+    if (!s_gateway_configured) return;
+
+    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t)];
+    memset(buf, 0, sizeof(buf));
+
+    espnow_header_t *hdr = (espnow_header_t *)buf;
+    hdr->version = ESPNOW_PROTOCOL_VERSION;
+    hdr->msg_type = ESPNOW_MSG_REPEATER_STATUS;
+    hdr->sequence = 0;
+    WiFi.macAddress(hdr->sensor_mac);
+    hdr->sensor_type = SENSOR_TYPE_REPEATER;
+    hdr->battery_pct = 0;
+    hdr->rssi = (int16_t)WiFi.RSSI();
+
+    payload_repeater_status_t *pl = (payload_repeater_status_t *)hdr->payload;
+    pl->received = s_received;
+    pl->forwarded = s_forwarded;
+    pl->client_count = s_client_count;
+    pl->channel = WiFi.channel();
+    pl->rssi = WiFi.RSSI();
+    pl->uptime_s = (uint32_t)((millis() - s_start_time) / 1000);
+    pl->free_heap = ESP.getFreeHeap();
+    pl->ack_failures = 0;
+
+    hdr->payload_len = sizeof(payload_repeater_status_t);
+
+    esp_now_send(s_gateway_mac, buf, sizeof(buf));
+}
+
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 
 static void handle_api_settings(void)
@@ -671,6 +702,14 @@ void loop(void)
     {
         last_discover = now;
         send_gw_discover();
+    }
+
+    /* Send status to gateway every 30s */
+    static unsigned long last_status = 0;
+    if (s_gateway_configured && (now - last_status > 30000))
+    {
+        last_status = now;
+        send_repeater_status();
     }
 
     delay(1);
