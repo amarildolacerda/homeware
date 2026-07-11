@@ -474,6 +474,7 @@ static void handle_api_state(void)
         doc["battery"] = s_battery;
         doc["device_id"] = s_device_id;
         doc["device_name"] = s_device_name;
+        doc["fw_version"] = FW_VERSION;
         doc["gateway_connected"] = s_gateway_connected;
         doc["paired"] = s_paired;
         doc["ip"] = WiFi.localIP().toString();
