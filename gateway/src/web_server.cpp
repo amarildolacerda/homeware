@@ -161,6 +161,15 @@ void web_server_init() {
                     case SENSOR_TYPE_LIGHT:
                         state["state"] = s->state.onoff.state;
                         break;
+                    case SENSOR_TYPE_REPEATER:
+                        state["received"] = s->state.repeater.received;
+                        state["forwarded"] = s->state.repeater.forwarded;
+                        state["client_count"] = s->state.repeater.client_count;
+                        state["channel"] = s->state.repeater.channel;
+                        state["uptime_s"] = s->state.repeater.uptime_s;
+                        state["free_heap"] = s->state.repeater.free_heap;
+                        state["ack_failures"] = s->state.repeater.ack_failures;
+                        break;
                 }
             }
         }
