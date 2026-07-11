@@ -9,6 +9,7 @@
 #include <espnow.h>
 #include "config.h"
 #include "espnow_protocol.h"
+#include "console.h"
 #include "pages.h"
 
 static const char *TAG = "repeater";
@@ -43,7 +44,7 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
     if (status != 0)
-        Serial.printf("[%s] Send fail to %02X:%02X:%02X:%02X:%02X:%02X status=%d\n",
+        console.printf("[%s] Send fail to %02X:%02X:%02X:%02X:%02X:%02X status=%d\n",
                       TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], status);
 }
 
@@ -89,7 +90,7 @@ static void learn_client(const uint8_t *mac)
     esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, WiFi.channel(), NULL, 0);
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    Serial.printf("[%s] New client: %s\n", TAG, mac_str);
+    console.printf("[%s] New client: %s\n", TAG, mac_str);
     s_client_count++;
 }
 
@@ -147,7 +148,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             esp_now_add_peer(s_gateway_mac, ESP_NOW_ROLE_COMBO, WiFi.channel(), NULL, 0);
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            Serial.printf("[%s] Gateway discovered: %s\n", TAG, mac_str);
+            console.printf("[%s] Gateway discovered: %s\n", TAG, mac_str);
         }
         return;
     }
@@ -166,7 +167,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
                 char m1[18], m2[18];
                 mac_to_str(mac, m1, sizeof(m1));
                 mac_to_str(client_mac, m2, sizeof(m2));
-                Serial.printf("[%s] GW→CLI seq=%u %s → %s\n", TAG, sequence, m1, m2);
+                console.printf("[%s] GW→CLI seq=%u %s → %s\n", TAG, sequence, m1, m2);
             }
         }
         else
@@ -177,7 +178,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
                 s_forwarded++;
             }
             if (s_monitor)
-                Serial.printf("[%s] GW→BCAST seq=%u (%d clients)\n", TAG, sequence, s_client_count);
+                console.printf("[%s] GW→BCAST seq=%u (%d clients)\n", TAG, sequence, s_client_count);
         }
     }
     else if (s_gateway_configured)
@@ -192,7 +193,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             char m1[18], m2[18];
             mac_to_str(mac, m1, sizeof(m1));
             mac_to_str(s_gateway_mac, m2, sizeof(m2));
-            Serial.printf("[%s] CLI→GW seq=%u %s → %s\n", TAG, sequence, m1, m2);
+            console.printf("[%s] CLI→GW seq=%u %s → %s\n", TAG, sequence, m1, m2);
         }
     }
 }
@@ -213,10 +214,11 @@ static void init_serial(void)
 {
     Serial.begin(115200);
     delay(1000);
+    console.begin();
     s_start_time = millis();
-    Serial.printf("\n============================================\n");
-    Serial.printf("  ESP-NOW Repeater " FW_VERSION "\n");
-    Serial.printf("============================================\n");
+    console.printf("\n============================================\n");
+    console.printf("  ESP-NOW Repeater " FW_VERSION "\n");
+    console.printf("============================================\n");
 }
 
 static bool load_gateway_mac(void)
@@ -230,7 +232,7 @@ static bool load_gateway_mac(void)
     s_gateway_configured = true;
     char mac_str[18];
     mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-    Serial.printf("[%s] Gateway MAC loaded: %s\n", TAG, mac_str);
+    console.printf("[%s] Gateway MAC loaded: %s\n", TAG, mac_str);
     return true;
 }
 
@@ -244,7 +246,7 @@ static void save_gateway_mac(void)
     EEPROM.end();
     char mac_str[18];
     mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-    Serial.printf("[%s] Gateway MAC saved: %s\n", TAG, mac_str);
+    console.printf("[%s] Gateway MAC saved: %s\n", TAG, mac_str);
 }
 
 static bool wifi_setup(bool force_portal = false)
@@ -256,21 +258,21 @@ static bool wifi_setup(bool force_portal = false)
     if (strlen(WIFI_SSID) > 0)
     {
         WiFi.begin(WIFI_SSID, WIFI_PASS);
-        Serial.printf("[%s] WiFi: connecting to %s...\n", TAG, WIFI_SSID);
+        console.printf("[%s] WiFi: connecting to %s...\n", TAG, WIFI_SSID);
         int retries = 0;
         while (WiFi.status() != WL_CONNECTED && retries < 20) {
             delay(500);
             retries++;
         }
         if (WiFi.status() == WL_CONNECTED) {
-            Serial.printf("[%s] WiFi: %s IP: %s\n", TAG, WIFI_SSID, WiFi.localIP().toString().c_str());
+            console.printf("[%s] WiFi: %s IP: %s\n", TAG, WIFI_SSID, WiFi.localIP().toString().c_str());
             return true;
         }
-        Serial.printf("[%s] WiFi: connection failed, continuing without WiFi\n", TAG);
+        console.printf("[%s] WiFi: connection failed, continuing without WiFi\n", TAG);
     }
     else
     {
-        Serial.printf("[%s] No WiFi SSID configured, continuing without WiFi\n", TAG);
+        console.printf("[%s] No WiFi SSID configured, continuing without WiFi\n", TAG);
     }
     return true;
 #else
@@ -281,13 +283,13 @@ static bool wifi_setup(bool force_portal = false)
         wm.setTimeout(180);
         if (wm.autoConnect())
         {
-            Serial.printf("[%s] WiFi: %s IP: %s\n", TAG, WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            console.printf("[%s] WiFi: %s IP: %s\n", TAG, WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
             return true;
         }
-        Serial.printf("[%s] WiFi autoconnect failed\n", TAG);
+        console.printf("[%s] WiFi autoconnect failed\n", TAG);
     }
 
-    Serial.printf("[%s] Starting config portal (SSID: %s)...\n", TAG, WIFI_CONFIG_PORTAL_SSID);
+    console.printf("[%s] Starting config portal (SSID: %s)...\n", TAG, WIFI_CONFIG_PORTAL_SSID);
     WiFiManager wm;
     wm.setConfigPortalTimeout(300);
     wm.setConnectTimeout(20);
@@ -307,14 +309,14 @@ static bool wifi_setup(bool force_portal = false)
             }
             else
             {
-                Serial.printf("[%s] Invalid gateway MAC in config portal\n", TAG);
+                console.printf("[%s] Invalid gateway MAC in config portal\n", TAG);
             }
         }
-        Serial.printf("[%s] WiFi: %s IP: %s\n", TAG, WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+        console.printf("[%s] WiFi: %s IP: %s\n", TAG, WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
         return true;
     }
 
-    Serial.printf("[%s] Config portal timeout, continuing without WiFi\n", TAG);
+    console.printf("[%s] Config portal timeout, continuing without WiFi\n", TAG);
     return true;
 #endif
 }
@@ -323,7 +325,7 @@ static bool init_espnow(void)
 {
     if (esp_now_init() != 0)
     {
-        Serial.printf("[%s] ESP-NOW init failed\n", TAG);
+        console.printf("[%s] ESP-NOW init failed\n", TAG);
         return false;
     }
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
@@ -338,14 +340,14 @@ static bool init_espnow(void)
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            Serial.printf("[%s] Failed to add gateway peer %s: %d\n", TAG, mac_str, ret);
+            console.printf("[%s] Failed to add gateway peer %s: %d\n", TAG, mac_str, ret);
         }
     }
 
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     esp_now_add_peer(broadcast_mac, ESP_NOW_ROLE_COMBO, WiFi.channel(), NULL, 0);
 
-    Serial.printf("[%s] ESP-NOW initialized\n", TAG);
+    console.printf("[%s] ESP-NOW initialized\n", TAG);
     return true;
 }
 
@@ -354,7 +356,7 @@ static void send_gw_discover(void)
     espnow_gw_discover_t disc = { .msg_type = ESPNOW_MSG_GW_DISCOVER };
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     esp_now_send(broadcast_mac, (uint8_t *)&disc, sizeof(disc));
-    Serial.printf("[%s] GW_DISCOVER sent\n", TAG);
+    console.printf("[%s] GW_DISCOVER sent\n", TAG);
 }
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
@@ -393,32 +395,30 @@ static void handle_api_status(void)
 static void print_status(void)
 {
     unsigned long up = (millis() - s_start_time) / 1000;
-    Serial.printf("\n--- Repeater Status ---\n");
-    Serial.printf("  Uptime:    %lums\n", up);
-    Serial.printf("  Received:  %d\n", s_received);
-    Serial.printf("  Forwarded: %d\n", s_forwarded);
-    Serial.printf("  Clients:   %d\n", s_client_count);
-    Serial.printf("  Monitor:   %s\n", s_monitor ? "ativo" : "desligado");
-    Serial.printf("  Channel:   %d\n", WiFi.channel());
+    console.printf("\n--- Repeater Status ---\n");
+    console.printf("  Uptime:    %lums\n", up);
+    console.printf("  Received:  %d\n", s_received);
+    console.printf("  Forwarded: %d\n", s_forwarded);
+    console.printf("  Clients:   %d\n", s_client_count);
+    console.printf("  Monitor:   %s\n", s_monitor ? "ativo" : "desligado");
+    console.printf("  Channel:   %d\n", WiFi.channel());
     if (s_gateway_configured)
     {
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        Serial.printf("  Gateway:   %s\n", mac_str);
+        console.printf("  Gateway:   %s\n", mac_str);
     }
     for (int i = 0; i < s_client_count; i++)
     {
         char mac_str[18];
         mac_to_str(s_client_peers[i], mac_str, sizeof(mac_str));
-        Serial.printf("  Client %d:  %s\n", i, mac_str);
+        console.printf("  Client %d:  %s\n", i, mac_str);
     }
-    Serial.printf("------------------------\n\n");
+    console.printf("------------------------\n\n");
 }
 
-static void handle_serial(void)
+static void handle_serial(char c)
 {
-    if (Serial.available() <= 0) return;
-    char c = Serial.read();
     switch (c)
     {
     case 's':
@@ -428,25 +428,25 @@ static void handle_serial(void)
     case 'm':
     case 'M':
         s_monitor = !s_monitor;
-        Serial.printf("[%s] Monitor %s\n", TAG, s_monitor ? "ativado" : "desativado");
+        console.printf("[%s] Monitor %s\n", TAG, s_monitor ? "ativado" : "desativado");
         break;
     case 'c':
     case 'C':
         s_received = 0;
         s_forwarded = 0;
-        Serial.printf("[%s] Estatisticas zeradas\n", TAG);
+        console.printf("[%s] Estatisticas zeradas\n", TAG);
         break;
     case 'd':
     case 'D':
-        Serial.printf("[%s] Enviando GW_DISCOVER...\n", TAG);
+        console.printf("[%s] Enviando GW_DISCOVER...\n", TAG);
         send_gw_discover();
         break;
     case 'w':
     case 'W':
 #ifdef STATIC_WIFI
-        Serial.printf("[%s] WiFi configurado estaticamente via build flags\n", TAG);
+        console.printf("[%s] WiFi configurado estaticamente via build flags\n", TAG);
 #else
-        Serial.printf("[%s] Abrindo portal de configuracao...\n", TAG);
+        console.printf("[%s] Abrindo portal de configuracao...\n", TAG);
         wifi_setup(true);
 #endif
         break;
@@ -457,15 +457,15 @@ static void handle_serial(void)
     case 'h':
     case 'H':
     case '?':
-        Serial.printf("\n--- Comandos ---\n");
-        Serial.printf("  s    - status\n");
-        Serial.printf("  d    - descobrir gateway (GW_DISCOVER)\n");
-        Serial.printf("  w    - reconfigurar WiFi + gateway MAC\n");
-        Serial.printf("  m    - monitor (liga/desliga log de pacotes)\n");
-        Serial.printf("  c    - zerar contadores\n");
-        Serial.printf("  r    - reset\n");
-        Serial.printf("  h/?  - ajuda\n");
-        Serial.printf("----------------\n\n");
+        console.printf("\n--- Comandos ---\n");
+        console.printf("  s    - status\n");
+        console.printf("  d    - descobrir gateway (GW_DISCOVER)\n");
+        console.printf("  w    - reconfigurar WiFi + gateway MAC\n");
+        console.printf("  m    - monitor (liga/desliga log de pacotes)\n");
+        console.printf("  c    - zerar contadores\n");
+        console.printf("  r    - reset\n");
+        console.printf("  h/?  - ajuda\n");
+        console.printf("----------------\n\n");
         break;
     }
 }
@@ -483,7 +483,7 @@ void setup(void)
         save_gateway_mac();
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        Serial.printf("[%s] Gateway MAC from config: %s\n", TAG, mac_str);
+        console.printf("[%s] Gateway MAC from config: %s\n", TAG, mac_str);
     }
 #endif
 
@@ -497,22 +497,27 @@ void setup(void)
         s_server.on("/", handle_root);
         s_server.on("/api/status", handle_api_status);
         s_server.begin();
-        Serial.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+        console.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
     }
     else
     {
-        Serial.printf("\n  WiFi: nao conectado (somente ESP-NOW)\n");
+        console.printf("\n  WiFi: nao conectado (somente ESP-NOW)\n");
     }
 
     if (s_gateway_configured)
-        Serial.printf("  Repeater pronto! Pressione 'h' para ajuda\n\n");
+        console.printf("  Repeater pronto! Pressione 'h' para ajuda\n\n");
     else
-        Serial.printf("  Repeater sem gateway! Aguardando GW_DISCOVER... (use 'd' para buscar)\n\n");
+        console.printf("  Repeater sem gateway! Aguardando GW_DISCOVER... (use 'd' para buscar)\n\n");
 }
 
 void loop(void)
 {
-    handle_serial();
+    console.loop();
+    if (Serial.available() > 0)
+        handle_serial(Serial.read());
+    int tc = console.telnet_read();
+    if (tc >= 0)
+        handle_serial((char)tc);
     if (WiFi.status() == WL_CONNECTED)
         s_server.handleClient();
 
@@ -540,7 +545,7 @@ void loop(void)
     /* Gateway timeout: if no communication for 60s, clear config and rediscover */
     if (s_gateway_configured && s_last_gateway_comm > 0 && (now - s_last_gateway_comm > 60000))
     {
-        Serial.printf("[%s] Gateway timeout (no comm for 1min), clearing config\n", TAG);
+        console.printf("[%s] Gateway timeout (no comm for 1min), clearing config\n", TAG);
         s_gateway_configured = false;
         memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
         /* Clear from EEPROM */

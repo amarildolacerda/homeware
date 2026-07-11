@@ -10,6 +10,7 @@
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
+#include "console.h"
 
 static const char *TAG = "esp8266-chuva";
 
@@ -73,7 +74,7 @@ static bool load_gateway_mac(void)
         EEPROM.end();
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        Serial.printf("[%s] Loaded gateway MAC: %s\n", TAG, mac_str);
+        console.printf("[%s] Loaded gateway MAC: %s\n", TAG, mac_str);
         return true;
     }
     EEPROM.end();
@@ -152,11 +153,11 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
                 s_gateway_connected = true;
                 char mac_str[18];
                 mac_to_str(mac, mac_str, sizeof(mac_str));
-                Serial.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
+                console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
             }
             else
             {
-                Serial.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
+                console.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
             }
             break;
         }
@@ -168,7 +169,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             {
                 s_paired = false;
                 s_gateway_connected = false;
-                Serial.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
+                console.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
             }
             else
             {
@@ -184,14 +185,14 @@ static bool espnow_init_client(void)
 {
     if (esp_now_init() != 0)
     {
-        Serial.printf("[%s] ESP-NOW init failed\n", TAG);
+        console.printf("[%s] ESP-NOW init failed\n", TAG);
         return false;
     }
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
     esp_now_register_send_cb(espnow_send_cb);
     esp_now_register_recv_cb(espnow_recv_cb);
     s_espnow_ready = true;
-    Serial.printf("[%s] ESP-NOW initialized\n", TAG);
+    console.printf("[%s] ESP-NOW initialized\n", TAG);
     return true;
 }
 
@@ -206,7 +207,7 @@ static bool espnow_add_peer(const uint8_t *mac)
     {
         char mac_str[18];
         mac_to_str(mac, mac_str, sizeof(mac_str));
-        Serial.printf("[%s] Failed to add peer %s: %d\n", TAG, mac_str, ret);
+        console.printf("[%s] Failed to add peer %s: %d\n", TAG, mac_str, ret);
     }
     return (ret == 0);
 }
@@ -243,7 +244,7 @@ static bool espnow_send_data(void)
 
     if (!espnow_add_peer(s_gateway_mac))
     {
-        Serial.printf("[%s] Failed to add gateway peer\n", TAG);
+        console.printf("[%s] Failed to add gateway peer\n", TAG);
         return false;
     }
 
@@ -252,7 +253,7 @@ static bool espnow_send_data(void)
     int ret = esp_now_send(s_gateway_mac, buf, sizeof(buf));
     if (ret != 0)
     {
-        Serial.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
+        console.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
         s_send_pending = false;
         return false;
     }
@@ -308,7 +309,7 @@ static bool espnow_send_pair_request(void)
     int ret = esp_now_send(s_broadcast_mac, buf, sizeof(buf));
     if (ret != 0)
     {
-        Serial.printf("[%s] Pair request send failed: %d\n", TAG, ret);
+        console.printf("[%s] Pair request send failed: %d\n", TAG, ret);
         return false;
     }
     return true;
@@ -349,17 +350,17 @@ static bool wifi_setup(bool force_config_portal = false)
     {
         wifiManager.setTimeout(180);
         wifiManager.setConnectRetries(3);
-        Serial.printf("[%s] Connecting to saved WiFi: %s\n", TAG, WiFi.SSID().c_str());
+        console.printf("[%s] Connecting to saved WiFi: %s\n", TAG, WiFi.SSID().c_str());
         if (wifiManager.autoConnect())
         {
-            Serial.printf("[%s] WiFi connected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
+            console.printf("[%s] WiFi connected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
             s_wifi_configuration_mode = false;
             return true;
         }
-        Serial.printf("[%s] Failed to connect to saved WiFi\n", TAG);
+        console.printf("[%s] Failed to connect to saved WiFi\n", TAG);
     }
 
-    Serial.printf("[%s] Starting configuration portal...\n", TAG);
+    console.printf("[%s] Starting configuration portal...\n", TAG);
     s_wifi_configuration_mode = true;
     s_wifi_config_start_time = millis();
     wifiManager.setConfigPortalTimeout(300);
@@ -379,7 +380,7 @@ static bool wifi_setup(bool force_config_portal = false)
         return true;
     }
 
-    Serial.printf("[%s] Configuration portal timed out\n", TAG);
+    console.printf("[%s] Configuration portal timed out\n", TAG);
     s_wifi_configuration_mode = false;
     return false;
 }
@@ -393,14 +394,14 @@ static void maintain_wifi_connection(void)
         return;
     s_last_reconnect_attempt = now;
 
-    Serial.printf("[%s] WiFi disconnected. Reconnecting...\n", TAG);
+    console.printf("[%s] WiFi disconnected. Reconnecting...\n", TAG);
     WiFi.begin();
     unsigned long connect_start = millis();
     while (millis() - connect_start < 15000)
     {
         if (WiFi.status() == WL_CONNECTED)
         {
-            Serial.printf("[%s] Reconnected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
+            console.printf("[%s] Reconnected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
             return;
         }
         delay(500);
@@ -418,7 +419,7 @@ static void check_config_portal_timeout(void)
 {
     if (s_wifi_configuration_mode && (millis() - s_wifi_config_start_time > 600000))
     {
-        Serial.printf("[%s] Config portal timeout. Restarting...\n", TAG);
+        console.printf("[%s] Config portal timeout. Restarting...\n", TAG);
         ESP.restart();
     }
 }
@@ -498,11 +499,8 @@ static void handle_api_pin(void)
     }
 }
 
-static void handle_serial(void)
+static void handle_serial(char c)
 {
-    if (Serial.available() <= 0)
-        return;
-    char c = Serial.read();
     switch (c)
     {
     case 'R':
@@ -512,11 +510,11 @@ static void handle_serial(void)
     case 'l':
     case 'L':
     {
-        Serial.printf("\n--- Leitura forcada ---\n");
+        console.printf("\n--- Leitura forcada ---\n");
         read_sensor();
-        Serial.printf("  Chuva:    %d %%\n", s_rain_level);
-        Serial.printf("  Digital:  %s\n", s_rain_digital == LOW ? "chuva" : "seco");
-        Serial.printf("  Bateria:  %d %%\n", s_battery);
+        console.printf("  Chuva:    %d %%\n", s_rain_level);
+        console.printf("  Digital:  %s\n", s_rain_digital == LOW ? "chuva" : "seco");
+        console.printf("  Bateria:  %d %%\n", s_battery);
         if (s_paired)
         {
             s_last_espnow_send = 0;
@@ -525,85 +523,85 @@ static void handle_serial(void)
         }
         else
         {
-            Serial.printf("  (gateway nao pareado)\n");
+            console.printf("  (gateway nao pareado)\n");
         }
-        Serial.printf("-------------------------\n\n");
+        console.printf("-------------------------\n\n");
         break;
     }
     case 'u':
     case 'U':
-        Serial.printf("\n--- OTA ---\n");
-        Serial.printf("  Hostname: %s.local\n", s_device_id);
-        Serial.printf("  Port:     8266 (ArduinoOTA)\n");
-        Serial.printf("  PlatformIO CLI:\n");
-        Serial.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
-        Serial.printf("  espota.py:\n");
-        Serial.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
-        Serial.printf("-------------\n\n");
+        console.printf("\n--- OTA ---\n");
+        console.printf("  Hostname: %s.local\n", s_device_id);
+        console.printf("  Port:     8266 (ArduinoOTA)\n");
+        console.printf("  PlatformIO CLI:\n");
+        console.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
+        console.printf("  espota.py:\n");
+        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
+        console.printf("-------------\n\n");
         break;
     case 'p':
     case 'P':
     {
-        Serial.printf("\n--- Par ---\n");
+        console.printf("\n--- Par ---\n");
         s_paired = false;
         s_gateway_connected = false;
         s_pair_attempts = 0;
-        Serial.printf("  Estado de pareamento resetado\n");
-        Serial.printf("  Enviando requisicao de par...\n");
+        console.printf("  Estado de pareamento resetado\n");
+        console.printf("  Enviando requisicao de par...\n");
         if (espnow_send_pair_request())
-            Serial.printf("  Requisicao enviada!\n");
+            console.printf("  Requisicao enviada!\n");
         else
-            Serial.printf("  Falha ao enviar requisicao\n");
-        Serial.printf("----------------\n\n");
+            console.printf("  Falha ao enviar requisicao\n");
+        console.printf("----------------\n\n");
         break;
     }
     case 'h':
     case 'H':
     case '?':
-        Serial.printf("\n--- Comandos ---\n");
-        Serial.printf("  l    - ler sensor agora\n");
-        Serial.printf("  r    - reset\n");
-        Serial.printf("  s    - status do dispositivo\n");
-        Serial.printf("  p    - resetar par e tentar parear\n");
-        Serial.printf("  u    - info OTA\n");
-        Serial.printf("  h/?  - esta ajuda\n");
-        Serial.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
+        console.printf("\n--- Comandos ---\n");
+        console.printf("  l    - ler sensor agora\n");
+        console.printf("  r    - reset\n");
+        console.printf("  s    - status do dispositivo\n");
+        console.printf("  p    - resetar par e tentar parear\n");
+        console.printf("  u    - info OTA\n");
+        console.printf("  h/?  - esta ajuda\n");
+        console.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
         if (s_paired)
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            Serial.printf("  Gateway: %s (slot %d)\n", mac_str, s_assigned_slot);
+            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_assigned_slot);
         }
-        Serial.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
-        Serial.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
-        Serial.printf("----------------\n\n");
+        console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
+        console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
+        console.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
+        console.printf("----------------\n\n");
         break;
     case 's':
     case 'S':
     {
         unsigned long up = (millis() - s_start_time) / 1000;
-        Serial.printf("\n--- Status ---\n");
-        Serial.printf("  Dispositivo: %s\n", s_device_id);
-        Serial.printf("  Nome:        %s\n", s_device_name);
-        Serial.printf("  Chuva:       %d %%\n", s_rain_level);
-        Serial.printf("  Digital:     %s\n", s_rain_digital == LOW ? "chuva" : "seco");
-        Serial.printf("  Bateria:     %d %%\n", s_battery);
+        console.printf("\n--- Status ---\n");
+        console.printf("  Dispositivo: %s\n", s_device_id);
+        console.printf("  Nome:        %s\n", s_device_name);
+        console.printf("  Chuva:       %d %%\n", s_rain_level);
+        console.printf("  Digital:     %s\n", s_rain_digital == LOW ? "chuva" : "seco");
+        console.printf("  Bateria:     %d %%\n", s_battery);
         if (s_paired)
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            Serial.printf("  Gateway:     %s (slot %d) %s\n", mac_str, s_assigned_slot,
+            console.printf("  Gateway:     %s (slot %d) %s\n", mac_str, s_assigned_slot,
                           s_gateway_connected ? "conectado" : "desconectado");
         }
         else
         {
-            Serial.printf("  Gateway:     nao pareado\n");
+            console.printf("  Gateway:     nao pareado\n");
         }
-        Serial.printf("  Browser:     http://%s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
-        Serial.printf("  Uptime:      %lu s\n", up);
-        Serial.printf("---------------\n\n");
+        console.printf("  Browser:     http://%s\n", WiFi.localIP().toString().c_str());
+        console.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
+        console.printf("  Uptime:      %lu s\n", up);
+        console.printf("---------------\n\n");
         break;
     }
     }
@@ -628,7 +626,7 @@ static void handle_ota_upload(void)
     HTTPUpload &upload = s_server.upload();
     if (upload.status == UPLOAD_FILE_START)
     {
-        Serial.printf("[%s] OTA update started: %s (%d bytes)\n", TAG, upload.filename.c_str(), upload.totalSize);
+        console.printf("[%s] OTA update started: %s (%d bytes)\n", TAG, upload.filename.c_str(), upload.totalSize);
         if (!Update.begin(upload.totalSize))
             Update.printError(Serial);
     }
@@ -640,7 +638,7 @@ static void handle_ota_upload(void)
     else if (upload.status == UPLOAD_FILE_END)
     {
         if (Update.end(true))
-            Serial.printf("[%s] OTA update success: %d bytes\n", TAG, upload.totalSize);
+            console.printf("[%s] OTA update success: %d bytes\n", TAG, upload.totalSize);
         else
             Update.printError(Serial);
     }
@@ -650,6 +648,7 @@ void setup(void)
 {
     Serial.begin(115200);
     delay(1000);
+    console.begin();
     s_start_time = millis();
 
     uint32_t chip_id = ESP.getChipId();
@@ -657,20 +656,20 @@ void setup(void)
 
     load_device_name();
 
-    Serial.printf("\n");
-    Serial.printf("============================================\n");
-    Serial.printf("  ESP8266 Rain Sensor " FW_VERSION "\n");
-    Serial.printf("  Device: %s\n", s_device_id);
-    Serial.printf("  Nome:   %s\n", s_device_name);
-    Serial.printf("============================================\n");
+    console.printf("\n");
+    console.printf("============================================\n");
+    console.printf("  ESP8266 Rain Sensor " FW_VERSION "\n");
+    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Nome:   %s\n", s_device_name);
+    console.printf("============================================\n");
 
     randomSeed(analogRead(A0));
     init_hardware();
-    Serial.printf("============================================\n");
+    console.printf("============================================\n");
 
     if (!wifi_setup(false))
     {
-        Serial.printf("[%s] WiFi setup failed, restarting...\n", TAG);
+        console.printf("[%s] WiFi setup failed, restarting...\n", TAG);
         delay(5000);
         ESP.restart();
     }
@@ -684,38 +683,43 @@ void setup(void)
     s_server.begin();
 
     ArduinoOTA.setHostname(s_device_id);
-    ArduinoOTA.onStart([]() { Serial.printf("[%s] OTA update start\n", TAG); });
-    ArduinoOTA.onEnd([]() { Serial.printf("[%s] OTA update end\n", TAG); });
+    ArduinoOTA.onStart([]() { console.printf("[%s] OTA update start\n", TAG); });
+    ArduinoOTA.onEnd([]() { console.printf("[%s] OTA update end\n", TAG); });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("[%s] OTA progress: %u%%\r", TAG, (progress * 100) / total);
+        console.printf("[%s] OTA progress: %u%%\r", TAG, (progress * 100) / total);
     });
     ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("[%s] OTA error: %d\n", TAG, error);
+        console.printf("[%s] OTA error: %d\n", TAG, error);
     });
     ArduinoOTA.begin();
-    Serial.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
+    console.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
 
-    Serial.printf("\n  => Browser: http://%s\n", WiFi.localIP().toString().c_str());
-    Serial.printf("  => Terminal: 'h' comando de ajuda\n");
+    console.printf("\n  => Browser: http://%s\n", WiFi.localIP().toString().c_str());
+    console.printf("  => Terminal: 'h' comando de ajuda\n");
 
     if (load_gateway_mac())
     {
-        Serial.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
+        console.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;
     }
     else
     {
-        Serial.printf("[%s] No saved gateway MAC, will pair\n", TAG);
+        console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
 
-    Serial.printf("============================================\n");
-    Serial.printf("  Pronto! Pressione 'h' para ajuda\n");
-    Serial.printf("============================================\n\n");
+    console.printf("============================================\n");
+    console.printf("  Pronto! Pressione 'h' para ajuda\n");
+    console.printf("============================================\n\n");
 }
 
 void loop(void)
 {
-    handle_serial();
+    console.loop();
+    if (Serial.available() > 0)
+        handle_serial(Serial.read());
+    int tc = console.telnet_read();
+    if (tc >= 0)
+        handle_serial((char)tc);
     check_config_portal_timeout();
     ArduinoOTA.handle();
     s_server.handleClient();
@@ -742,12 +746,12 @@ void loop(void)
         {
             s_last_espnow_pair = now;
             s_pair_attempts++;
-            Serial.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
+            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
             espnow_send_pair_request();
             if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
             {
                 s_pair_attempts = 0;
-                Serial.printf("[%s] Max pair attempts, waiting before retry\n", TAG);
+                console.printf("[%s] Max pair attempts, waiting before retry\n", TAG);
                 delay(60000);
             }
         }
@@ -798,7 +802,7 @@ void loop(void)
                 }
                 else
                 {
-                    Serial.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
+                    console.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
                     s_paired = false;
                     s_pair_attempts = 0;
                     s_last_espnow_pair = 0;
@@ -810,7 +814,7 @@ void loop(void)
     if (now - s_last_heartbeat > HEARTBEAT_INTERVAL)
     {
         s_last_heartbeat = now;
-        Serial.printf("[%s] RSSI=%d dBm  up=%lus\n", TAG, WiFi.RSSI(), (millis() - s_start_time) / 1000);
+        console.printf("[%s] RSSI=%d dBm  up=%lus\n", TAG, WiFi.RSSI(), (millis() - s_start_time) / 1000);
         if (s_paired)
             espnow_send_heartbeat();
     }
