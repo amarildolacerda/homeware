@@ -85,7 +85,7 @@ load();setInterval(load,5000);
 
 static const char PAGE_DOCS[] PROGMEM = R"=====(
 <!DOCTYPE html>
-<html lang="pt-BBR">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
