@@ -172,6 +172,19 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
+        case SENSOR_TYPE_REPEATER: {
+            if (payload_len >= sizeof(payload_repeater_status_t)) {
+                payload_repeater_status_t *p = (payload_repeater_status_t*)payload;
+                s->state.repeater.received = p->received;
+                s->state.repeater.forwarded = p->forwarded;
+                s->state.repeater.client_count = p->client_count;
+                s->state.repeater.channel = p->channel;
+                s->state.repeater.uptime_s = p->uptime_s;
+                s->state.repeater.free_heap = p->free_heap;
+                s->state.repeater.ack_failures = p->ack_failures;
+            }
+            break;
+        }
     }
 
     size_t expected = 0;
@@ -185,6 +198,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_TANK:     expected = sizeof(payload_tank_t); break;
         case SENSOR_TYPE_ONOFF:
         case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
+        case SENSOR_TYPE_REPEATER: expected = sizeof(payload_repeater_status_t); break;
     }
     if (expected && payload_len >= expected + 6) {
         memcpy(s->ip, payload + payload_len - 6, 4);
@@ -297,6 +311,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
         case SENSOR_TYPE_ONOFF: return "Interruptor";
         case SENSOR_TYPE_LIGHT: return "Lâmpada";
         case SENSOR_TYPE_TANK: return "Tanque";
+        case SENSOR_TYPE_REPEATER: return "Repeater";
         default: return "Sensor";
     }
 }
@@ -312,6 +327,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_ONOFF: return "onoff";
         case SENSOR_TYPE_LIGHT: return "light";
         case SENSOR_TYPE_TANK: return "tanque";
+        case SENSOR_TYPE_REPEATER: return "repeater";
         default: return "unknown";
     }
 }
