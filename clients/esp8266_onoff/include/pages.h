@@ -81,7 +81,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
 </div>
-<div class="sidebar-bottom"><span id="sbVersion">v0.0.21</span></div>
+<div class="sidebar-bottom"><span id="sbVersion">...</span></div>
 </div>
 <div class="main">
 <div class="stats-header">
@@ -200,6 +200,7 @@ let name=d.device_name||'OnOff';
 document.getElementById('pageTitle').textContent=name;
 document.getElementById('sbName').textContent=name;
 document.getElementById('sbId').textContent=d.device_id||'';
+const ve=document.getElementById('sbVersion');if(ve&&d.fw_version)ve.textContent=d.fw_version;
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
