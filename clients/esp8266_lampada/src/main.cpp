@@ -923,7 +923,7 @@ static void handle_api_state(void)
         doc["rx_count"] = s_espnow_rx_count;
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
-        doc["repeater_active"] = s_use_repeater;
+        doc["repeater_active"] = (s_repeater_fwd > 0);
         if (s_use_repeater)
         {
             doc["repeater_fwd"] = s_repeater_fwd;
