@@ -464,6 +464,10 @@ static void handle_api_status(void)
     doc["tx_count"] = s_espnow_tx_count;
     doc["rx_count"] = s_espnow_rx_count;
     doc["last_activity_s"] = s_has_activity ? (int)((millis() - s_last_activity) / 1000) : -1;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["fw_version"] = FW_VERSION;
+    doc["device_id"] = String("esp8266_") + String(ESP.getChipId(), HEX);
+    doc["device_name"] = s_device_name;
     JsonArray arr = doc["client_list"].to<JsonArray>();
     for (int i = 0; i < s_client_count; i++)
     {
@@ -584,6 +588,24 @@ void setup(void)
         s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
         s_server.on("/api/status", handle_api_status);
         s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
+        s_server.on("/api/restart", HTTP_POST, []() {
+            s_server.send(200, "application/json", "{\"ok\":true}");
+            delay(500);
+            ESP.restart();
+        });
+        s_server.on("/api/wifi", HTTP_GET, []() {
+            DynamicJsonDocument doc(256);
+            doc["ssid"] = WiFi.SSID();
+            doc["ip"] = WiFi.localIP().toString();
+            doc["rssi"] = WiFi.RSSI();
+            doc["device_name"] = s_device_name;
+            String json;
+            serializeJson(doc, json);
+            s_server.send(200, "application/json", json);
+        });
+        s_server.on("/api/wifi", HTTP_POST, []() {
+            s_server.send(200, "application/json", "{\"ok\":true}");
+        });
         s_server.begin();
         console.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
     }

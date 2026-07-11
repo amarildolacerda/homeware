@@ -146,7 +146,7 @@ var t='';var cl=d.client_list||[];
 for(var i=0;i<cl.length;i++){t+='<tr><td>'+(i+1)+'</td><td>'+cl[i]+'</td></tr>'}
 document.getElementById('tbl').innerHTML=t;
 document.getElementById('noClients').style.display=cl.length?'none':'block';
-var gwConnected=a>=0;
+var gwConnected=a>=0&&a<300;
 document.getElementById('detGateway').textContent=gwConnected?'Online':'Offline';
 document.getElementById('detGateway').className='value'+(gwConnected?' green':'');
 document.getElementById('detChannel').textContent=d.channel||'-';
