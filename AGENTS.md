@@ -59,6 +59,7 @@
 - dashboards de clients ESP8266 devem usar layout compacto com seção "Detalhes" collapsível (expandir ao clicar), mostrando apenas o controle principal + badge estado por padrão
 - os arquivos fontes devem tentar organização separados por responsabilidade, tentar otimizar uso de memoria / PROGMEM nos ESP, deixando o main mais limpo, usar config.h para mapear configurações
 - mostrar no dashboard a versão (FW_VERSION)
+- quando conseguir resolver um problema, erro ou mudança de especificação - registrar a nova regra para aprendizado e reaproveitamento nas proximas sessões
 
 ### Novos Clients
 1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações relevantes ao cliente

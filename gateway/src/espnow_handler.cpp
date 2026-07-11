@@ -39,9 +39,10 @@ static void queue_bridge_state(int slot) {
 
 static void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slot);
 static void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot);
+static void send_gw_announce(const uint8_t *mac);
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
-    if (!data || len < 2) {
+    if (!data || len < 1) {
         s_crc_errors++;
         return;
     }
@@ -131,6 +132,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             break;
         }
 
+        case ESPNOW_MSG_GW_DISCOVER: {
+            char from_str[18];
+            mac_to_str(mac, from_str, sizeof(from_str));
+            console.printf("[ESP-NOW] GW_DISCOVER from %s\n", from_str);
+            send_gw_announce(mac);
+            break;
+        }
+
         default:
             s_crc_errors++;
             break;
@@ -183,6 +192,25 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     console.printf("[ESP-NOW] Pair response sent to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
 }
 
+static void send_gw_announce(const uint8_t *mac) {
+    espnow_gw_announce_t ann = {
+        .msg_type = ESPNOW_MSG_GW_ANNOUNCE,
+        .gateway_mac = {0},
+        .fw_version = {0}
+    };
+    mac_copy(ann.gateway_mac, s_gateway_mac);
+    strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
+
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper(mac, ch);
+    int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&ann, sizeof(ann));
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+    console.printf("[ESP-NOW] GW_ANNOUNCE sent to %s gw=%s ret=%d\n", mac_str,
+                   FW_VERSION, ret);
+}
+
 bool espnow_handler_init() {
     memset(s_pending_pairs, 0, sizeof(s_pending_pairs));
     WiFi.mode(WIFI_STA);
@@ -197,6 +225,9 @@ bool espnow_handler_init() {
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
 #endif
     esp_now_register_recv_cb(espnow_recv_cb);
+
+    uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    espnow_add_peer_wrapper(broadcast_mac, WiFi.channel());
     
     console.printf("[ESP-NOW] Initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X WiFi ch=%d\n",
                   s_gateway_mac[0], s_gateway_mac[1], s_gateway_mac[2],

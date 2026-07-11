@@ -19,6 +19,8 @@ typedef enum {
     ESPNOW_MSG_OTA_TRIGGER = 0x06,
     ESPNOW_MSG_COMMAND = 0x07,
     ESPNOW_MSG_TIME_SYNC = 0x08,
+    ESPNOW_MSG_GW_ANNOUNCE = 0x09,
+    ESPNOW_MSG_GW_DISCOVER = 0x0A,
 } espnow_msg_type_t;
 
 typedef enum {
@@ -125,6 +127,16 @@ typedef struct __attribute__((packed)) {
     uint8_t gateway_mac[6];
     uint32_t epoch_seconds;
 } espnow_time_sync_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+    uint8_t gateway_mac[6];
+    uint8_t fw_version[4];
+} espnow_gw_announce_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+} espnow_gw_discover_t;
 
 #define PAIR_STATUS_OK 0
 #define PAIR_STATUS_FULL 1

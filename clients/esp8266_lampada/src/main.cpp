@@ -49,6 +49,17 @@ static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
+#define MAX_REPEATER_CLIENTS 5
+
+typedef struct {
+    uint8_t mac[6];
+    uint32_t pkt_count;
+} repeater_client_t;
+
+static repeater_client_t s_rep_clients[MAX_REPEATER_CLIENTS];
+static int s_rep_client_num = 0;
+static uint32_t s_repeater_fwd = 0;
+
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 static bool s_tz_changed = false;
@@ -70,6 +81,24 @@ static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+static void track_repeater_client(const uint8_t *mac)
+{
+    for (int i = 0; i < s_rep_client_num; i++)
+    {
+        if (memcmp(s_rep_clients[i].mac, mac, 6) == 0)
+        {
+            s_rep_clients[i].pkt_count++;
+            return;
+        }
+    }
+    if (s_rep_client_num < MAX_REPEATER_CLIENTS)
+    {
+        memcpy(s_rep_clients[s_rep_client_num].mac, mac, 6);
+        s_rep_clients[s_rep_client_num].pkt_count = 1;
+        s_rep_client_num++;
+    }
+}
 
 
 // D1-MINI é invtido
@@ -466,11 +495,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         {
             /* From gateway → broadcast (other devices check target_mac) */
             esp_now_send(s_broadcast_mac, data, len);
+            s_repeater_fwd++;
         }
         else
         {
             /* From client → forward to gateway */
+            track_repeater_client(mac);
             esp_now_send(s_gateway_mac, data, len);
+            s_repeater_fwd++;
         }
     }
 }
@@ -891,6 +923,20 @@ static void handle_api_state(void)
         doc["rx_count"] = s_espnow_rx_count;
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
+        doc["repeater_active"] = s_use_repeater;
+        if (s_use_repeater)
+        {
+            doc["repeater_fwd"] = s_repeater_fwd;
+            JsonArray rep_clients = doc["repeater_clients"].to<JsonArray>();
+            for (int i = 0; i < s_rep_client_num; i++)
+            {
+                JsonObject obj = rep_clients.add<JsonObject>();
+                char mac_str[18];
+                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                obj["mac"] = mac_str;
+                obj["packets"] = s_rep_clients[i].pkt_count;
+            }
+        }
         if (s_tz_changed)
             doc["timezone"] = s_timezone_offset;
         serializeJson(doc, json);
@@ -1068,6 +1114,8 @@ static void handle_console(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+        console.printf("  x    - repeater stats\n");
+        console.printf("  c    - zerar contadores\n");
         console.printf("  u    - info OTA\n");
         console.printf("  a    - info Alexa\n");
         console.printf("  h/?  - esta ajuda\n");
@@ -1092,6 +1140,36 @@ static void handle_console(char c)
         console.printf("               \"Alexa, desligue %s\"\n", s_device_name);
         console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
+        break;
+    case 'x':
+    case 'X':
+        if (s_use_repeater)
+        {
+            console.printf("\n--- Repeater Stats ---\n");
+            console.printf("  Forwarded: %lu\n", s_repeater_fwd);
+            console.printf("  Clients:   %d\n", s_rep_client_num);
+            for (int i = 0; i < s_rep_client_num; i++)
+            {
+                char mac_str[18];
+                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, s_rep_clients[i].pkt_count);
+            }
+            console.printf("----------------------\n\n");
+        }
+        else
+        {
+            console.printf("[%s] Repeater mode disabled\n", TAG);
+        }
+        break;
+    case 'c':
+    case 'C':
+        s_espnow_tx_count = 0;
+        s_espnow_rx_count = 0;
+        s_on_count = 0;
+        s_repeater_fwd = 0;
+        for (int i = 0; i < s_rep_client_num; i++)
+            s_rep_clients[i].pkt_count = 0;
+        console.printf("[%s] Contadores zerados\n", TAG);
         break;
     case 's':
     case 'S':

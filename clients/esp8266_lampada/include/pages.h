@@ -79,6 +79,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
+<div class="nav-item" data-section="repeater" onclick="showSection('repeater')" id="navRepeater" style="display:none"><span>📡</span><span>Repeater</span></div>
 </div>
 <div class="sidebar-bottom"><span id="sbVersion">v0.0.21</span></div>
 </div>
@@ -129,6 +130,11 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
+</div>
+<div class="section" id="secRepeater">
+<h1>Repeater</h1>
+<div class="row"><span class="label">Total Retransmitidos</span><span class="value" id="repFwd">0</span></div>
+<div id="repClientList"></div>
 </div>
 </div>
 <div class="footer-bar">
@@ -214,8 +220,14 @@ let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers()},3000);
-fetchState();fetchSettings();fetchTimers();
+async function fetchRepeater(){try{let r=await fetch('/api/state');let d=await r.json();
+let nav=document.getElementById('navRepeater');
+if(d.repeater_active){nav.style.display='flex';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
+let list=document.getElementById('repClientList');list.innerHTML='';
+if(d.repeater_clients&&d.repeater_clients.length){d.repeater_clients.forEach(function(c){
+let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none'}}catch(e){}}
+setInterval(function(){fetchState();fetchRepeater();if(currentSection==='timer')fetchTimers()},3000);
+fetchState();fetchSettings();fetchTimers();fetchRepeater();
 </script>
 </body>
 </html>

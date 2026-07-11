@@ -4,7 +4,7 @@
 #include "timer.h"
 
 static timer_config_t s_timers[MAX_TIMERS];
-static uint8_t s_last_fired_minute[MAX_TIMERS]; // track per-timer to avoid re-fire
+static uint16_t s_last_fired_minute[MAX_TIMERS]; // track per-timer to avoid re-fire
 static bool s_timers_loaded = false;
 
 bool timer_init() {
@@ -60,12 +60,12 @@ int8_t timer_check(unsigned long current_epoch, int timezone_offset) {
     uint8_t now_hour = lt->tm_hour;
     uint8_t now_min = lt->tm_min;
     uint8_t now_wday = lt->tm_wday; // 0=Sun
-    uint8_t now_minute_id = now_hour * 60 + now_min;
+    uint16_t now_minute_id = now_hour * 60 + now_min;
 
     for (int i = 0; i < MAX_TIMERS; i++) {
         if (!s_timers[i].enabled) continue;
 
-        uint8_t timer_minute_id = s_timers[i].hour * 60 + s_timers[i].minute;
+        uint16_t timer_minute_id = s_timers[i].hour * 60 + s_timers[i].minute;
         if (timer_minute_id != now_minute_id) continue;
         if (s_last_fired_minute[i] == now_minute_id) continue;
 
