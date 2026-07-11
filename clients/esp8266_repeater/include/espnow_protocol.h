@@ -21,6 +21,7 @@ typedef enum {
     ESPNOW_MSG_TIME_SYNC = 0x08,
     ESPNOW_MSG_GW_ANNOUNCE = 0x09,
     ESPNOW_MSG_GW_DISCOVER = 0x0A,
+    ESPNOW_MSG_REPEATER_STATUS = 0x0B,
 } espnow_msg_type_t;
 
 typedef enum {
@@ -32,6 +33,7 @@ typedef enum {
     SENSOR_TYPE_TANK = 6,
     SENSOR_TYPE_DHT_GAS = 7,
     SENSOR_TYPE_ONOFF = 8,
+    SENSOR_TYPE_REPEATER = 10,
 } sensor_type_t;
 
 typedef struct __attribute__((packed)) {
@@ -86,6 +88,17 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint8_t state;
 } payload_onoff_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t received;
+    uint16_t forwarded;
+    uint8_t  client_count;
+    uint8_t  channel;
+    int16_t  rssi;
+    uint32_t uptime_s;
+    uint16_t free_heap;
+    uint8_t  ack_failures;
+} payload_repeater_status_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t msg_type;
