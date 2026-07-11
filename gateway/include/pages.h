@@ -126,6 +126,11 @@ function fmtUptime(ms) {
   return Math.floor(s/86400)+'d '+Math.floor((s%86400)/3600)+'h';
 }
 
+function fmtHeap(b) {
+  if (!b) return '-';
+  return b > 1024 ? (b/1024).toFixed(1)+'KB' : b+'B';
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -251,6 +256,10 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 </div>
 <div class="filters" id="filter-bar"></div>
 <div id="sensors-grid" class="grid grid-2"><div class="loading">carregando...</div></div>
+<div id="repeaterSection" style="display:none">
+<h2 style="font-size:0.95rem;font-weight:600;color:var(--primary);margin:20px 0 12px">Repeaters</h2>
+<div id="repeaterList"></div>
+</div>
 
 <div class="modal" id="rename-modal">
   <div class="modal-content" style="max-width:360px">
@@ -339,11 +348,12 @@ function renderState(s) {
 
 function renderSensors(sensors) {
   var grid = document.getElementById('sensors-grid');
-  if (!sensors || !sensors.length) {
+  var nonRepeater = sensors.filter(function(s) { return s.type_name !== 'repeater'; });
+  if (!nonRepeater || !nonRepeater.length) {
     grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted-subtle)">Nenhum sensor pareado</div>';
     return;
   }
-  grid.innerHTML = sensors.map(function(s) {
+  grid.innerHTML = nonRepeater.map(function(s) {
     var off = !s.online;
     var offClass = off ? ' offline' : '';
     var isType9 = s.type === 9;
@@ -381,12 +391,45 @@ function renderSensors(sensors) {
   }).join('');
 }
 
+function renderRepeaters(sensors) {
+  var list = document.getElementById('repeaterList');
+  var section = document.getElementById('repeaterSection');
+  var repeaters = sensors.filter(function(s) { return s.type_name === 'repeater'; });
+  if (!repeaters.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = repeaters.map(function(r) {
+    var st = r.state || {};
+    var ago = r.last_seen >= 0 ? fmtUptime(r.last_seen) : 'nunca';
+    return '<div class="device" style="margin-bottom:12px">'+
+      '<div class="device-head">'+
+        '<div>'+
+          '<div class="device-icon">&#x1F504;</div>'+
+          '<div class="device-name"><span>'+escHtml(r.name||'Repeater')+'</span></div>'+
+          '<div class="device-type">Repeater &bull; Slot '+r.slot+' &bull; '+r.mac+'</div>'+
+        '</div>'+
+        '<span class="badge '+(r.online?'online':'offline')+'">'+(r.online?'Online':'Offline')+'</span>'+
+      '</div>'+
+      '<div class="metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:12px">'+
+        '<div class="metric"><div class="metric-label">Recebidos</div><div class="metric-value">'+(st.received||0)+'</div></div>'+
+        '<div class="metric"><div class="metric-label">Encaminhados</div><div class="metric-value">'+(st.forwarded||0)+'</div></div>'+
+        '<div class="metric"><div class="metric-label">Clients</div><div class="metric-value">'+(st.client_count||0)+'</div></div>'+
+        '<div class="metric"><div class="metric-label">Falhas ACK</div><div class="metric-value" style="color:'+(st.ack_failures>0?'var(--danger)':'var(--text)')+'">'+(st.ack_failures||0)+'</div></div>'+
+        '<div class="metric"><div class="metric-label">Canal</div><div class="metric-value">'+(st.channel||'-')+'</div></div>'+
+        '<div class="metric"><div class="metric-label">RSSI</div><div class="metric-value">'+r.last_rssi+' dBm</div></div>'+
+        '<div class="metric"><div class="metric-label">Uptime</div><div class="metric-value">'+fmtUptime(st.uptime_s*1000)+'</div></div>'+
+        '<div class="metric"><div class="metric-label">Memória</div><div class="metric-value">'+fmtHeap(st.free_heap)+'</div></div>'+
+      '</div>'+
+      '<div style="font-size:0.75rem;color:var(--muted-subtle);margin-top:8px">Último envio: '+ago+'</div>'+
+    '</div>';
+  }).join('');
+}
+
 function updateFilters(sensors) {
   var bar = document.getElementById('filter-bar');
   if (!bar) return;
   var types = {};
   sensors.forEach(function(s) { types[s.type] = true; });
-  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada'};
+  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater'};
   var html = '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
   Object.keys(types).sort().forEach(function(t) {
     html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
@@ -583,6 +626,7 @@ async function loadData() {
     s_sensors = sensors;
     updateFilters(sensors);
     renderSensors(sensors);
+    renderRepeaters(sensors);
     filterSensors(s_activeFilter);
     filterStatus(s_statusFilter);
   } catch(e) {
