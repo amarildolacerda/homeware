@@ -140,6 +140,39 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             break;
         }
 
+        case ESPNOW_MSG_REPEATER_STATUS: {
+            if (len < ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t)) { s_crc_errors++; return; }
+            espnow_header_t *hdr = (espnow_header_t*)data;
+
+            if (hdr->version != ESPNOW_PROTOCOL_VERSION) { s_crc_errors++; return; }
+
+            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
+            {
+                char sender_str[18], sensor_str[18];
+                mac_to_str(mac, sender_str, sizeof(sender_str));
+                mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
+                console.printf("[ESP-NOW] REPEATER_STATUS: sender=%s sensor=%s slot=%d\n",
+                    sender_str, sensor_str, slot);
+            }
+
+            if (slot < 0) {
+                slot = sensor_registry_find_free_slot();
+                if (slot < 0) {
+                    console.printf("[ESP-NOW] Repeater rejected: registry full\n");
+                    send_ack(mac, hdr->sequence, PAIR_STATUS_FULL, 0xFF);
+                    return;
+                }
+                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater");
+            }
+
+            sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
+            send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+            log_add("info", "Repeater status slot %d seq %d", slot, hdr->sequence);
+            s_ack_count++;
+            queue_bridge_state(slot);
+            break;
+        }
+
         default:
             s_crc_errors++;
             break;
