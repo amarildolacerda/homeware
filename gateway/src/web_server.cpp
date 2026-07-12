@@ -479,7 +479,38 @@ void web_server_init() {
     });
 
     s_server.on("/api/portal/setup", HTTP_POST, []() {
-        s_server.send(501, "application/json", "{\"error\":\"not implemented\"}");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        if (err || !doc.containsKey("ssid")) {
+            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            return;
+        }
+        const char *ssid = doc["ssid"];
+        const char *pass = doc["pass"] | "";
+        int mode = doc["mode"] | WIFI_MODE_DHCP;
+        const char *ip = doc["ip"] | "";
+        const char *gw = doc["gateway"] | "";
+        const char *mask = doc["subnet"] | "";
+        const char *dns = doc["dns"] | "";
+        if (strlen(ssid) == 0) {
+            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            return;
+        }
+        if (mode == WIFI_MODE_STATIC && (strlen(ip) == 0 || strlen(gw) == 0)) {
+            s_server.send(400, "application/json", "{\"error\":\"static ip and gateway required\"}");
+            return;
+        }
+        const char *mqtt_host = doc["mqtt_host"] | "";
+        uint16_t mqtt_port = doc["mqtt_port"] | MQTT_PORT_DEFAULT;
+        const char *mqtt_user = doc["mqtt_user"] | "";
+        const char *mqtt_pass = doc["mqtt_pass"] | "";
+        if (strlen(mqtt_host) > 0) {
+            mqtt_client_save_config(mqtt_host, mqtt_port, mqtt_user, mqtt_pass);
+        }
+        wifi_creds_save(ssid, pass);
+        wifi_net_save(mode, ip, gw, mask, dns);
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        captive_portal_set_submitted();
     });
     s_server.on("/api/portal/scan", HTTP_GET, []() {
         s_server.send(501, "application/json", "{\"error\":\"not implemented\"}");

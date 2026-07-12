@@ -2,13 +2,85 @@
 #define PAGES_H
 
 const char PAGE_PORTAL[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Configurar Gateway</title></head>
-<body style="font-family:sans-serif;padding:24px">
-<h1>Configurar Wi-Fi (modo portal)</h1>
-<p>Endpoint /api/portal/setup implementado na Task 2.</p>
-</body></html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Configurar Gateway</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--border:#e5e7eb;--border-strong:#d1d5db;--danger:#dc2626;--success:#16a34a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:420px}
+h1{font-size:1.1rem;font-weight:700;color:var(--primary);margin-bottom:4px}
+.sub{color:var(--muted);font-size:0.8rem;margin-bottom:20px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;margin-bottom:4px;font-size:0.82rem;color:var(--muted)}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text)}
+.toggle-row{display:flex;gap:8px;margin:10px 0}
+.seg{flex:1;padding:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem}
+.seg.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.hidden{display:none!important}
+.btn{padding:12px;width:100%;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.9rem;background:var(--primary);color:#fff}
+.section{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.section h2{font-size:0.9rem;color:var(--primary);margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Configurar Gateway</h1>
+<div class="sub">Conecte o gateway à sua rede Wi-Fi e ao broker MQTT</div>
+<div class="form-group">
+<label>SSID</label>
+<input list="ssid-list" id="ssid" placeholder="Nome da rede" maxlength="32">
+<datalist id="ssid-list"></datalist>
+</div>
+<div class="form-group">
+<label>Senha</label>
+<input type="password" id="pass" placeholder="Senha do Wi-Fi" maxlength="64">
+</div>
+<div class="toggle-row">
+<button type="button" class="seg active" id="seg-dhcp" onclick="setMode(0)">DHCP</button>
+<button type="button" class="seg" id="seg-static" onclick="setMode(1)">IP Fixo</button>
+</div>
+<div id="static-fields" class="hidden">
+<div class="form-group"><label>IP Fixo</label><input id="ip" placeholder="192.168.1.50"></div>
+<div class="form-group"><label>Gateway</label><input id="gw" placeholder="192.168.1.1"></div>
+<div class="form-group"><label>Máscara</label><input id="mask" placeholder="255.255.255.0"></div>
+<div class="form-group"><label>DNS</label><input id="dns" placeholder="192.168.1.1"></div>
+</div>
+<div class="section">
+<h2>MQTT</h2>
+<div class="form-group"><label>Broker IP</label><input id="mqtt_host" placeholder="192.168.1.12"></div>
+<div class="form-group"><label>Porta</label><input id="mqtt_port" placeholder="1883"></div>
+<div class="form-group"><label>Usuário</label><input id="mqtt_user" placeholder="(opcional)"></div>
+<div class="form-group"><label>Senha</label><input type="password" id="mqtt_pass" placeholder="(opcional)"></div>
+</div>
+<button class="btn" id="save" onclick="save()">Salvar e Reiniciar</button>
+</div>
+<script>
+var mode = 0;
+function setMode(m){mode=m;document.getElementById('seg-dhcp').classList.toggle('active',m===0);document.getElementById('seg-static').classList.toggle('active',m===1);document.getElementById('static-fields').classList.toggle('hidden',m!==1);}
+function save(){
+  var ssid=document.getElementById('ssid').value.trim();
+  if(!ssid){alert('SSID obrigatório');return;}
+  if(mode===1 && (!document.getElementById('ip').value.trim() || !document.getElementById('gw').value.trim())){alert('IP Fixo e Gateway obrigatórios');return;}
+  var body={ssid:ssid,pass:document.getElementById('pass').value,mode:mode,
+    ip:document.getElementById('ip').value.trim(),gateway:document.getElementById('gw').value.trim(),
+    subnet:document.getElementById('mask').value.trim(),dns:document.getElementById('dns').value.trim(),
+    mqtt_host:document.getElementById('mqtt_host').value.trim(),
+    mqtt_port:parseInt(document.getElementById('mqtt_port').value)||1883,
+    mqtt_user:document.getElementById('mqtt_user').value.trim(),
+    mqtt_pass:document.getElementById('mqtt_pass').value};
+  fetch('/api/portal/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){if(!r.ok)throw new Error('erro');return r.json();})
+    .then(function(){document.getElementById('save').textContent='Salvo! Reiniciando...';})
+    .catch(function(){alert('Falha ao salvar');});
+}
+</script>
+</body>
+</html>
 )rawliteral";
 
 const char PAGE_SHELL[] PROGMEM = R"rawliteral(
