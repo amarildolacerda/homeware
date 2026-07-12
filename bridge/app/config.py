@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     bridge_ip: str = ""
     data_dir: str = "/data/bridge_python"
     addon_slug: str = "bridge_python"
-    version: str = "v0.0.22"
+    version: str = "v0.0.24"
 
     model_config = {"env_prefix": ""}
 
