@@ -90,7 +90,7 @@ input[type=text]:focus{border-color:var(--primary)}
 <div class="section active" id="secHome">
 <div class="hero">
 <div class="motion-value clear" id="motionValue">&#x1F6AB;</div>
-<div><span class="badge clear" id="motionBadge">LIMPO</span></div>
+<div><span class="badge clear" id="motionBadge">AUSENTE</span></div>
 </div>
 <div class="card">
 <div class="collapsible open" onclick="toggleDetails()">
@@ -160,7 +160,7 @@ async function fetchState(){try{let r=await fetch('/api/state');let d=await r.js
 let active=d.motion_state;
 motionValue.innerHTML=active?'\u{1F6A8}':'\u{1F6AB}';
 motionValue.className='motion-value '+(active?'active':'clear');
-motionBadge.textContent=active?'PRESENTE':'LIMPO';
+motionBadge.textContent=active?'PRESENTE':'AUSENTE';
 motionBadge.className='badge '+(active?'active':'clear');
 rxVal.textContent=d.rx_count||0;txVal.textContent=d.tx_count||0;
 memVal.textContent=d.free_heap||0;

@@ -14,8 +14,6 @@
 
 static const char *TAG = "esp8266-pir";
 
-static unsigned long s_last_state_update = 0;
-static unsigned long s_last_telemetry_update = 0;
 static unsigned long s_last_reconnect_attempt = 0;
 static unsigned long s_last_espnow_send = 0;
 static unsigned long s_last_espnow_pair = 0;
@@ -297,7 +295,7 @@ static bool espnow_send_pair_request(void)
     req->sequence = s_sequence++;
     WiFi.macAddress(req->sensor_mac);
     req->sensor_type = SENSOR_TYPE_MOTION;
-    uint32_t ver = 0x000A000B;
+    uint32_t ver = 0x00000016;
     req->firmware_version[0] = (uint8_t)(ver >> 24);
     req->firmware_version[1] = (uint8_t)(ver >> 16);
     req->firmware_version[2] = (uint8_t)(ver >> 8);
@@ -788,10 +786,9 @@ void loop(void)
             {
                 s_pair_attempts = 0;
                 console.printf("[%s] Max pair attempts, waiting before retry\n", TAG);
-                delay(60000);
+                s_last_espnow_pair = millis(); // will retry after ESPNOW_PAIR_INTERVAL_MS
             }
         }
-        delay(1);
         return;
     }
 
