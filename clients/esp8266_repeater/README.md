@@ -21,6 +21,14 @@ Totalmente transparente — o cliente e o gateway não precisam saber da existê
 4. Salve — o repeater reinicia e começa a encaminhar
 5. Para reconfigurar, use serial `w` ou segure o pino D3 (GPIO0) no boot
 
+### ESP-01S
+
+Para ESP-01S, use o environment `esp8266_esp01s`:
+```bash
+pio run -e esp8266_esp01s
+```
+WiFi e gateway MAC são configurados via build flags em `platformio.ini` (STATIC_WIFI).
+
 ## Configuração nos Clientes
 
 No cliente (ex: lampada), configurar `REPEATER_MAC` com o MAC do repeater:

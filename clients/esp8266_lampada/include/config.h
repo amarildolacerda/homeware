@@ -5,23 +5,32 @@
 #endif
 
 #ifndef DEVICE_NAME
-#define DEVICE_NAME "sacadasocial"
+#define DEVICE_NAME "ESP01-Relay"
 #endif
 
-#ifndef RELAY_PIN
-#define RELAY_PIN 15
-#endif
-
-#ifndef BUTTON_PIN
-#define BUTTON_PIN 4
+#ifdef ESP01S
+  #ifndef RELAY_PIN
+    #define RELAY_PIN 0
+  #endif
+  #ifndef BUTTON_PIN
+    #define BUTTON_PIN 2
+  #endif
+  // ESP-01S: no LED (GPIO2 used for button)
+  #undef LED_PIN
+#else
+  #ifndef RELAY_PIN
+    #define RELAY_PIN 15
+  #endif
+  #ifndef BUTTON_PIN
+    #define BUTTON_PIN 4
+  #endif
+  #ifndef LED_PIN
+    #define LED_PIN 2
+  #endif
 #endif
 
 #ifndef RELAY_ON
 #define RELAY_ON HIGH
-#endif
-
-#ifndef LED_PIN
-#define LED_PIN 2
 #endif
 
 #ifndef WIFI_CONFIG_PORTAL_SSID
@@ -33,7 +42,7 @@
 #endif
 
 #ifndef STATE_UPDATE_INTERVAL
-#define STATE_UPDATE_INTERVAL 10000
+#define STATE_UPDATE_INTERVAL 60000
 #endif
 
 #ifndef HEARTBEAT_INTERVAL
@@ -99,5 +108,19 @@
 #endif
 
 /* Pinos GPIO disponiveis para configuracao do relé */
-static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};
-static const int AVAILABLE_GPIOS_COUNT = 9;
+#ifdef ESP01S
+  static const int AVAILABLE_GPIOS[] = {0, 2};
+  static const int AVAILABLE_GPIOS_COUNT = 2;
+#else
+  static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};
+  static const int AVAILABLE_GPIOS_COUNT = 9;
+#endif
+
+#ifdef STATIC_WIFI
+  #ifndef WIFI_SSID
+    #define WIFI_SSID ""
+  #endif
+  #ifndef WIFI_PASS
+    #define WIFI_PASS ""
+  #endif
+#endif

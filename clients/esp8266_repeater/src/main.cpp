@@ -592,8 +592,10 @@ static void handle_serial(char c)
 void setup(void)
 {
     init_serial();
+#ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
+#endif
 
     load_device_name();
 
@@ -662,6 +664,7 @@ void loop(void)
     if (WiFi.status() == WL_CONNECTED)
         s_server.handleClient();
 
+#ifdef LED_PIN
     /* Slow heartbeat LED */
     static unsigned long last_blink = 0;
     unsigned long now = millis();
@@ -670,6 +673,9 @@ void loop(void)
         last_blink = now;
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     }
+#else
+    unsigned long now = millis();
+#endif
 
     /* Re-add gateway periodically if WiFi channel changes */
     static unsigned long last_chk = 0;

@@ -4,10 +4,22 @@ Firmware for ESP8266 (Wemos D1 Mini) relay control with ESP-NOW sensor protocol.
 
 ## Hardware
 
+### D1 Mini (padrão)
+
 | Component | Pin | Notes |
 |-----------|-----|-------|
 | Relay     | D2 (GPIO4) | Active HIGH |
 | LED (built-in) | D4 (GPIO2) | Active LOW, status indicator |
+
+### ESP-01S
+
+| Component | Pin | Notes |
+|-----------|-----|-------|
+| Relay     | GPIO0 | Active HIGH |
+| Button    | GPIO2 | INPUT_PULLUP |
+| LED       | — | Não disponível (GPIO2 usado para botão) |
+
+Build: `pio run -e esp8266_esp01s`
 
 ### Status LED
 
@@ -72,7 +84,8 @@ pio run -t upload --upload-port <ip>
 ## Build
 
 ```bash
-pio run
+pio run           # D1 Mini (padrão)
+pio run -e esp8266_esp01s  # ESP-01S
 ```
 
 ## First Flash (Serial)

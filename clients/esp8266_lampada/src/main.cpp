@@ -6,7 +6,9 @@
 #include <ArduinoOTA.h>
 #include <Updater.h>
 #include <espnow.h>
+#ifdef HABILITA_ALEXA
 #include <Espalexa.h>
+#endif
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
@@ -49,9 +51,11 @@ static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
+#ifdef HABILITA_REPEATER
 #define MAX_REPEATER_CLIENTS 5
 
-typedef struct {
+typedef struct
+{
     uint8_t mac[6];
     uint32_t pkt_count;
 } repeater_client_t;
@@ -59,6 +63,7 @@ typedef struct {
 static repeater_client_t s_rep_clients[MAX_REPEATER_CLIENTS];
 static int s_rep_client_num = 0;
 static uint32_t s_repeater_fwd = 0;
+#endif
 
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
@@ -77,11 +82,14 @@ static unsigned long s_wifi_connect_start = 0;
 static bool s_wifi_connected = false;
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
+#ifdef HABILITA_ALEXA
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
+#endif
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+#ifdef HABILITA_REPEATER
 static void track_repeater_client(const uint8_t *mac)
 {
     for (int i = 0; i < s_rep_client_num; i++)
@@ -99,12 +107,11 @@ static void track_repeater_client(const uint8_t *mac)
         s_rep_client_num++;
     }
 }
-
+#endif
 
 // D1-MINI é invtido
-#define LED_ON  LOW   // GPIO2 acende com LOW
-#define LED_OFF HIGH  // GPIO2 apaga com HIGH
-
+#define LED_ON LOW   // GPIO2 acende com LOW
+#define LED_OFF HIGH // GPIO2 apaga com HIGH
 
 #define EEPROM_GATEWAY_MAC_ADDR 0
 #define EEPROM_GATEWAY_MAC_SIZE 6
@@ -428,11 +435,15 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
         if (resp->status == PAIR_STATUS_OK)
         {
+#ifdef HABILITA_REPEATER
             if (!s_use_repeater)
             {
+#endif
                 mac_copy(s_gateway_mac, mac);
                 save_gateway_mac(mac);
+#ifdef HABILITA_REPEATER
             }
+#endif
             s_assigned_slot = resp->assigned_slot;
             s_paired = true;
             s_gateway_connected = true;
@@ -488,6 +499,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
     }
 
+#ifdef HABILITA_REPEATER
     /* Repeater: forward messages between clients and gateway */
     if (s_paired && s_use_repeater)
     {
@@ -505,6 +517,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             s_repeater_fwd++;
         }
     }
+#endif
 }
 
 static bool espnow_init_client(void)
@@ -671,6 +684,7 @@ static void toggle_relay(void)
     set_relay(!s_relay_state);
 }
 
+#ifdef HABILITA_ALEXA
 static void alexa_callback(EspalexaDevice *d)
 {
     bool state = (d->getValue() > 0);
@@ -683,6 +697,7 @@ static void alexa_callback(EspalexaDevice *d)
         espnow_send_data();
     }
 }
+#endif
 
 static void init_hardware(void)
 {
@@ -724,6 +739,19 @@ static void hwifi_begin(void)
 {
     WiFi.mode(WIFI_AP_STA);
     WiFi.setOutputPower(20.5);
+    s_last_reconnect_attempt = millis();
+
+#ifdef STATIC_WIFI
+    if (strlen(WIFI_SSID) > 0)
+    {
+        console.printf("[%s] WiFi: connecting to %s (static)...\n", TAG, WIFI_SSID);
+        WiFi.begin(WIFI_SSID, WIFI_PASS);
+        s_wifi_connect_start = millis();
+        s_config_portal_active = false;
+        return;
+    }
+    console.printf("[%s] No WiFi SSID configured\n", TAG);
+#endif
 
     if (WiFi.SSID().length() > 0)
     {
@@ -779,7 +807,9 @@ static void handle_wifi(void)
             s_wifi_connected = true;
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+#ifdef HABILITA_ALEXA
             console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
+#endif
             console.printf("  => Terminal:  'h' comando de ajuda\n");
         }
         return;
@@ -861,6 +891,7 @@ static void handle_api_wifi(void)
                 }
             }
 
+#ifdef HABILITA_REPEATER
             if (doc.containsKey("repeater_mac"))
             {
                 const char *mac_str = doc["repeater_mac"];
@@ -871,6 +902,7 @@ static void handle_api_wifi(void)
                     save_gateway_mac(s_gateway_mac);
                 }
             }
+#endif
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
@@ -890,9 +922,20 @@ static void handle_api_wifi(void)
 static void handle_root(void)
 {
     if (s_config_portal_active)
+    {
         s_server.send(200, "text/html", FPSTR(PAGE_WIFI_CONFIG));
-    else
-        s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
+        return;
+    }
+    String page;
+    page.reserve(4096);
+    page = FPSTR(PAGE_DASHBOARD);
+    page += FPSTR(PAGE_PINS_NAV);
+    page += FPSTR(PAGE_DASHBOARD_CONT1);
+    page += FPSTR(PAGE_PINS_SEC);
+    page += FPSTR(PAGE_DASHBOARD_CONT2);
+    page += FPSTR(PAGE_SCRIPT_PINS);
+    page += FPSTR(PAGE_DASHBOARD_END);
+    s_server.send(200, "text/html", page);
 }
 
 static void handle_api_state(void)
@@ -913,7 +956,9 @@ static void handle_api_state(void)
         if (s_last_send_ms)
             doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
+       #ifdef  HABILITA_ALEXA
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
+        #endif
 #ifdef LED_PIN
         doc["led_enabled"] = (s_led_enabled ? "true" : "false");
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
@@ -923,6 +968,7 @@ static void handle_api_state(void)
         doc["rx_count"] = s_espnow_rx_count;
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
+#ifdef HABILITA_REPEATER
         doc["repeater_active"] = (s_repeater_fwd > 0);
         if (s_use_repeater)
         {
@@ -937,6 +983,7 @@ static void handle_api_state(void)
                 obj["packets"] = s_rep_clients[i].pkt_count;
             }
         }
+#endif
         if (s_tz_changed)
             doc["timezone"] = s_timezone_offset;
         serializeJson(doc, json);
@@ -1032,6 +1079,59 @@ static void handle_api_pin(void)
     }
 }
 
+#ifdef HABILITA_PINOS
+static uint32_t GPIOMUX[17] = {
+    0x000, // GPIO0
+    0x000, // GPIO1
+    0x000, // GPIO2
+    0x000, // GPIO3
+    0x000, // GPIO4
+    0x000, // GPIO5
+    0x000, // GPIO6
+    0x000, // GPIO7
+    0x000, // GPIO8
+    0x000, // GPIO9
+    0x000, // GPIO10
+    0x000, // GPIO11
+    0x000, // GPIO12
+    0x000, // GPIO13
+    0x000, // GPIO14
+    0x000, // GPIO15
+    0x000  // GPIO16
+};
+static uint8_t getMode(int pin)
+{
+    if (pin < 0 || pin > 16)
+        return 0xFF;
+    uint32_t reg = GPIOMUX[pin];
+    if (reg & 0x100)
+        return OUTPUT;
+    else if (reg & 0x200)
+        return INPUT_PULLUP;
+    else
+        return INPUT;
+}
+static void handle_api_pins(void)
+{
+    String json;
+    {
+        JsonDocument doc;
+        JsonArray arr = doc["pins"].to<JsonArray>();
+        for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
+        {
+            int gpio = AVAILABLE_GPIOS[i];
+            JsonObject obj = arr.add<JsonObject>();
+            obj["gpio"] = gpio;
+            obj["state"] = digitalRead(gpio);
+            uint8_t mode = getMode(gpio);
+            obj["mode"] = (mode == OUTPUT) ? "OUT" : (mode == INPUT_PULLUP) ? "IN_PU" : "IN";
+        }
+        serializeJson(doc, json);
+    }
+    s_server.send(200, "application/json", json);
+}
+#endif
+
 static void handle_console(char c)
 {
     switch (c)
@@ -1114,10 +1214,14 @@ static void handle_console(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+#ifdef HABILITA_REPEATER
         console.printf("  x    - repeater stats\n");
+#endif
         console.printf("  c    - zerar contadores\n");
         console.printf("  u    - info OTA\n");
+        #ifdef HABILITA_ALEXA
         console.printf("  a    - info Alexa\n");
+        #endif
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
         if (s_paired)
@@ -1131,6 +1235,7 @@ static void handle_console(char c)
         console.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
         console.printf("----------------\n\n");
         break;
+   #ifdef HABILITA_ALEXA     
     case 'a':
     case 'A':
         console.printf("\n--- Alexa ---\n");
@@ -1141,6 +1246,8 @@ static void handle_console(char c)
         console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
         break;
+        #endif
+#ifdef HABILITA_REPEATER
     case 'x':
     case 'X':
         if (s_use_repeater)
@@ -1161,14 +1268,17 @@ static void handle_console(char c)
             console.printf("[%s] Repeater mode disabled\n", TAG);
         }
         break;
+#endif
     case 'c':
     case 'C':
         s_espnow_tx_count = 0;
         s_espnow_rx_count = 0;
         s_on_count = 0;
+#ifdef HABILITA_REPEATER
         s_repeater_fwd = 0;
         for (int i = 0; i < s_rep_client_num; i++)
             s_rep_clients[i].pkt_count = 0;
+#endif
         console.printf("[%s] Contadores zerados\n", TAG);
         break;
     case 's':
@@ -1197,13 +1307,17 @@ static void handle_console(char c)
             console.printf("  Gateway:     nao pareado\n");
         }
         console.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+      #ifdef HABILITA_ALEXA
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
+        #endif
+#ifdef HABILITA_REPEATER
         if (s_use_repeater)
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
             console.printf("  Repeater:    %s\n", mac_str);
         }
+#endif
         console.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
         console.printf("  Uptime:      %lu s\n", up);
         console.printf("---------------\n\n");
@@ -1258,8 +1372,10 @@ static void handle_api_settings(void)
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 save_device_name(s_device_name);
+#ifdef HABILITA_ALEXA
                 if (s_alexa_dev)
                     s_alexa_dev->setName(s_device_name);
+#endif
                 console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
                 changed = true;
             }
@@ -1404,7 +1520,8 @@ static void handle_api_timers(void)
                     break;
                 }
             }
-            if (idx < 0) idx = 0;
+            if (idx < 0)
+                idx = 0;
             timer_config_t cfg;
             cfg.hour = doc["hour"] | 0;
             cfg.minute = doc["minute"] | 0;
@@ -1520,10 +1637,12 @@ void setup(void)
     espnow_init_client();
     WiFi.macAddress(s_my_mac);
 
+#ifdef HABILITA_ALEXA
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
     s_alexa.begin(&s_server);
     console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+#endif
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1532,12 +1651,19 @@ void setup(void)
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
     s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
+#ifdef HABILITA_PINOS
+    s_server.on("/api/pins", HTTP_GET, handle_api_pins);
+#endif
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
+#ifdef HABILITA_ALEXA
     /* s_server.begin() is called by Espalexa internally */
+#else
+    s_server.begin();
+#endif
 
     ArduinoOTA.setHostname(s_device_id);
     ArduinoOTA.onStart([]()
@@ -1554,6 +1680,7 @@ void setup(void)
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
     /* Check for REPEATER_MAC from config.h */
+#ifdef HABILITA_REPEATER
     if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
     {
         s_use_repeater = true;
@@ -1562,7 +1689,9 @@ void setup(void)
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
         console.printf("[%s] Using repeater MAC: %s\n", TAG, mac_str);
     }
-    else if (load_gateway_mac())
+    else
+#endif
+        if (load_gateway_mac())
     {
         console.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;
@@ -1595,7 +1724,11 @@ void loop(void)
     }
     handle_wifi();
     ArduinoOTA.handle();
+#ifdef HABILITA_ALEXA
     s_alexa.loop();
+#else
+    s_server.handleClient();
+#endif
 
     {
         bool btn = digitalRead(s_button_pin);
@@ -1733,5 +1866,4 @@ void loop(void)
         digitalWrite(LED_PIN, LED_OFF);
     }
 #endif
-
 }

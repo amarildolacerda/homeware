@@ -800,7 +800,9 @@ static void handle_wifi(void)
             s_wifi_connected = true;
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+          #ifdef HABILITA_ALEXA
             console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
+          #endif  
             console.printf("  => Terminal:  'h' comando de ajuda\n");
         }
         return;
@@ -1161,6 +1163,7 @@ static void handle_console(char c)
         console.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
         console.printf("----------------\n\n");
         break;
+   #ifdef HABILITA_ALEXA     
     case 'a':
     case 'A':
         console.printf("\n--- Alexa ---\n");
@@ -1171,6 +1174,7 @@ static void handle_console(char c)
             console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
         break;
+    #endif    
     case 'i':
     case 'I':
         s_pulse_enabled = !s_pulse_enabled;

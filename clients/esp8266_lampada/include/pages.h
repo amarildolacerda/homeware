@@ -78,6 +78,15 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="nav-item" data-section="timer" onclick="showSection('timer')"><span>⏰</span><span>Timer</span></div>
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
+)=====";
+#ifdef HABILITA_PINOS
+static const char PAGE_PINS_NAV[] PROGMEM = R"=====(
+<div class="nav-item" data-section="pins" onclick="showSection('pins')"><span>🔧</span><span>Pinos</span></div>
+)=====";
+#else
+static const char PAGE_PINS_NAV[] PROGMEM = R"=====()=====";
+#endif
+static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
 <div class="nav-item" data-section="repeater" onclick="showSection('repeater')" id="navRepeater" style="display:none"><span>📡</span><span>Repeater</span></div>
 </div>
@@ -131,6 +140,18 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
 </div>
+)=====";
+#ifdef HABILITA_PINOS
+static const char PAGE_PINS_SEC[] PROGMEM = R"=====(
+<div class="section" id="secPins">
+<h1>Estado dos Pinos</h1>
+<div id="pinList"></div>
+</div>
+)=====";
+#else
+static const char PAGE_PINS_SEC[] PROGMEM = R"=====()=====";
+#endif
+static const char PAGE_DASHBOARD_CONT2[] PROGMEM = R"=====(
 <div class="section" id="secRepeater">
 <h1>Repeater</h1>
 <div class="row"><span class="label">Total Retransmitidos</span><span class="value" id="repFwd">0</span></div>
@@ -227,8 +248,24 @@ if(d.repeater_active){nav.style.display='flex';document.getElementById('repFwd')
 let list=document.getElementById('repClientList');list.innerHTML='';
 if(d.repeater_clients&&d.repeater_clients.length){d.repeater_clients.forEach(function(c){
 let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none'}}catch(e){}}
+)=====";
+#ifdef HABILITA_PINOS
+static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
+async function fetchPins(){try{let r=await fetch('/api/pins');let d=await r.json();let list=document.getElementById('pinList');if(!list)return;
+list.innerHTML='';d.pins.forEach(function(p){
+let div=document.createElement('div');div.className='row';
+div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
+list.appendChild(div)})}catch(e){}}
+setInterval(function(){fetchState();fetchRepeater();fetchPins();if(currentSection==='timer')fetchTimers()},3000);
+fetchState();fetchSettings();fetchTimers();fetchRepeater();fetchPins();
+)=====";
+#else
+static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
 setInterval(function(){fetchState();fetchRepeater();if(currentSection==='timer')fetchTimers()},3000);
 fetchState();fetchSettings();fetchTimers();fetchRepeater();
+)=====";
+#endif
+static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(
 </script>
 </body>
 </html>
