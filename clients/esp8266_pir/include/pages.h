@@ -8,7 +8,7 @@ static const char PAGE_DASHBOARD[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title id="pageTitle">Sensor PIR</title>
+<title id="pageTitle">Sensor de Presença PIR</title>
 <style>
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--success:#16a34a;--danger:#dc2626;--warn:#f59e0b;--info:#2563eb;--sidebar-w:180px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -36,12 +36,12 @@ body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;backgroun
 .fb-sep{color:var(--border);user-select:none}
 h1{font-size:1.1rem;color:var(--primary);margin-bottom:12px;text-align:center}
 .hero{text-align:center;padding:16px 0 8px}
-.motion-value{font-size:4rem;font-weight:700;line-height:1}
-.motion-value.clear{color:var(--success)}
-.motion-value.active{color:var(--danger)}
+.presence-value{font-size:4rem;font-weight:700;line-height:1}
+.presence-value.present{color:var(--success)}
+.presence-value.absent{color:var(--danger)}
 .badge{display:inline-block;padding:4px 14px;border-radius:9999px;font-size:.78rem;font-weight:600;margin-top:8px}
-.badge.clear{background:rgba(22,163,74,0.12);color:var(--success)}
-.badge.active{background:rgba(220,38,38,0.12);color:var(--danger)}
+.badge.present{background:rgba(22,163,74,0.12);color:var(--success)}
+.badge.absent{background:rgba(220,38,38,0.12);color:var(--danger)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:16px}
 .row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
 .row:last-child{border-bottom:none}
@@ -85,12 +85,13 @@ input[type=text]:focus{border-color:var(--primary)}
 <div class="stat"><div class="stat-value" id="rxVal">0</div><div class="stat-label">RX</div></div>
 <div class="stat"><div class="stat-value" id="txVal">0</div><div class="stat-label">TX</div></div>
 <div class="stat"><div class="stat-value" id="memVal">-</div><div class="stat-label">Mem</div></div>
+<div class="stat"><div class="stat-value" id="uptimeVal">0m</div><div class="stat-label">Uptime</div></div>
 </div>
 <div class="content">
 <div class="section active" id="secHome">
 <div class="hero">
-<div class="motion-value clear" id="motionValue">&#x1F6AB;</div>
-<div><span class="badge clear" id="motionBadge">AUSENTE</span></div>
+<div class="presence-value absent" id="motionValue">&#x1F6AB;</div>
+<div><span class="badge absent" id="motionBadge">AUSENTE</span></div>
 </div>
 <div class="card">
 <div class="collapsible open" onclick="toggleDetails()">
@@ -144,6 +145,7 @@ if(gw){document.getElementById('backBtn').href='http://'+gw;document.getElementB
 const rxVal=document.getElementById('rxVal');
 const txVal=document.getElementById('txVal');
 const memVal=document.getElementById('memVal');
+const uptimeVal=document.getElementById('uptimeVal');
 const motionValue=document.getElementById('motionValue');
 const motionBadge=document.getElementById('motionBadge');
 const footerEl=document.getElementById('footer');
@@ -159,9 +161,9 @@ async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch(
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 let active=d.motion_state;
 motionValue.innerHTML=active?'\u{1F6A8}':'\u{1F6AB}';
-motionValue.className='motion-value '+(active?'active':'clear');
+motionValue.className='presence-value '+(active?'present':'absent');
 motionBadge.textContent=active?'PRESENTE':'AUSENTE';
-motionBadge.className='badge '+(active?'active':'clear');
+motionBadge.className='badge '+(active?'present':'absent');
 rxVal.textContent=d.rx_count||0;txVal.textContent=d.tx_count||0;
 memVal.textContent=d.free_heap||0;
 document.getElementById('detBattery').textContent=(d.battery||0)+'%';
@@ -176,12 +178,13 @@ document.getElementById('propIp').textContent=d.ip||'-';
 document.getElementById('propRssi').textContent=(d.rssi||0)+' dBm';
 document.getElementById('propVersion').textContent=d.fw_version||'-';
 document.getElementById('propSlot').textContent=d.slot!==undefined&&d.slot!==null?d.slot:'-';
-let name=d.device_name||'Sensor PIR';
+let name=d.device_name||'Sensor de Presença PIR';
 document.getElementById('pageTitle').textContent=name;
 document.getElementById('sbName').textContent=name;
 document.getElementById('sbId').textContent=d.device_id||'';
 const ve=document.getElementById('sbVersion');if(ve&&d.fw_version)ve.textContent=d.fw_version;
 let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
+uptimeVal.textContent=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
 fbUptime.textContent=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
@@ -219,12 +222,10 @@ h1{color:var(--primary);font-size:1.2rem;margin-bottom:16px}
 </style>
 </head>
 <body>
-<h1>Sensor PIR - API</h1>
+<h1>Sensor de Presença PIR - API</h1>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/</span></div><div class="desc">Dashboard</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/docs</span></div><div class="desc">Esta página</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/state</span></div><div class="desc">Estado do dispositivo</div></div>
-<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/pin?gpio=N</span></div><div class="desc">Ler GPIO</div></div>
-<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/pin</span></div><div class="desc">Setar GPIO {"gpio":N,"state":0|1}</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div><div class="desc">Configurações</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div><div class="desc">Atualizar {"device_name":"..."}</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div><div class="desc">Upload firmware</div></div>
