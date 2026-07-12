@@ -110,7 +110,6 @@ void handle_console(char c) {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    console.begin();
     s_start_time = millis();
     
     pinMode(STATUS_LED_GPIO, OUTPUT);
@@ -126,18 +125,19 @@ void setup() {
     sensor_registry_init();
     mqtt_client_load_config();
     mqtt_client_generate_device_ids();
-    
-    ota_init(get_gateway_device_id());
-    
+
+    web_server_init();
+
     if (!web_server_wifi_setup(false)) {
         console.printf("[%s] WiFi setup failed, restarting...\n", TAG);
         delay(5000);
         ESP.restart();
     }
     
+    ota_init(get_gateway_device_id());
+    console.begin();
     espnow_handler_init();
     log_buffer_init();
-    web_server_init();
     
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
     console.printf("[%s] NTP: pool.ntp.org, non-blocking sync\n", TAG);

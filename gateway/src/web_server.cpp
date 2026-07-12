@@ -7,16 +7,111 @@
 #include "log_buffer.h"
 #include "console.h"
 #include "platform.h"
+#include "captive_portal.h"
 #include <uri/UriBraces.h>
-#include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
+#include <EEPROM.h>
 
 static MyWebServer s_server(80);
 static bool s_wifi_config_mode = false;
 static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;
 static unsigned long s_wifi_reconnect_deadline = 0;
+
+// WiFi credentials are not persisted by the ESP32 WiFi driver NVS in this
+// environment (esp_wifi_set_config returns OK but is lost on reboot), so we
+// store them in our own EEPROM NVS namespace instead.
+static bool wifi_creds_load(char *ssid, char *pass) {
+    EEPROM.begin(EEPROM_SIZE);
+    bool valid = false;
+    for (int i = 0; i < EEPROM_WIFI_SSID_SIZE; i++) {
+        char c = EEPROM.read(EEPROM_WIFI_SSID_OFFSET + i);
+        ssid[i] = c;
+        if (c == 0) { valid = true; break; }
+        if (i == EEPROM_WIFI_SSID_SIZE - 1) { ssid[i] = '\0'; valid = true; }
+    }
+    ssid[EEPROM_WIFI_SSID_SIZE - 1] = '\0';
+    for (int i = 0; i < EEPROM_WIFI_PASS_SIZE; i++) {
+        pass[i] = EEPROM.read(EEPROM_WIFI_PASS_OFFSET + i);
+    }
+    pass[EEPROM_WIFI_PASS_SIZE - 1] = '\0';
+    EEPROM.end();
+    return valid && strlen(ssid) > 0;
+}
+
+static void wifi_creds_save(const char *ssid, const char *pass) {
+    EEPROM.begin(EEPROM_SIZE);
+    for (int i = 0; i < EEPROM_WIFI_SSID_SIZE; i++) {
+        EEPROM.write(EEPROM_WIFI_SSID_OFFSET + i, i < (int)strlen(ssid) ? ssid[i] : 0);
+    }
+    for (int i = 0; i < EEPROM_WIFI_PASS_SIZE; i++) {
+        EEPROM.write(EEPROM_WIFI_PASS_OFFSET + i, i < (int)strlen(pass) ? pass[i] : 0);
+    }
+    EEPROM.commit();
+    EEPROM.end();
+    console.printf("[WIFI] Credenciais salvas no EEPROM: %s\n", ssid);
+}
+
+// WiFi network configuration (DHCP vs static IP). Stored in EEPROM.
+static void wifi_net_load(int *mode, char *ip, char *gw, char *mask, char *dns) {
+    EEPROM.begin(EEPROM_SIZE);
+    *mode = EEPROM.read(EEPROM_WIFI_MODE_OFFSET) == WIFI_MODE_STATIC ? WIFI_MODE_STATIC : WIFI_MODE_DHCP;
+    auto read_str = [](int off, int size, char *buf) {
+        for (int i = 0; i < size; i++) {
+            char c = EEPROM.read(off + i);
+            buf[i] = c;
+            if (c == 0) break;
+        }
+        buf[size - 1] = '\0';
+    };
+    read_str(EEPROM_WIFI_IP_OFFSET, EEPROM_WIFI_IP_SIZE, ip);
+    read_str(EEPROM_WIFI_GW_OFFSET, EEPROM_WIFI_GW_SIZE, gw);
+    read_str(EEPROM_WIFI_MASK_OFFSET, EEPROM_WIFI_MASK_SIZE, mask);
+    read_str(EEPROM_WIFI_DNS_OFFSET, EEPROM_WIFI_DNS_SIZE, dns);
+    EEPROM.end();
+}
+
+static void wifi_net_save(int mode, const char *ip, const char *gw, const char *mask, const char *dns) {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_WIFI_MODE_OFFSET, mode == WIFI_MODE_STATIC ? WIFI_MODE_STATIC : WIFI_MODE_DHCP);
+    auto write_str = [](int off, int size, const char *s) {
+        for (int i = 0; i < size; i++) {
+            EEPROM.write(off + i, i < (int)strlen(s) ? s[i] : 0);
+        }
+    };
+    write_str(EEPROM_WIFI_IP_OFFSET, EEPROM_WIFI_IP_SIZE, ip ? ip : "");
+    write_str(EEPROM_WIFI_GW_OFFSET, EEPROM_WIFI_GW_SIZE, gw ? gw : "");
+    write_str(EEPROM_WIFI_MASK_OFFSET, EEPROM_WIFI_MASK_SIZE, mask ? mask : "");
+    write_str(EEPROM_WIFI_DNS_OFFSET, EEPROM_WIFI_DNS_SIZE, dns ? dns : "");
+    EEPROM.commit();
+    EEPROM.end();
+    console.printf("[WIFI] Network config salva: mode=%d\n", mode);
+}
+
+// Apply a static IP configuration to the STA interface before connecting.
+// No-op when in DHCP mode or when the stored IP is invalid.
+static void apply_wifi_static_ip() {
+    int mode = WIFI_MODE_DHCP;
+    char ip[EEPROM_WIFI_IP_SIZE], gw[EEPROM_WIFI_GW_SIZE];
+    char mask[EEPROM_WIFI_MASK_SIZE], dns[EEPROM_WIFI_DNS_SIZE];
+    wifi_net_load(&mode, ip, gw, mask, dns);
+    if (mode != WIFI_MODE_STATIC || strlen(ip) == 0) return;
+    IPAddress ipa, gwa, maska, dnsa;
+    if (!ipa.fromString(ip)) {
+        console.println("[WIFI] Static IP invalido, usando DHCP");
+        return;
+    }
+    maska = IPAddress(255, 255, 255, 0);
+    if (mask[0]) maska.fromString(mask);
+    gwa = INADDR_NONE;
+    if (gw[0]) gwa.fromString(gw);
+    dnsa = gwa;
+    if (dns[0]) dnsa.fromString(dns);
+    WiFi.config(ipa, gwa, maska, dnsa);
+    console.printf("[WIFI] Static IP aplicado: %s gw %s mask %s dns %s\n",
+                   ip, gw, mask[0] ? mask : "255.255.255.0", dns[0] ? dns : (gw[0] ? gw : "none"));
+}
 
 static void serve_pgm_page(const char* page) {
     size_t total = strlen_P(page);
@@ -38,7 +133,8 @@ static void serve_pgm_page(const char* page) {
 
 void web_server_init() {
     s_server.on("/", HTTP_GET, []() {
-        serve_pgm_page(PAGE_SHELL);
+        if (s_wifi_config_mode) serve_pgm_page(PAGE_PORTAL);
+        else serve_pgm_page(PAGE_SHELL);
     });
 
     s_server.on("/overview", HTTP_GET, []() {
@@ -88,7 +184,16 @@ void web_server_init() {
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
         doc["free_heap"] = ESP.getFreeHeap();
+        doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
         doc["ip"] = WiFi.localIP().toString();
+        doc["wifi_ssid"] = WiFi.SSID();
+        {
+            int wmode = WIFI_MODE_DHCP;
+            char wip[EEPROM_WIFI_IP_SIZE], wgw[EEPROM_WIFI_GW_SIZE];
+            char wmask[EEPROM_WIFI_MASK_SIZE], wdns[EEPROM_WIFI_DNS_SIZE];
+            wifi_net_load(&wmode, wip, wgw, wmask, wdns);
+            doc["wifi_mode"] = wmode;
+        }
         
         String json;
         serializeJson(doc, json);
@@ -264,6 +369,16 @@ void web_server_init() {
         }
     });
     
+    s_server.on("/api/config/mqtt", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["host"] = mqtt_client_get_host();
+        doc["port"] = mqtt_client_get_port();
+        doc["user"] = mqtt_client_get_user();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    });
+
     s_server.on("/api/config/mqtt", HTTP_POST, []() {
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
@@ -277,6 +392,55 @@ void web_server_init() {
         const char *pass = doc["pass"] | "";
         mqtt_client_save_config(host, port, user, pass);
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    s_server.on("/api/config/wifi", HTTP_GET, []() {
+        char ssid[EEPROM_WIFI_SSID_SIZE];
+        char pass[EEPROM_WIFI_PASS_SIZE];
+        bool have_creds = wifi_creds_load(ssid, pass);
+        int mode = WIFI_MODE_DHCP;
+        char ip[EEPROM_WIFI_IP_SIZE], gw[EEPROM_WIFI_GW_SIZE];
+        char mask[EEPROM_WIFI_MASK_SIZE], dns[EEPROM_WIFI_DNS_SIZE];
+        wifi_net_load(&mode, ip, gw, mask, dns);
+        JsonDocument doc;
+        doc["ssid"] = have_creds ? ssid : "";
+        doc["mode"] = mode;
+        doc["ip"] = ip;
+        doc["gateway"] = gw;
+        doc["subnet"] = mask;
+        doc["dns"] = dns;
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    });
+
+    s_server.on("/api/config/wifi", HTTP_POST, []() {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        if (err || !doc.containsKey("ssid")) {
+            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            return;
+        }
+        const char *ssid = doc["ssid"];
+        const char *newpass = doc["pass"] | "";
+        int mode = doc["mode"] | WIFI_MODE_DHCP;
+        const char *ip = doc["ip"] | "";
+        const char *gw = doc["gateway"] | "";
+        const char *mask = doc["subnet"] | "";
+        const char *dns = doc["dns"] | "";
+        if (strlen(ssid) == 0) {
+            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            return;
+        }
+        char cur_ssid[EEPROM_WIFI_SSID_SIZE];
+        char cur_pass[EEPROM_WIFI_PASS_SIZE];
+        wifi_creds_load(cur_ssid, cur_pass);
+        const char *pass = (strlen(newpass) > 0) ? newpass : cur_pass;
+        wifi_creds_save(ssid, pass);
+        wifi_net_save(mode, ip, gw, mask, dns);
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        delay(300);
+        ESP.restart();
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {
@@ -310,6 +474,33 @@ void web_server_init() {
         }
     });
     
+    s_server.on("/favicon.ico", HTTP_GET, []() {
+        s_server.send(204);
+    });
+
+    s_server.on("/api/portal/setup", HTTP_POST, []() {
+        s_server.send(501, "application/json", "{\"error\":\"not implemented\"}");
+    });
+    s_server.on("/api/portal/scan", HTTP_GET, []() {
+        s_server.send(501, "application/json", "{\"error\":\"not implemented\"}");
+    });
+    auto portal_redirect = []() {
+        s_server.sendHeader("Location", "/");
+        s_server.send(302, "text/plain", "");
+    };
+    s_server.on("/generate_204", HTTP_GET, portal_redirect);
+    s_server.on("/hotspot-detect.html", HTTP_GET, portal_redirect);
+    s_server.on("/ncsi.txt", HTTP_GET, portal_redirect);
+    s_server.on("/success.html", HTTP_GET, portal_redirect);
+    s_server.onNotFound([]() {
+        if (s_wifi_config_mode) {
+            s_server.sendHeader("Location", "/");
+            s_server.send(302, "text/plain", "");
+        } else {
+            s_server.send(404, "text/plain", "Not found");
+        }
+    });
+
     s_server.begin();
     console.println("[WEB] Server started on port 80");
 }
@@ -317,53 +508,48 @@ void web_server_init() {
 void web_server_loop() {
     s_server.handleClient();
     ArduinoOTA.handle();
-    
+
+    if (s_wifi_config_mode) captive_dns_poll();
+
     if (s_wifi_config_mode && millis() - s_wifi_config_start > 300000) {
         console.println("[WIFI] Config portal timeout, restarting...");
         ESP.restart();
     }
 }
 
+void web_server_handle_client() {
+    s_server.handleClient();
+}
+
 bool web_server_wifi_setup(bool force_portal) {
-    WiFiManager wifiManager;
-    wifiManager.setConnectTimeout(20);
-    
-    if (!force_portal && WiFi.SSID().length() > 0) {
-        wifiManager.setTimeout(180);
-        wifiManager.setConnectRetries(3);
-        console.printf("[WIFI] Connecting to saved: %s\n", WiFi.SSID().c_str());
-        if (wifiManager.autoConnect()) {
+    char saved_ssid[EEPROM_WIFI_SSID_SIZE];
+    char saved_pass[EEPROM_WIFI_PASS_SIZE];
+    bool have_creds = wifi_creds_load(saved_ssid, saved_pass);
+
+    if (!force_portal && have_creds) {
+        console.printf("[WIFI] Connecting to saved (EEPROM): %s\n", saved_ssid);
+        WiFi.mode(WIFI_STA);
+        apply_wifi_static_ip();
+        WiFi.begin(saved_ssid, saved_pass);
+        unsigned long t0 = millis();
+        while (millis() - t0 < 45000 && WiFi.status() != WL_CONNECTED) {
+            delay(200);
+            yield();
+        }
+        if (WiFi.status() == WL_CONNECTED) {
             console.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
             s_wifi_config_mode = false;
             return true;
         }
         console.println("[WIFI] Failed to connect to saved WiFi");
     }
-    
+
     console.println("[WIFI] Starting config portal...");
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
-    wifiManager.setConfigPortalTimeout(300);
-    
-    WiFiManagerParameter custom_mqtt_host("mqtt_host", "MQTT Broker IP", mqtt_client_get_host(), 64);
-    WiFiManagerParameter custom_mqtt_port("mqtt_port", "MQTT Port", String(mqtt_client_get_port()).c_str(), 6);
-    WiFiManagerParameter custom_mqtt_user("mqtt_user", "MQTT User", mqtt_client_get_user(), 32);
-    WiFiManagerParameter custom_mqtt_pass("mqtt_pass", "MQTT Pass", mqtt_client_get_pass(), 32);
-    wifiManager.addParameter(&custom_mqtt_host);
-    wifiManager.addParameter(&custom_mqtt_port);
-    wifiManager.addParameter(&custom_mqtt_user);
-    wifiManager.addParameter(&custom_mqtt_pass);
-    
-    if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS)) {
-        if (strlen(custom_mqtt_host.getValue()) > 0) {
-            mqtt_client_save_config(custom_mqtt_host.getValue(), atoi(custom_mqtt_port.getValue()),
-                                     custom_mqtt_user.getValue(), custom_mqtt_pass.getValue());
-        }
-        s_wifi_config_mode = false;
-        return true;
-    }
-    
-    console.println("[WIFI] Config portal timeout");
+    captive_portal_start();
+    captive_portal_run();
+    // captive_portal_run() only returns after ESP.restart(); this is a fallback:
     s_wifi_config_mode = false;
     return false;
 }
@@ -383,6 +569,8 @@ void web_server_maintain_wifi() {
         if (millis() - last_attempt < 30000) return;
         last_attempt = millis();
         console.println("[WIFI] Reconnecting...");
+        WiFi.mode(WIFI_STA);
+        apply_wifi_static_ip();
         WiFi.begin();
         s_wifi_reconnect_active = true;
         s_wifi_reconnect_deadline = millis() + 15000;

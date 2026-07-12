@@ -1,6 +1,16 @@
 #ifndef PAGES_H
 #define PAGES_H
 
+const char PAGE_PORTAL[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Configurar Gateway</title></head>
+<body style="font-family:sans-serif;padding:24px">
+<h1>Configurar Wi-Fi (modo portal)</h1>
+<p>Endpoint /api/portal/setup implementado na Task 2.</p>
+</body></html>
+)rawliteral";
+
 const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -289,6 +299,9 @@ var s_renameSlot = null;
 var s_sensors = [];
 var s_activeFilter = 'all';
 var s_statusFilter = 'all';
+var s_prevSensorMap = {};
+var s_sensorCount = 0;
+var s_info = {};
 
 function typeName(type) {
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada'};
@@ -351,44 +364,49 @@ function renderSensors(sensors) {
   var nonRepeater = sensors.filter(function(s) { return s.type_name !== 'repeater'; });
   if (!nonRepeater || !nonRepeater.length) {
     grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted-subtle)">Nenhum sensor pareado</div>';
+    s_prevSensorMap = {};
     return;
   }
-  grid.innerHTML = nonRepeater.map(function(s) {
-    var off = !s.online;
-    var offClass = off ? ' offline' : '';
-    var isType9 = s.type === 9;
-    var isType8 = s.type === 8 || isType9;
-    var onState = s.state && s.state.state;
-    return '<div class="device'+offClass+'" data-slot="'+s.slot+'" data-type="'+s.type+'">'+
-      '<div class="device-head">'+
-        '<div>'+
-          '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
-          '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
-            (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
-          '</div>'+
-          '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+  grid.innerHTML = nonRepeater.map(function(s) { return buildSensorCard(s); }).join('');
+  s_prevSensorMap = {};
+  nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
+}
+
+function buildSensorCard(s) {
+  var off = !s.online;
+  var offClass = off ? ' offline' : '';
+  var isType9 = s.type === 9;
+  var isType8 = s.type === 8 || isType9;
+  var onState = s.state && s.state.state;
+  return '<div class="device'+offClass+'" data-slot="'+s.slot+'" data-type="'+s.type+'">'+
+    '<div class="device-head">'+
+      '<div>'+
+        '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
+        '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
+          (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
         '</div>'+
-        '<div style="display:flex;align-items:center;gap:4px">'+
-          '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
-          '<div class="device-actions">'+
-            '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
-            '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
-              '<button onclick="showPropsModal('+s.slot+')">Propriedades</button>'+
-              '<button onclick="renameSensor('+s.slot+')">Renomear</button>'+
-              '<button class="danger" onclick="removeSensor('+s.slot+')">Remover</button>'+
-            '</div>'+
+        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:4px">'+
+        '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
+        '<div class="device-actions">'+
+          '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
+          '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
+            '<button onclick="showPropsModal('+s.slot+')">Propriedades</button>'+
+            '<button onclick="renameSensor('+s.slot+')">Renomear</button>'+
+            '<button class="danger" onclick="removeSensor('+s.slot+')">Remover</button>'+
           '</div>'+
         '</div>'+
       '</div>'+
-      '<div class="metrics">'+
-        batteryBar(s.battery_pct)+
-        rssiBar(s.last_rssi)+
-      '</div>'+
-      '<div class="state-group">'+
-        (isType8 ? '' : renderState(s))+
-      '</div>'+          /* closes state-group */
-    '</div>';            /* closes device */
-  }).join('');
+    '</div>'+
+    '<div class="metrics">'+
+      batteryBar(s.battery_pct)+
+      rssiBar(s.last_rssi)+
+    '</div>'+
+    '<div class="state-group">'+
+      (isType8 ? '' : renderState(s))+
+    '</div>'+
+  '</div>';
 }
 
 function renderRepeaters(sensors) {
@@ -405,7 +423,7 @@ function renderRepeaters(sensors) {
         '<div>'+
           '<div class="device-icon">&#x1F504;</div>'+
           '<div class="device-name"><span>'+escHtml(r.name||'Repeater')+'</span></div>'+
-          '<div class="device-type">Repeater &bull; Slot '+r.slot+' &bull; '+r.mac+'</div>'+
+          '<div class="device-type">Repeater &bull; Slot '+r.slot+'</div>'+
         '</div>'+
         '<span class="badge '+(r.online?'online':'offline')+'">'+(r.online?'Online':'Offline')+'</span>'+
       '</div>'+
@@ -542,8 +560,7 @@ function showPropsModal(slot) {
     (stateHtml || '<div class="row"><span class="label">Dados</span><span class="value" style="color:var(--muted-subtle)">Aguardando...</span></div>')+
     '</div>'+
     '<div class="props-section"><div class="props-section-title">Dispositivo</div>'+
-    '<div class="row"><span class="label">MAC</span><span class="value" style="font-size:0.7rem">'+escHtml(s.mac||'--')+'</span></div>'+
-    '<div class="row"><span class="label">Bridge ID</span><span class="value" style="font-size:0.65rem">'+escHtml(s.bridge_device_id||'&mdash;')+'</span></div>'+
+    '<div class="row"><span class="label">Sensores</span><span class="value">'+s_sensors.length+'/'+(s_info.max_sensors||'--')+'</span></div>'+
     (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
@@ -615,20 +632,44 @@ async function loadData() {
   try {
     var data = await Promise.all([api('/api/info'), api('/api/sensors')]);
     var info = data[0], sensors = data[1];
-    document.getElementById('stat-paired').textContent = info.paired_count;
+    s_info = info;
+    document.getElementById('stat-paired').textContent = info.paired_count + '/' + info.max_sensors;
     document.getElementById('stat-online').textContent = info.online_count;
     document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
     document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
-    sensors.forEach(function(s) { delete s.mac_bytes; });
     s_sensors = sensors;
     updateFilters(sensors);
-    renderSensors(sensors);
-    renderRepeaters(sensors);
-    filterSensors(s_activeFilter);
-    filterStatus(s_statusFilter);
+    var nonRepeater = sensors.filter(function(s) { return s.type_name !== 'repeater'; });
+    var prevCount = Object.keys(s_prevSensorMap).length;
+    if (nonRepeater.length !== prevCount || nonRepeater.length === 0) {
+      renderSensors(sensors);
+      renderRepeaters(sensors);
+    } else {
+      var changed = false;
+      nonRepeater.forEach(function(s) {
+        var prev = s_prevSensorMap[s.slot];
+        var curr = JSON.stringify(s);
+        if (prev !== curr) {
+          var el = document.querySelector('.device[data-slot="'+s.slot+'"]');
+          if (el) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = buildSensorCard(s);
+            el.replaceWith(tmp.firstChild);
+          }
+          changed = true;
+        }
+      });
+      renderRepeaters(sensors);
+      if (changed) {
+        filterSensors(s_activeFilter);
+        filterStatus(s_statusFilter);
+      }
+      s_prevSensorMap = {};
+      nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
+    }
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   } finally {
@@ -644,10 +685,22 @@ s_pollTimer = setInterval(loadData, 5000);
 const char PAGE_SETTINGS[] PROGMEM = R"rawliteral(
 <style>
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card.collapsible{padding:0;overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer;user-select:none}
+.card-head h2{font-size:0.95rem;font-weight:600;color:var(--primary);margin:0}
+.card-head .summary{display:flex;align-items:center;gap:8px;flex:1;margin-left:10px;justify-content:flex-end;text-align:right}
+.chev{transition:transform .2s;color:var(--muted);font-size:0.9rem}
+.card.collapsed .chev{transform:rotate(-90deg)}
+.card-body{padding:0 16px 16px}
+.card.collapsed .card-body{display:none}
 .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.85rem}
 .row:last-child{border-bottom:none}
 .label{color:var(--muted-subtle)}
 .value{font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-ok{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-off{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-info{background:rgba(94,106,210,.15);color:var(--primary)}
 .btn{padding:10px 18px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;min-height:44px}
 .btn-primary{background:var(--primary);color:#fff}
 .btn-primary:hover{filter:brightness(1.1)}
@@ -659,11 +712,20 @@ const char PAGE_SETTINGS[] PROGMEM = R"rawliteral(
 .form-group{margin-bottom:14px}
 .form-group label{display:block;margin-bottom:4px;font-size:0.82rem;color:var(--muted)}
 .form-group input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text)}
+.toggle-row{display:flex;gap:8px;margin:10px 0}
+.seg{flex:1;padding:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem}
+.seg.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.hidden{display:none!important}
 h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </style>
 <div style="max-width:500px">
-<div class="card">
-<h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">Bridge</h2>
+
+<div class="card collapsible" id="card-bridge">
+<div class="card-head" onclick="toggleCard('card-bridge')">
+<h2>Bridge</h2>
+<div class="summary"><span id="bridge-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
 <div class="row"><span class="label">Device ID</span><span class="value" id="s-device" style="font-size:0.7rem">--</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="s-ip">--</span></div>
 <div class="row"><span class="label">Firmware</span><span class="value" id="s-fw">--</span></div>
@@ -672,15 +734,35 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <button class="btn btn-primary" id="btn-pair" onclick="enterPairingMode()" style="margin-top:12px;width:100%">+ Adicionar Sensor</button>
 <button class="btn btn-primary" onclick="doRestart()" style="margin-top:8px;width:100%">Reiniciar</button>
 </div>
-<div class="card" style="margin-top:12px">
-<h2 style="font-size:0.95rem;font-weight:600;margin-bottom:16px;color:var(--primary)">MQTT</h2>
+</div>
+
+<div class="card collapsible" id="card-wifi" style="margin-top:12px">
+<div class="card-head" onclick="toggleCard('card-wifi')">
+<h2>Rede (WiFi)</h2>
+<div class="summary"><span id="wifi-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
+<div class="row"><span class="label">SSID</span><span class="value" id="s-wifi-ssid">--</span></div>
+<div class="row"><span class="label">IP</span><span class="value" id="s-wifi-ip">--</span></div>
+<div class="row"><span class="label">Modo</span><span class="value" id="s-wifi-mode">--</span></div>
+<button class="btn btn-primary" onclick="showWifiForm()" style="margin-top:12px;width:100%">Configurar Rede</button>
+</div>
+</div>
+
+<div class="card collapsible" id="card-mqtt" style="margin-top:12px">
+<div class="card-head" onclick="toggleCard('card-mqtt')">
+<h2>MQTT</h2>
+<div class="summary"><span id="mqtt-sum" class="badge badge-off">--</span><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
 <div class="row"><span class="label">Host</span><span class="value" id="s-host">--</span></div>
 <div class="row"><span class="label">Porta</span><span class="value" id="s-port">--</span></div>
 <div class="row"><span class="label">Usuário</span><span class="value" id="s-user">--</span></div>
 <div class="row"><span class="label">Status</span><span class="value" id="s-status">--</span></div>
 <div class="row"><span class="label">Conectado há</span><span class="value" id="s-mqtt-uptime">--</span></div>
-<button class="btn btn-primary" onclick="showMqttForm()" style="margin-top:12px">Configurar MQTT</button>
-<button class="btn btn-secondary" onclick="doReregister()" style="margin-top:8px">Forçar re-registro</button>
+<button class="btn btn-primary" onclick="showMqttForm()" style="margin-top:12px;width:100%">Configurar MQTT</button>
+<button class="btn btn-secondary" onclick="doReregister()" style="margin-top:8px;width:100%">Forçar re-registro</button>
+</div>
 </div>
 </div>
 <div class="modal" id="mqtt-modal">
@@ -696,7 +778,41 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </div>
 </div>
 </div>
+
+<div class="modal" id="wifi-modal">
+<div class="modal-content">
+<h3>Configurar Rede (WiFi)</h3>
+<div class="form-group"><label>SSID</label><input type="text" id="wifi-ssid-input" maxlength="32" placeholder="Nome da rede"></div>
+<div class="form-group"><label>Senha</label><input type="password" id="wifi-pass-input" maxlength="64" placeholder="(em branco mantém atual)"></div>
+<div class="toggle-row">
+<button type="button" class="seg active" id="seg-dhcp" onclick="setWifiMode(0)">DHCP</button>
+<button type="button" class="seg" id="seg-static" onclick="setWifiMode(1)">IP Fixo</button>
+</div>
+<div id="wifi-static-fields" class="hidden">
+<div class="form-group"><label>IP Fixo</label><input type="text" id="wifi-ip-input" placeholder="192.168.1.50"></div>
+<div class="form-group"><label>Gateway</label><input type="text" id="wifi-gw-input" placeholder="192.168.1.1"></div>
+<div class="form-group"><label>Máscara</label><input type="text" id="wifi-mask-input" placeholder="255.255.255.0"></div>
+<div class="form-group"><label>DNS</label><input type="text" id="wifi-dns-input" placeholder="192.168.1.1"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-primary" onclick="saveWifiConfig()">Salvar</button>
+<button class="btn btn-secondary" onclick="closeWifiForm()">Cancelar</button>
+</div>
+</div>
+</div>
+
 <script>
+function toggleCard(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+function setWifiMode(mode) {
+  document.getElementById('seg-dhcp').classList.toggle('active', mode === 0);
+  document.getElementById('seg-static').classList.toggle('active', mode === 1);
+  document.getElementById('wifi-static-fields').classList.toggle('hidden', mode !== 1);
+  window.s_wifiMode = mode;
+}
+
 async function loadSettings() {
   try {
     var info = await api('/api/info');
@@ -704,17 +820,27 @@ async function loadSettings() {
     document.getElementById('s-port').textContent = info.mqtt_port || '--';
     document.getElementById('s-user').textContent = info.mqtt_user || '--';
     document.getElementById('s-status').textContent = info.mqtt_connected ? 'Conectado' : 'Desconectado';
+    document.getElementById('mqtt-sum').textContent = info.mqtt_connected ? 'MQTT OK' : 'MQTT OFF';
+    document.getElementById('mqtt-sum').className = 'badge ' + (info.mqtt_connected ? 'badge-ok' : 'badge-off');
     document.getElementById('s-mqtt-uptime').textContent = info.mqtt_connected && info.mqtt_connected_since ? fmtUptime(info.uptime_ms - info.mqtt_connected_since) : '--';
     document.getElementById('s-device').textContent = info.gateway_id || '--';
     document.getElementById('s-ip').textContent = info.ip || '--';
     document.getElementById('s-fw').textContent = info.fw_version || '--';
     document.getElementById('s-uptime').textContent = fmtUptime(info.uptime_ms);
     document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
+    document.getElementById('bridge-sum').textContent = info.ip || '--';
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     if (info.pairing_mode && info.pairing_remaining_sec > 0) {
       startPairingUI(info.pairing_remaining_sec);
     }
+    var wifi = await api('/api/config/wifi');
+    document.getElementById('s-wifi-ssid').textContent = (wifi.ssid && wifi.ssid.length) ? wifi.ssid : (info.wifi_ssid || '--');
+    document.getElementById('s-wifi-ip').textContent = info.ip || '--';
+    var isStatic = wifi.mode === 1;
+    document.getElementById('s-wifi-mode').textContent = isStatic ? 'IP Fixo' : 'DHCP';
+    document.getElementById('wifi-sum').textContent = ((wifi.ssid && wifi.ssid.length) ? wifi.ssid : (info.wifi_ssid || 'sem SSID'));
+    document.getElementById('wifi-sum').className = 'badge ' + ((wifi.ssid && wifi.ssid.length) ? 'badge-info' : 'badge-off');
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   }
@@ -747,6 +873,48 @@ async function saveMqttConfig() {
     showToast('MQTT configurado: '+host+':'+port);
     closeMqttForm();
     loadSettings();
+  } catch(e) { showToast('Erro: '+e.message, true); }
+}
+
+async function showWifiForm() {
+  try {
+    var wifi = await api('/api/config/wifi');
+    document.getElementById('wifi-ssid-input').value = wifi.ssid || '';
+    document.getElementById('wifi-pass-input').value = '';
+    setWifiMode(wifi.mode === 1 ? 1 : 0);
+    document.getElementById('wifi-ip-input').value = wifi.ip || '';
+    document.getElementById('wifi-gw-input').value = wifi.gateway || '';
+    document.getElementById('wifi-mask-input').value = wifi.subnet || '';
+    document.getElementById('wifi-dns-input').value = wifi.dns || '';
+    document.getElementById('wifi-modal').classList.add('show');
+    document.getElementById('wifi-ssid-input').focus();
+  } catch(e) { showToast('Erro: '+e.message, true); }
+}
+
+function closeWifiForm() {
+  document.getElementById('wifi-modal').classList.remove('show');
+}
+
+async function saveWifiConfig() {
+  var ssid = document.getElementById('wifi-ssid-input').value.trim();
+  var pass = document.getElementById('wifi-pass-input').value;
+  var mode = window.s_wifiMode || 0;
+  if (!ssid) { showToast('SSID obrigatório', true); return; }
+  if (mode === 1) {
+    var ip = document.getElementById('wifi-ip-input').value.trim();
+    var gw = document.getElementById('wifi-gw-input').value.trim();
+    if (!ip || !gw) { showToast('IP Fixo e Gateway obrigatórios', true); return; }
+  }
+  var body = { ssid: ssid, pass: pass, mode: mode,
+    ip: document.getElementById('wifi-ip-input').value.trim(),
+    gateway: document.getElementById('wifi-gw-input').value.trim(),
+    subnet: document.getElementById('wifi-mask-input').value.trim(),
+    dns: document.getElementById('wifi-dns-input').value.trim() };
+  try {
+    await api('/api/config/wifi', {method:'POST', body:JSON.stringify(body)});
+    showToast('Rede salva, reiniciando...');
+    closeWifiForm();
+    setTimeout(function() { window.location.reload(); }, 2500);
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
 
@@ -918,6 +1086,10 @@ h1{font-size:1.1rem}
 <div class="desc">Publica discovery + estado de todos os sensores via MQTT</div>
 </div>
 <div class="endpoint">
+<div class="head"><span class="method get">GET</span><span class="path">/api/config/mqtt</span></div>
+<div class="desc">Retorna configuracao atual do broker MQTT</div>
+</div>
+<div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/config/mqtt</span></div>
 <div class="desc">Configura broker MQTT</div>
 <div class="params">
@@ -926,6 +1098,23 @@ h1{font-size:1.1rem}
 <tr><td><code>port</code></td><td>number</td><td>Porta do broker</td></tr>
 <tr><td><code>user</code></td><td>string</td><td>Usuario (opcional)</td></tr>
 <tr><td><code>pass</code></td><td>string</td><td>Senha (opcional)</td></tr></table>
+</div>
+</div>
+
+<h2>Rede (WiFi)</h2>
+<div class="endpoint">
+<div class="head"><span class="method get">GET</span><span class="path">/api/config/wifi</span></div>
+<div class="desc">Retorna configuracao de rede (SSID, modo DHCP/estatico, IP, gateway, mascara, DNS)</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/api/config/wifi</span></div>
+<div class="desc">Configura rede WiFi (credenciais + IP fixo ou DHCP). Reinicia o gateway para aplicar</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>ssid</code></td><td>string</td><td>Nome da rede (obrigatorio)</td></tr>
+<tr><td><code>pass</code></td><td>string</td><td>Senha (vazio mantem a atual)</td></tr>
+<tr><td><code>mode</code></td><td>number</td><td>0 = DHCP, 1 = IP fixo</td></tr>
+<tr><td><code>ip</code> / <code>gateway</code> / <code>subnet</code> / <code>dns</code></td><td>string</td><td>Usados quando mode=1</td></tr></table>
 </div>
 </div>
 

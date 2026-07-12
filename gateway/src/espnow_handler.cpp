@@ -41,7 +41,11 @@ static void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint
 static void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot);
 static void send_gw_announce(const uint8_t *mac);
 
+#ifdef ESP32
+extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len) {
+#else
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
+#endif
     if (!data || len < 1) {
         s_crc_errors++;
         return;
