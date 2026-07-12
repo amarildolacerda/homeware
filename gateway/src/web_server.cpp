@@ -513,7 +513,47 @@ void web_server_init() {
         captive_portal_set_submitted();
     });
     s_server.on("/api/portal/scan", HTTP_GET, []() {
-        s_server.send(501, "application/json", "{\"error\":\"not implemented\"}");
+        int n = WiFi.scanNetworks();
+        const int MAX_NET = 64;
+        String ssids[MAX_NET];
+        int32_t rssis[MAX_NET];
+        int encs[MAX_NET];
+        int count = 0;
+        for (int i = 0; i < n && count < MAX_NET; i++) {
+            String s = WiFi.SSID(i);
+            if (s.length() == 0) continue; // omit hidden networks
+            bool dup = false;
+            for (int j = 0; j < count; j++) {
+                if (ssids[j] == s) { dup = true; break; }
+            }
+            if (dup) continue;
+            ssids[count] = s;
+            rssis[count] = WiFi.RSSI(i);
+            encs[count] = (int)WiFi.encryptionType(i);
+            count++;
+        }
+        // sort by RSSI descending (selection sort)
+        for (int a = 0; a < count - 1; a++) {
+            for (int b = a + 1; b < count; b++) {
+                if (rssis[b] > rssis[a]) {
+                    int32_t tr = rssis[a]; rssis[a] = rssis[b]; rssis[b] = tr;
+                    String ts = ssids[a]; ssids[a] = ssids[b]; ssids[b] = ts;
+                    int te = encs[a]; encs[a] = encs[b]; encs[b] = te;
+                }
+            }
+        }
+        JsonDocument doc;
+        JsonArray arr = doc["networks"].to<JsonArray>();
+        for (int i = 0; i < count; i++) {
+            JsonObject o = arr.add<JsonObject>();
+            o["ssid"] = ssids[i];
+            o["rssi"] = rssis[i];
+            o["enc"] = encs[i];
+        }
+        WiFi.scanDelete();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
     });
     auto portal_redirect = []() {
         s_server.sendHeader("Location", "/");

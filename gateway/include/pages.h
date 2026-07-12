@@ -60,6 +60,13 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 <button class="btn" id="save" onclick="save()">Salvar e Reiniciar</button>
 </div>
 <script>
+fetch('/api/portal/scan').then(function(r){return r.json();}).then(function(d){
+  var dl=document.getElementById('ssid-list');
+  (d.networks||[]).forEach(function(n){
+    if(!n.ssid)return;
+    var o=document.createElement('option');o.value=n.ssid;o.label=(n.rssi!==undefined?n.rssi+' dBm':'');dl.appendChild(o);
+  });
+}).catch(function(){});
 var mode = 0;
 function setMode(m){mode=m;document.getElementById('seg-dhcp').classList.toggle('active',m===0);document.getElementById('seg-static').classList.toggle('active',m===1);document.getElementById('static-fields').classList.toggle('hidden',m!==1);}
 function save(){
