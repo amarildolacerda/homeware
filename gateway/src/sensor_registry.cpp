@@ -221,13 +221,13 @@ bool sensor_registry_save() {
             EEPROM.write(addr + 1, s_sensors[i].type);
             EEPROM.write(addr + 2, s_sensors[i].slot);
             for (int j = 0; j < 6; j++) EEPROM.write(addr + 3 + j, s_sensors[i].mac[j]);
-            for (int j = 0; j < 32; j++) {
+            for (int j = 0; j < 48; j++) {
                 if (j < (int)strlen(s_sensors[i].name))
                     EEPROM.write(addr + 9 + j, s_sensors[i].name[j]);
                 else
                     EEPROM.write(addr + 9 + j, 0);
             }
-            EEPROM.write(addr + 41, 0);
+            EEPROM.write(addr + 57, 0);
             console.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
         }
     }
@@ -252,9 +252,9 @@ void sensor_registry_load() {
             s_sensors[i].type = EEPROM.read(addr + 1);
             s_sensors[i].slot = EEPROM.read(addr + 2);
             for (int j = 0; j < 6; j++) s_sensors[i].mac[j] = EEPROM.read(addr + 3 + j);
-            char name[33] = {0};
+            char name[49] = {0};
             int name_len = 0;
-            for (int j = 0; j < 32; j++) {
+            for (int j = 0; j < 48; j++) {
                 uint8_t c = EEPROM.read(addr + 9 + j);
                 if (c == 0) break;
                 if (c < 32 || c > 126) break;

@@ -87,6 +87,7 @@
 14. Qualquer mudança de estado no client deve disparar feedback imediato ao gateway (setar `s_last_espnow_send = 0`)
 15. **Loop non-blocking**: `loop()` não pode conter `delay()` bloqueante. Usar máquina de estados com timestamps (`millis()`) para ESP-NOW sends, ACK wait, retries, pareamento, heartbeat e LED. Aplica-se a gateway e todos os clients.
 16. **Páginas web PROGMEM**: páginas HTML grandes (>10KB) via `FPSTR` + `send()` estouram heap no ESP8266 porque alocam String RAM. `send_P()` e `sendContent_P()` também falham se o buffer TCP encher (`write()` retorna 0). Para páginas grandes, escrever response manualmente via `WiFiClient` em chunks pequenos (256 bytes) com `yield()` entre chunks. Alternativa: manter páginas enxutas (<8KB) para usar `send_P()` sem risco.
+17. **device_name[48]**: `espnow_pair_request_t.device_name` usa48 bytes (compatível com `s_device_name[48]` dos clients). `virtual_sensor_t.name` e `pending_pair_t.name` também48. EEPROM_SENSOR_SIZE=64 (nome ocupa48 bytes no offset9). Qualquer mudança nesse campo exige atualização simultânea de gateway e todos os clients.
 
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias

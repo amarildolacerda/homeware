@@ -84,7 +84,7 @@ typedef struct __attribute__((packed)) {
     uint8_t sensor_mac[6];
     uint8_t sensor_type;
     uint8_t firmware_version[4];
-    char device_name[16];
+    char device_name[48];
 } espnow_pair_request_t;
 
 typedef struct __attribute__((packed)) {

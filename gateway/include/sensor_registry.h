@@ -11,7 +11,7 @@ typedef struct {
     uint8_t type;
     uint16_t sequence;
     uint8_t slot;
-    char name[32];
+    char name[48];
     char bridge_device_id[48];
     uint8_t battery_pct;
     int16_t last_rssi;

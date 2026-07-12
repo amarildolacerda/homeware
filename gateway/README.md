@@ -95,9 +95,15 @@ Acesse `http://<IP_DO_GATEWAY>` no navegador:
 
 ## EEPROM Layout
 ```
-0x000-0x2CF: 20 sensores x 48 bytes cada
-0x300-0x33F: Bridge host (64 bytes)
-0x340-0x341: Bridge port (2 bytes)
+0x000-0x4FF: 20 sensores x 64 bytes cada
+  offset 0: marker (1 byte, 0xAA = pareado)
+  offset 1: type (1 byte)
+  offset 2: slot (1 byte)
+  offset 3-8: MAC (6 bytes)
+  offset 9-56: device_name (48 bytes)
+  offset 57: null terminator
+0x500-0x53F: Bridge host (64 bytes)
+0x540-0x541: Bridge port (2 bytes)
 ```
 
 ## Troubleshooting
