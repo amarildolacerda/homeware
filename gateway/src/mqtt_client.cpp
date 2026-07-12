@@ -36,6 +36,10 @@ static void build_device_info(JsonDocument &doc, const char *name, const char *b
     device["model"] = model;
 }
 
+static void build_entity_id(char *buf, size_t len, const uint8_t *mac, int slot, const char *suffix) {
+    snprintf(buf, len, "gw_%02X%02X%02X.%s.%d", mac[3], mac[4], mac[5], suffix, slot);
+}
+
 static bool is_valid_host() {
     if (strcmp(s_mqtt_host, "0.0.0.0") == 0) return false;
     if (strlen(s_mqtt_host) == 0) return false;
@@ -49,16 +53,19 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
     buf[len] = '\0';
 
     String topicStr(topic);
-    if (!topicStr.startsWith(MQTT_TOPIC_PREFIX "/switch/") || !topicStr.endsWith("/set")) return;
+    bool is_switch = topicStr.startsWith(MQTT_TOPIC_PREFIX "/switch/");
+    bool is_light = topicStr.startsWith(MQTT_TOPIC_PREFIX "/light/");
+    if ((!is_switch && !is_light) || !topicStr.endsWith("/set")) return;
 
-    int id_start = String(MQTT_TOPIC_PREFIX "/switch/").length();
+    int id_start = is_switch ? String(MQTT_TOPIC_PREFIX "/switch/").length()
+                             : String(MQTT_TOPIC_PREFIX "/light/").length();
     int id_end = topicStr.lastIndexOf("/set");
     if (id_start >= id_end) return;
     String entity_id = topicStr.substring(id_start, id_end);
 
-    const char suffix[] = "_power";
-    if (!entity_id.endsWith(suffix)) return;
-    String dev_id = entity_id.substring(0, entity_id.length() - strlen(suffix));
+    int dot = entity_id.lastIndexOf('.');
+    if (dot < 0) return;
+    int slot = atoi(entity_id.c_str() + dot + 1);
 
     uint8_t state = 0;
     if (strcmp(buf, "ON") == 0 || strcmp(buf, "1") == 0 || strcmp(buf, "true") == 0) {
@@ -67,9 +74,9 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
 
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
-        if (s && s->paired && strcmp(s->bridge_device_id, dev_id.c_str()) == 0) {
+        if (s && s->paired && s->slot == slot) {
             espnow_send_command(s->mac, s->slot, state);
-            console.printf("[MQTT] Command forwarded: %s -> slot %d state=%d\n", dev_id.c_str(), i, state);
+            console.printf("[MQTT] Command forwarded: slot %d state=%d\n", i, state);
             break;
         }
     }
@@ -94,8 +101,8 @@ static void publish_entity_config(const char *component, const char *entity_id,
         doc["payload_off"] = "OFF";
     }
 
-    if (strcmp(component, "switch") == 0) {
-        doc["command_topic"] = String(MQTT_TOPIC_PREFIX "/switch/") + entity_id + "/set";
+    if (strcmp(component, "switch") == 0 || strcmp(component, "light") == 0) {
+        doc["command_topic"] = String(MQTT_TOPIC_PREFIX "/") + component + "/" + entity_id + "/set";
     }
 
     if (strlen(device_class) > 0) {
@@ -267,7 +274,7 @@ void mqtt_client_generate_device_ids() {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) == 0) {
             snprintf(s->bridge_device_id, sizeof(s->bridge_device_id),
-                     PLATFORM_PREFIX "_%06x_sensor_%d", cid, i);
+                     "gw_%02X%02X%02X.%d", s->mac[3], s->mac[4], s->mac[5], i);
         }
     }
 }
@@ -278,105 +285,97 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
     const char *id = sensor->bridge_device_id;
     const char *name = sensor->name;
     const char *model = sensor_type_to_string(sensor->type);
+    char entity[32];
 
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_temperature", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
             publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.temp_hum.temperature, 1).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_humidity", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
             publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.temp_hum.humidity, 0).c_str());
             break;
         }
         case SENSOR_TYPE_CONTACT: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_contact", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "cnt");
             publish_entity_config("binary_sensor", entity, name, "Contato", "door", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.contact.contact_state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_MOTION: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_occupancy", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "occ");
             publish_entity_config("binary_sensor", entity, name, "Movimento", "occupancy", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.motion.motion_state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_GAS: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_gas_level", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
             publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.gas.gas_level).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_alarm", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
             publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.gas.alarm ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_DHT_GAS: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_temperature", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
             publish_entity_config("sensor", entity, name, "Temperatura", "temperature", "°C", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.temperature, 1).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_humidity", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
             publish_entity_config("sensor", entity, name, "Umidade", "humidity", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.humidity, 0).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_gas_level", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
             publish_entity_config("sensor", entity, name, "Gás", "gas", "ppm", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.dht_gas.gas_level).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_alarm", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
             publish_entity_config("binary_sensor", entity, name, "Alarme", "smoke", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.dht_gas.alarm ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_RAIN: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_rain_level", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "rain");
             publish_entity_config("sensor", entity, name, "Chuva", "moisture", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.rain.rain_level).c_str());
 
-            snprintf(entity, sizeof(entity), "%s_rain", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "raind");
             publish_entity_config("binary_sensor", entity, name, "Chuva Digital", "moisture", "", true, id, model);
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.rain.rain_digital ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_TANK: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_level", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
             publish_entity_config("sensor", entity, name, "Nível", "water", "%", false, id, model);
             publish_entity_state("sensor", entity,
                                  String(sensor->state.tank.level_pct).c_str());
             break;
         }
         case SENSOR_TYPE_ONOFF: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_power", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "pwr");
             publish_entity_config("switch", entity, name, "Interruptor", "", "", false, id, model);
             publish_entity_state("switch", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_LIGHT: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_light", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lgt");
             publish_entity_config("light", entity, name, "Lâmpada", "", "", false, id, model);
             publish_entity_state("light", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
@@ -390,92 +389,88 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
 bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
     if (!s_mqtt_connected) return false;
 
-    const char *id = sensor->bridge_device_id;
+    char entity[32];
 
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM: {
-            char entity[64], val[16];
-            snprintf(entity, sizeof(entity), "%s_temperature", id);
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
             snprintf(val, sizeof(val), "%.1f", sensor->state.temp_hum.temperature);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_humidity", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
             snprintf(val, sizeof(val), "%.0f", sensor->state.temp_hum.humidity);
             publish_entity_state("sensor", entity, val);
             break;
         }
         case SENSOR_TYPE_CONTACT: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_contact", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "cnt");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.contact.contact_state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_MOTION: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_occupancy", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "occ");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.motion.motion_state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_GAS: {
-            char entity[64], val[16];
-            snprintf(entity, sizeof(entity), "%s_gas_level", id);
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
             snprintf(val, sizeof(val), "%u", sensor->state.gas.gas_level);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_alarm", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.gas.alarm ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_DHT_GAS: {
-            char entity[64], val[16];
-            snprintf(entity, sizeof(entity), "%s_temperature", id);
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
             snprintf(val, sizeof(val), "%.1f", sensor->state.dht_gas.temperature);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_humidity", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
             snprintf(val, sizeof(val), "%.0f", sensor->state.dht_gas.humidity);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_gas_level", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
             snprintf(val, sizeof(val), "%u", sensor->state.dht_gas.gas_level);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_alarm", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.dht_gas.alarm ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_RAIN: {
-            char entity[64], val[16];
-            snprintf(entity, sizeof(entity), "%s_rain_level", id);
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "rain");
             snprintf(val, sizeof(val), "%u", sensor->state.rain.rain_level);
             publish_entity_state("sensor", entity, val);
 
-            snprintf(entity, sizeof(entity), "%s_rain", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "raind");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.rain.rain_digital ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_TANK: {
-            char entity[64], val[16];
-            snprintf(entity, sizeof(entity), "%s_level", id);
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
             snprintf(val, sizeof(val), "%u", sensor->state.tank.level_pct);
             publish_entity_state("sensor", entity, val);
             break;
         }
         case SENSOR_TYPE_ONOFF: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_power", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "pwr");
             publish_entity_state("switch", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
         case SENSOR_TYPE_LIGHT: {
-            char entity[64];
-            snprintf(entity, sizeof(entity), "%s_light", id);
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lgt");
             publish_entity_state("light", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;

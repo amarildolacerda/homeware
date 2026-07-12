@@ -23,7 +23,7 @@ static int s_forwarded = 0;
 static int s_received = 0;
 static bool s_monitor = false;
 static unsigned long s_last_gateway_comm = 0; // last successful comm with gateway
-static char s_device_name[48] = DEVICE_NAME;
+static char s_device_name[32] = DEVICE_NAME;
 static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 

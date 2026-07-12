@@ -50,7 +50,7 @@ static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
 static char s_device_id[32];
-static char s_device_name[48] = DEVICE_NAME;
+static char s_device_name[32] = DEVICE_NAME;
 
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;

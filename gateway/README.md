@@ -43,7 +43,7 @@ Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge 
 
 ## Bridge Integration
 - Registra cada sensor virtual como device separado no Bridge
-- IDs: `esp8266_<gateway_chipid>_sensor_<slot>`
+- IDs: `gw_XXYYZZ.N` (compacto, XXYYZZ = últimos 3 bytes MAC hex, N = slot)
 - Tipos suportados: temperature, contact, occupancy, gas, rain, tanque, onoff
 - Heartbeat a cada 30s
 - Responde a broadcast `re_register` do Bridge
@@ -95,15 +95,15 @@ Acesse `http://<IP_DO_GATEWAY>` no navegador:
 
 ## EEPROM Layout
 ```
-0x000-0x4FF: 20 sensores x 64 bytes cada
+0x000-0x8FF: 48 sensores x 48 bytes cada
   offset 0: marker (1 byte, 0xAA = pareado)
   offset 1: type (1 byte)
   offset 2: slot (1 byte)
   offset 3-8: MAC (6 bytes)
-  offset 9-56: device_name (48 bytes)
-  offset 57: null terminator
-0x500-0x53F: Bridge host (64 bytes)
-0x540-0x541: Bridge port (2 bytes)
+  offset 9-40: device_name (32 bytes)
+  offset 41: null terminator
+0x900-0x93F: MQTT host (64 bytes)
+0x940-0x941: MQTT port (2 bytes)
 ```
 
 ## Troubleshooting

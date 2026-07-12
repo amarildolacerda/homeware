@@ -21,7 +21,7 @@ typedef struct {
     uint8_t mac[6];
     uint8_t sensor_type;
     uint16_t sequence;
-    char name[48];
+    char name[32];
 } pending_pair_t;
 static pending_pair_t s_pending_pairs[PENDING_PAIR_MAX];
 

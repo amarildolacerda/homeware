@@ -12,10 +12,10 @@
 9. para fazer flash OTA, pode tentar localiar o IP usando o scan.py comparando o <title/>
 
 ## Protocolo ESP-NOW (pair request)
-- `espnow_pair_request_t.device_name`: **48 bytes** (compatível com `s_device_name[48]` dos clients)
-- `virtual_sensor_t.name`: **48 bytes**
-- `pending_pair_t.name`: **48 bytes**
-- EEPROM_SENSOR_SIZE: **64 bytes** por sensor (nome ocupa48 bytes no offset9)
+- `espnow_pair_request_t.device_name`: **32 bytes** (compatível com `s_device_name[32]` dos clients)
+- `virtual_sensor_t.name`: **32 bytes**
+- `pending_pair_t.name`: **32 bytes**
+- EEPROM_SENSOR_SIZE: **48 bytes** por sensor (nome ocupa32 bytes no offset9)
 - Qualquer mudança no tamanho de `device_name` exige atualização simultânea de gateway e todos os clients
 
 

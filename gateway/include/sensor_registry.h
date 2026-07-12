@@ -4,15 +4,13 @@
 #include "espnow_protocol.h"
 #include <Arduino.h>
 
-#define MAX_VIRTUAL_SENSORS 20
-
 typedef struct {
     uint8_t mac[6];
     uint8_t type;
     uint16_t sequence;
     uint8_t slot;
-    char name[48];
-    char bridge_device_id[48];
+    char name[32];
+    char bridge_device_id[16];
     uint8_t battery_pct;
     int16_t last_rssi;
     unsigned long last_seen;

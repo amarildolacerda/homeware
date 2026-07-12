@@ -54,7 +54,7 @@ static uint32_t s_espnow_rx_count = 0;
 static unsigned long s_last_send_ms = 0;
 
 static char s_device_id[32];
-static char s_device_name[48] = DEVICE_NAME;
+static char s_device_name[32] = DEVICE_NAME;
 
 static int s_dht_pin = DHT_PIN;
 static bool s_wifi_configuration_mode = false;
@@ -441,7 +441,7 @@ static bool wifi_setup(bool force_config_portal = false)
     s_wifi_config_start_time = millis();
     wifiManager.setConfigPortalTimeout(300);
 
-    WiFiManagerParameter custom_dev_name("dev_name", "Device Name", s_device_name, 48);
+    WiFiManagerParameter custom_dev_name("dev_name", "Device Name", s_device_name, 32);
     wifiManager.addParameter(&custom_dev_name);
 
     if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS))
