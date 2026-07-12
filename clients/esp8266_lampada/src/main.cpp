@@ -919,6 +919,26 @@ static void handle_api_wifi(void)
     }
 }
 
+static void serve_pgm_page(const char *page)
+{
+    size_t total = strlen_P(page);
+    WiFiClient cl = s_server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+    PGM_P src = page;
+    char buf[256];
+    while (total > 0)
+    {
+        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+        memcpy_P(buf, src, chunk);
+        cl.write((const uint8_t *)buf, chunk);
+        src += chunk;
+        total -= chunk;
+        yield();
+    }
+}
+
 static void handle_root(void)
 {
     if (s_config_portal_active)
@@ -935,7 +955,7 @@ static void handle_root(void)
     page += FPSTR(PAGE_DASHBOARD_CONT2);
     page += FPSTR(PAGE_SCRIPT_PINS);
     page += FPSTR(PAGE_DASHBOARD_END);
-    s_server.send(200, "text/html", page);
+    serve_pgm_page(page.c_str());
 }
 
 static void handle_api_state(void)
@@ -1646,7 +1666,7 @@ void setup(void)
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
-                { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
+                { serve_pgm_page((const char *)FPSTR(PAGE_DOCS)); });
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);

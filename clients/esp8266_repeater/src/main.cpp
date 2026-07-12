@@ -42,6 +42,7 @@ static int s_client_count = 0;
 
 static void save_gateway_mac(void);
 static bool load_gateway_mac(void);
+static bool wifi_setup(bool force_portal);
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
@@ -301,6 +302,49 @@ static void load_device_name(void)
     EEPROM.end();
 }
 
+enum WifiState { WIFI_IDLE, WIFI_RECONNECTING };
+static WifiState s_wifi_state = WIFI_IDLE;
+static unsigned long s_wifi_reconnect_deadline = 0;
+static unsigned long s_last_config_attempt = 0;
+static unsigned long s_last_reconnect_attempt = 0;
+
+static void maintain_wifi_connection(void)
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        s_wifi_state = WIFI_IDLE;
+        return;
+    }
+    unsigned long now = millis();
+    if (s_wifi_state == WIFI_RECONNECTING)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            console.printf("[%s] Reconnected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
+            s_wifi_state = WIFI_IDLE;
+            return;
+        }
+        if (now >= s_wifi_reconnect_deadline)
+        {
+            console.printf("[%s] WiFi reconnect timeout\n", TAG);
+            s_wifi_state = WIFI_IDLE;
+            if (now - s_last_config_attempt > 300000)
+            {
+                s_last_config_attempt = now;
+                wifi_setup(true);
+            }
+        }
+        return;
+    }
+    if (now - s_last_reconnect_attempt < 30000)
+        return;
+    s_last_reconnect_attempt = now;
+    console.printf("[%s] WiFi disconnected. Reconnecting...\n", TAG);
+    WiFi.begin();
+    s_wifi_reconnect_deadline = millis() + 15000;
+    s_wifi_state = WIFI_RECONNECTING;
+}
+
 static bool wifi_setup(bool force_portal = false)
 {
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
@@ -474,9 +518,29 @@ static void handle_api_settings(void)
     }
 }
 
+static void serve_pgm_page(const char *page)
+{
+    size_t total = strlen_P(page);
+    WiFiClient cl = s_server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+    PGM_P src = page;
+    char buf[256];
+    while (total > 0)
+    {
+        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+        memcpy_P(buf, src, chunk);
+        cl.write((const uint8_t *)buf, chunk);
+        src += chunk;
+        total -= chunk;
+        yield();
+    }
+}
+
 static void handle_root(void)
 {
-    s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
+    serve_pgm_page(PAGE_DASHBOARD);
 }
 
 static void handle_api_status(void)
@@ -618,7 +682,7 @@ void setup(void)
     if (has_wifi)
     {
         s_server.on("/", handle_root);
-        s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
+        s_server.on("/docs", []() { serve_pgm_page(PAGE_DOCS); });
         s_server.on("/api/status", handle_api_status);
         s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
         s_server.on("/api/restart", HTTP_POST, []() {
@@ -663,6 +727,7 @@ void loop(void)
         handle_serial((char)tc);
     if (WiFi.status() == WL_CONNECTED)
         s_server.handleClient();
+    maintain_wifi_connection();
 
 #ifdef LED_PIN
     /* Slow heartbeat LED */
@@ -718,5 +783,5 @@ void loop(void)
         send_repeater_status();
     }
 
-    delay(1);
+    yield();
 }

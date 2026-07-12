@@ -31,6 +31,14 @@ static bool s_ack_received = false;
 static bool s_send_pending = false;
 static bool s_espnow_ready = false;
 
+static unsigned long s_pair_cooldown_end = 0;
+
+enum SendState { SEND_IDLE, SEND_WAIT_ACK, SEND_RETRY_DELAY, SEND_RETRY_WAIT_ACK };
+static SendState s_send_state = SEND_IDLE;
+static int s_retry_count = 0;
+static unsigned long s_ack_deadline = 0;
+static unsigned long s_retry_deadline = 0;
+
 static int s_rain_level = 0;
 static int s_rain_digital = HIGH;
 static int s_battery = 100;
@@ -389,34 +397,50 @@ static bool wifi_setup(bool force_config_portal = false)
     return false;
 }
 
+enum WifiState { WIFI_IDLE, WIFI_RECONNECTING };
+static WifiState s_wifi_state = WIFI_IDLE;
+static unsigned long s_wifi_reconnect_deadline = 0;
+static unsigned long s_last_config_attempt = 0;
+
 static void maintain_wifi_connection(void)
 {
     if (WiFi.status() == WL_CONNECTED)
+    {
+        s_wifi_state = WIFI_IDLE;
         return;
+    }
+
     unsigned long now = millis();
+
+    if (s_wifi_state == WIFI_RECONNECTING)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            console.printf("[%s] Reconnected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
+            s_wifi_state = WIFI_IDLE;
+            return;
+        }
+        if (now >= s_wifi_reconnect_deadline)
+        {
+            console.printf("[%s] WiFi reconnect timeout\n", TAG);
+            s_wifi_state = WIFI_IDLE;
+            if (now - s_last_config_attempt > 300000)
+            {
+                s_last_config_attempt = now;
+                wifi_setup(true);
+            }
+        }
+        return;
+    }
+
     if (now - s_last_reconnect_attempt < 30000)
         return;
     s_last_reconnect_attempt = now;
 
     console.printf("[%s] WiFi disconnected. Reconnecting...\n", TAG);
     WiFi.begin();
-    unsigned long connect_start = millis();
-    while (millis() - connect_start < 15000)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            console.printf("[%s] Reconnected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
-            return;
-        }
-        delay(500);
-    }
-
-    static unsigned long last_config_attempt = 0;
-    if (now - last_config_attempt > 300000)
-    {
-        last_config_attempt = now;
-        wifi_setup(true);
-    }
+    s_wifi_reconnect_deadline = millis() + 15000;
+    s_wifi_state = WIFI_RECONNECTING;
 }
 
 static void check_config_portal_timeout(void)
@@ -459,9 +483,29 @@ static void handle_api_settings(void)
     }
 }
 
+static void serve_pgm_page(const char *page)
+{
+    size_t total = strlen_P(page);
+    WiFiClient cl = s_server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+    PGM_P src = page;
+    char buf[256];
+    while (total > 0)
+    {
+        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
+        memcpy_P(buf, src, chunk);
+        cl.write((const uint8_t *)buf, chunk);
+        src += chunk;
+        total -= chunk;
+        yield();
+    }
+}
+
 static void handle_root(void)
 {
-    s_server.send(200, "text/html", FPSTR(PAGE_DASHBOARD));
+    serve_pgm_page(PAGE_DASHBOARD);
 }
 
 static void handle_api_state(void)
@@ -716,7 +760,7 @@ void setup(void)
     espnow_init_client();
 
     s_server.on("/", handle_root);
-    s_server.on("/docs", []() { s_server.send(200, "text/html", FPSTR(PAGE_DOCS)); });
+    s_server.on("/docs", []() { serve_pgm_page(PAGE_DOCS); });
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/pin", handle_api_pin);
@@ -768,7 +812,7 @@ void loop(void)
     if (WiFi.status() != WL_CONNECTED)
     {
         maintain_wifi_connection();
-        delay(1000);
+        yield();
         return;
     }
 
@@ -783,6 +827,14 @@ void loop(void)
 
     if (!s_paired)
     {
+        if (s_pair_cooldown_end && now < s_pair_cooldown_end)
+            return;
+        if (s_pair_cooldown_end && now >= s_pair_cooldown_end)
+        {
+            s_pair_cooldown_end = 0;
+            s_pair_attempts = 0;
+        }
+
         if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
         {
             s_last_espnow_pair = now;
@@ -791,64 +843,86 @@ void loop(void)
             espnow_send_pair_request();
             if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
             {
-                s_pair_attempts = 0;
-                console.printf("[%s] Max pair attempts, waiting before retry\n", TAG);
-                delay(60000);
+                console.printf("[%s] Max pair attempts, waiting 60s before retry\n", TAG);
+                s_pair_cooldown_end = millis() + 60000;
             }
         }
-        delay(1);
         return;
     }
 
-    if (now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
+    if (s_send_state == SEND_WAIT_ACK)
     {
-        s_last_espnow_send = now;
-        s_ack_received = false;
-        if (espnow_send_data())
+        if (s_ack_received || now >= s_ack_deadline)
         {
-            unsigned long deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
-            while (millis() < deadline)
-            {
-                if (s_ack_received) break;
-                delay(1);
-            }
             if (s_ack_received)
             {
                 s_gateway_connected = true;
-                s_last_send_ms = millis();
+                s_last_send_ms = now;
+                s_send_state = SEND_IDLE;
             }
             else
             {
-                s_gateway_connected = false;
-                bool ok = false;
-                for (int retry = 0; retry < ESPNOW_SEND_RETRIES; retry++)
-                {
-                    delay(50);
-                    s_ack_received = false;
-                    if (espnow_send_data())
-                    {
-                        deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
-                        while (millis() < deadline)
-                        {
-                            if (s_ack_received) break;
-                            delay(1);
-                        }
-                        if (s_ack_received) { ok = true; break; }
-                    }
-                }
-                if (ok)
-                {
-                    s_gateway_connected = true;
-                    s_last_send_ms = millis();
-                }
-                else
+                s_retry_count++;
+                if (s_retry_count >= ESPNOW_SEND_RETRIES)
                 {
                     console.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
                     s_paired = false;
                     s_pair_attempts = 0;
                     s_last_espnow_pair = 0;
+                    s_pair_cooldown_end = 0;
+                    s_send_state = SEND_IDLE;
+                }
+                else
+                {
+                    s_retry_deadline = now + 50;
+                    s_send_state = SEND_RETRY_DELAY;
                 }
             }
+        }
+        return;
+    }
+
+    if (s_send_state == SEND_RETRY_DELAY)
+    {
+        if (now >= s_retry_deadline)
+        {
+            s_ack_received = false;
+            if (espnow_send_data())
+            {
+                s_ack_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
+                s_send_state = SEND_WAIT_ACK;
+            }
+            else
+            {
+                s_retry_count++;
+                if (s_retry_count >= ESPNOW_SEND_RETRIES)
+                {
+                    console.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
+                    s_paired = false;
+                    s_pair_attempts = 0;
+                    s_last_espnow_pair = 0;
+                    s_pair_cooldown_end = 0;
+                    s_send_state = SEND_IDLE;
+                }
+                else
+                {
+                    s_retry_deadline = now + 50;
+                    s_send_state = SEND_RETRY_DELAY;
+                }
+            }
+        }
+        return;
+    }
+
+    if (s_send_state == SEND_IDLE && now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
+    {
+        s_last_espnow_send = now;
+        s_ack_received = false;
+        s_retry_count = 0;
+        if (espnow_send_data())
+        {
+            s_ack_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
+            s_send_state = SEND_WAIT_ACK;
         }
     }
 
@@ -888,5 +962,5 @@ void loop(void)
     }
 #endif
 
-    delay(1);
+    yield();
 }
