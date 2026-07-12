@@ -1197,6 +1197,16 @@ h1{font-size:1.1rem}
 </div>
 </div>
 
+<h2>Portal de Configuração</h2>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/api/portal/setup</span></div>
+<div class="desc">Configura WiFi (SSID/senha/IP fixo ou DHCP) + MQTT no modo portal cativo. Reinicia o gateway</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method get">GET</span><span class="path">/api/portal/scan</span></div>
+<div class="desc">Lista redes Wi-Fi visíveis (usado pelo portal)</div>
+</div>
+
 <h2>Manutencao</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>
