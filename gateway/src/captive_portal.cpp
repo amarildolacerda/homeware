@@ -19,7 +19,32 @@ void captive_portal_start() {
 }
 
 void captive_dns_poll() {
-    // Implemented in Task 3
+    if (s_dns.parsePacket() == 0) return;
+    static uint8_t buf[512];
+    int len = s_dns.read(buf, sizeof(buf));
+    if (len < 12) return;
+    IPAddress ap = WiFi.softAPIP();
+    // Header: copy ID; set QR=1, AA=1, RA=1, RCODE=0
+    buf[2] = 0x81;
+    buf[3] = 0x80;
+    buf[6] = 0x00; buf[7] = 0x01; // ANCOUNT = 1
+    buf[8] = 0x00; buf[9] = 0x00;  // NSCOUNT = 0
+    buf[10] = 0x00; buf[11] = 0x00; // ARCOUNT = 0
+    // Find end of question section
+    int pos = 12;
+    while (pos < len && buf[pos] != 0) pos += buf[pos] + 1;
+    pos += 1 + 4; // null terminator + QTYPE(2) + QCLASS(2)
+    if (pos + 16 > sizeof(buf)) return;
+    // Answer: name pointer 0xC00C, TYPE A, CLASS IN, TTL 60, RDLEN 4, RDATA = AP IP
+    buf[pos++] = 0xC0; buf[pos++] = 0x0C;
+    buf[pos++] = 0x00; buf[pos++] = 0x01;
+    buf[pos++] = 0x00; buf[pos++] = 0x01;
+    buf[pos++] = 0x00; buf[pos++] = 0x00; buf[pos++] = 0x00; buf[pos++] = 0x3C;
+    buf[pos++] = 0x00; buf[pos++] = 0x04;
+    buf[pos++] = ap[0]; buf[pos++] = ap[1]; buf[pos++] = ap[2]; buf[pos++] = ap[3];
+    s_dns.beginPacket(s_dns.remoteIP(), 53);
+    s_dns.write(buf, pos);
+    s_dns.endPacket();
 }
 
 bool captive_portal_submitted() {
