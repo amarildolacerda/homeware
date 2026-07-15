@@ -15,6 +15,28 @@ static unsigned long s_rx_count = 0;
 static unsigned long s_ack_count = 0;
 static unsigned long s_crc_errors = 0;
 
+static const uint8_t s_bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+/* ESP-NOW uses the "alt" MAC (bit 1 of byte 0 flipped) as source/destination,
+   different from the WiFi MAC. Derive it to address a peer correctly. */
+static void derive_espnow_mac(const uint8_t *wifi_mac, uint8_t *out) {
+    memcpy(out, wifi_mac, 6);
+    out[0] ^= 0x02;
+}
+
+/* Send unicast; fall back to broadcast if the unicast queueing fails.
+   Note: a silent RX drop (ESP-NOW/AP coexistence) is NOT detected here and
+   must be handled by the receiver's ACK/retry logic. */
+static int espnow_send_uf(const uint8_t *mac, const uint8_t *data, int len) {
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper(mac, ch);
+    int ret = esp_now_send(mac, data, len);
+    if (ret == 0) return 0;
+    espnow_add_peer_wrapper(s_bcast_addr, ch);
+    return esp_now_send(s_bcast_addr, data, len);
+}
+
 #define PENDING_PAIR_MAX 5
 typedef struct {
     bool active;
@@ -193,20 +215,13 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    espnow_add_peer_wrapper(broadcast_mac, ch);
-    int ret = esp_now_send(broadcast_mac, (uint8_t*)&ack, sizeof(ack));
-    if (ret != 0) {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
+    int ret = espnow_send_uf(mac, (uint8_t*)&ack, sizeof(ack));
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+    if (ret == 0)
+        console.printf("[ESP-NOW] ACK sent (unicast) to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
+    else
         console.printf("[ESP-NOW] ACK send failed to %s ret=%d\n", mac_str, ret);
-    } else {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
-        console.printf("[ESP-NOW] ACK sent (bcast) to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
-    }
 }
 
 void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
@@ -221,14 +236,10 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    espnow_add_peer_wrapper(broadcast_mac, ch);
-    int ret = esp_now_send(broadcast_mac, (uint8_t*)&resp, sizeof(resp));
+    int ret = espnow_send_uf(mac, (uint8_t*)&resp, sizeof(resp));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] Pair response sent (bcast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
+    console.printf("[ESP-NOW] Pair response sent (unicast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
 }
 
 static void send_gw_announce(const uint8_t *mac) {
@@ -379,15 +390,13 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    espnow_add_peer_wrapper(broadcast_mac, ch);
-    int ret = esp_now_send(broadcast_mac, (uint8_t*)&cmd, sizeof(cmd));
+    uint8_t espnow_mac[6];
+    derive_espnow_mac(mac, espnow_mac);
+    int ret = espnow_send_uf(espnow_mac, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {
-        console.printf("[ESP-NOW] Command sent (bcast) to %s slot=%d state=%d\n", mac_str, slot, state);
+        console.printf("[ESP-NOW] Command sent (unicast) to %s slot=%d state=%d\n", mac_str, slot, state);
         return true;
     }
     console.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);

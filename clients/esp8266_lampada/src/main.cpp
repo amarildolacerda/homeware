@@ -37,6 +37,7 @@ static int s_pair_attempts = 0;
 static bool s_ack_received = false;
 static bool s_send_pending = false;
 static bool s_espnow_ready = false;
+static bool s_force_broadcast = false;
 
 static bool s_relay_state = false;
 static int s_relay_pin = RELAY_PIN;
@@ -522,6 +523,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 
 static bool espnow_init_client(void)
 {
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
     if (esp_now_init() != 0)
     {
         console.printf("[%s] ESP-NOW init failed\n", TAG);
@@ -540,7 +542,9 @@ static bool espnow_add_peer(const uint8_t *mac)
     if (!s_espnow_ready)
         return false;
     esp_now_del_peer((uint8_t *)mac);
-    int ch = ESP_NOW_CHANNEL;
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13)
+        ch = ESP_NOW_CHANNEL;
     int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
     if (ret != 0)
     {
@@ -588,16 +592,17 @@ static bool espnow_send_data(void)
     hdr->payload_len = sizeof(payload_onoff_t) + 4 + 2;
 
     static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (!espnow_add_peer(bcast))
+    uint8_t *dst = s_force_broadcast ? bcast : s_gateway_mac;
+    if (!espnow_add_peer(dst))
     {
-        console.printf("[%s] Failed to add broadcast peer\n", TAG);
+        console.printf("[%s] Failed to add peer\n", TAG);
         return false;
     }
 
     s_ack_received = false;
     s_send_pending = true;
-    console.printf("[%s] Sending data broadcast (%d bytes)\n", TAG, sizeof(buf));
-    int ret = esp_now_send(bcast, buf, sizeof(buf));
+    console.printf("[%s] Sending data %s (%d bytes)\n", TAG, s_force_broadcast ? "broadcast" : "unicast", sizeof(buf));
+    int ret = esp_now_send(dst, buf, sizeof(buf));
     if (ret != 0)
     {
         console.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
@@ -626,11 +631,13 @@ static bool espnow_send_heartbeat(void)
     hdr->payload_len = 0;
 
     static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (!espnow_add_peer(bcast))
+    uint8_t *dst = s_force_broadcast ? bcast : s_gateway_mac;
+    if (!espnow_add_peer(dst))
         return false;
 
     s_ack_received = false;
-    return esp_now_send(bcast, buf, sizeof(buf)) == 0;
+    console.printf("[%s] Sending heartbeat %s\n", TAG, s_force_broadcast ? "broadcast" : "unicast");
+    return esp_now_send(dst, buf, sizeof(buf)) == 0;
 }
 
 static bool espnow_send_pair_request(void)
@@ -1799,19 +1806,18 @@ void loop(void)
             {
                 s_send_retries_left--;
                 s_ack_received = false;
+                s_force_broadcast = (s_send_retries_left == 0);
                 if (espnow_send_data())
                     s_send_deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
                 else
                     s_send_pending = false;
+                s_force_broadcast = false;
             }
             else
             {
                 s_send_pending = false;
                 s_gateway_connected = false;
-                console.printf("[%s] Send failed, re-pairing\n", TAG);
-                s_paired = false;
-                s_pair_attempts = 0;
-                s_last_espnow_pair = 0;
+                console.printf("[%s] Send failed (no ACK), will retry next cycle\n", TAG);
             }
         }
     }
