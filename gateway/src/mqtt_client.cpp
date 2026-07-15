@@ -126,17 +126,26 @@ static void publish_entity_state(const char *component, const char *entity_id, c
     s_mqtt.publish(topic, value, false);
 }
 
+// Load a NUL-terminated printable-ASCII string from EEPROM. Returns false
+// (and leaves buf empty) if the region holds garbage: no terminator within
+// buflen, or any non-printable byte before the terminator. This prevents
+// corrupted EEPROM data from leaking control characters into JSON responses.
+static bool eeprom_read_string(uint16_t offset, char *buf, size_t buflen) {
+    bool terminated = false;
+    for (size_t i = 0; i < buflen - 1; i++) {
+        char c = EEPROM.read(offset + i);
+        if (c == 0) { terminated = true; break; }
+        if (c < 0x20 || c > 0x7E) { terminated = false; break; }
+        buf[i] = c;
+    }
+    buf[buflen - 1] = '\0';
+    return terminated && strlen(buf) > 0;
+}
+
 bool mqtt_client_load_config() {
     EEPROM.begin(EEPROM_SIZE);
 
-    bool valid = false;
-    for (int i = 0; i < 63; i++) {
-        char c = EEPROM.read(EEPROM_MQTT_HOST_OFFSET + i);
-        if (c == 0) { valid = true; break; }
-        s_mqtt_host[i] = c;
-    }
-    s_mqtt_host[63] = '\0';
-    if (!valid || strlen(s_mqtt_host) == 0) {
+    if (!eeprom_read_string(EEPROM_MQTT_HOST_OFFSET, s_mqtt_host, sizeof(s_mqtt_host))) {
         strcpy(s_mqtt_host, MQTT_HOST_DEFAULT);
     }
 
@@ -146,23 +155,13 @@ bool mqtt_client_load_config() {
         s_mqtt_port = port;
     }
 
-    valid = false;
-    for (int i = 0; i < 31; i++) {
-        char c = EEPROM.read(EEPROM_MQTT_USER_OFFSET + i);
-        if (c == 0) { valid = true; break; }
-        s_mqtt_user[i] = c;
+    if (!eeprom_read_string(EEPROM_MQTT_USER_OFFSET, s_mqtt_user, sizeof(s_mqtt_user))) {
+        s_mqtt_user[0] = '\0';
     }
-    s_mqtt_user[31] = '\0';
-    if (!valid) s_mqtt_user[0] = '\0';
 
-    valid = false;
-    for (int i = 0; i < 31; i++) {
-        char c = EEPROM.read(EEPROM_MQTT_PASS_OFFSET + i);
-        if (c == 0) { valid = true; break; }
-        s_mqtt_pass[i] = c;
+    if (!eeprom_read_string(EEPROM_MQTT_PASS_OFFSET, s_mqtt_pass, sizeof(s_mqtt_pass))) {
+        s_mqtt_pass[0] = '\0';
     }
-    s_mqtt_pass[31] = '\0';
-    if (!valid) s_mqtt_pass[0] = '\0';
 
     EEPROM.end();
 

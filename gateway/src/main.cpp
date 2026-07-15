@@ -126,8 +126,6 @@ void setup() {
     mqtt_client_load_config();
     mqtt_client_generate_device_ids();
 
-    web_server_init();
-
     if (!web_server_wifi_setup(false)) {
         console.printf("[%s] WiFi setup failed, restarting...\n", TAG);
         delay(5000);

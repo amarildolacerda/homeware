@@ -15,6 +15,10 @@
 static const char *TAG = "repeater";
 
 static uint8_t s_gateway_mac[6];
+// Broadcast address used for all gateway-bound traffic. ESP8266→ESP32 ESP-NOW
+// unicast is dropped by the radio (see homeware AGENTS.md rule 18), so the
+// repeater must reach the ESP32 gateway via broadcast.
+static uint8_t s_bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static bool s_gateway_configured = false;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_activity = 0;
@@ -189,9 +193,12 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
     else if (s_gateway_configured)
     {
-        /* From client → forward to gateway */
+        /* From client → forward to gateway.
+           Must be broadcast: ESP8266→ESP32 unicast is dropped by the radio
+           (AGENTS.md rule 18). The gateway processes it by the sensor_mac in
+           the frame header, so targeting the gateway MAC is unnecessary. */
         cache_sequence(sequence, mac);
-        esp_now_send(s_gateway_mac, data, len);
+        esp_now_send(s_bcast_addr, data, len);
         s_forwarded++;
         s_last_gateway_comm = millis();
         if (s_monitor)
@@ -373,10 +380,17 @@ static bool wifi_setup(bool force_portal = false)
     return true;
 #else
 
-    if (!force_portal && load_gateway_mac() && WiFi.SSID() != "")
+    // Load any previously saved gateway MAC (sets s_gateway_configured when present).
+    load_gateway_mac();
+
+    if (!force_portal)
     {
         WiFiManager wm;
         wm.setTimeout(180);
+        // autoConnect() uses WiFiManager's persisted credentials; it does NOT
+        // require a gateway MAC. Do not gate on WiFi.SSID() here (it is empty
+        // before autoConnect runs), otherwise the device always falls into the
+        // config portal even when valid WiFi credentials are already saved.
         if (wm.autoConnect())
         {
             console.printf("[%s] WiFi: %s IP: %s\n", TAG, WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
@@ -459,7 +473,7 @@ static void send_repeater_status(void)
 {
     if (!s_gateway_configured) return;
 
-    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t)];
+    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t) + 4 + 2];
     memset(buf, 0, sizeof(buf));
 
     espnow_header_t *hdr = (espnow_header_t *)buf;
@@ -481,9 +495,19 @@ static void send_repeater_status(void)
     pl->free_heap = ESP.getFreeHeap();
     pl->ack_failures = 0;
 
-    hdr->payload_len = sizeof(payload_repeater_status_t);
+    // Gateway convention: append IP(4) + free_heap(2) at the payload tail.
+    IPAddress lip = WiFi.localIP();
+    uint8_t *ip_ptr = hdr->payload + sizeof(payload_repeater_status_t);
+    ip_ptr[0] = lip[0]; ip_ptr[1] = lip[1]; ip_ptr[2] = lip[2]; ip_ptr[3] = lip[3];
+    uint16_t fh = ESP.getFreeHeap();
+    uint8_t *fh_ptr = hdr->payload + sizeof(payload_repeater_status_t) + 4;
+    fh_ptr[0] = fh & 0xFF; fh_ptr[1] = (fh >> 8) & 0xFF;
 
-    esp_now_send(s_gateway_mac, buf, sizeof(buf));
+    hdr->payload_len = sizeof(payload_repeater_status_t) + 4 + 2;
+
+    // Broadcast: ESP8266→ESP32 ESP-NOW unicast is dropped by the radio
+    // (AGENTS.md rule 18). The gateway ACKs this via broadcast.
+    esp_now_send(s_bcast_addr, buf, sizeof(buf));
 }
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);

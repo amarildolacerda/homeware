@@ -597,6 +597,17 @@ bool web_server_wifi_setup(bool force_portal) {
     char saved_pass[EEPROM_WIFI_PASS_SIZE];
     bool have_creds = wifi_creds_load(saved_ssid, saved_pass);
 
+#ifdef STATIC_WIFI
+    if (strlen(WIFI_SSID) > 0) {
+        strncpy(saved_ssid, WIFI_SSID, sizeof(saved_ssid) - 1);
+        saved_ssid[sizeof(saved_ssid) - 1] = '\0';
+        strncpy(saved_pass, WIFI_PASS, sizeof(saved_pass) - 1);
+        saved_pass[sizeof(saved_pass) - 1] = '\0';
+        have_creds = true;
+        console.println("[WIFI] Usando credenciais STATIC_WIFI");
+    }
+#endif
+
     if (!force_portal && have_creds) {
         console.printf("[WIFI] Connecting to saved (EEPROM): %s\n", saved_ssid);
         WiFi.mode(WIFI_STA);
@@ -610,6 +621,7 @@ bool web_server_wifi_setup(bool force_portal) {
         if (WiFi.status() == WL_CONNECTED) {
             console.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
             s_wifi_config_mode = false;
+            web_server_init();
             return true;
         }
         console.println("[WIFI] Failed to connect to saved WiFi");
@@ -619,6 +631,7 @@ bool web_server_wifi_setup(bool force_portal) {
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
     captive_portal_start();
+    web_server_init();
     captive_portal_run();
     // captive_portal_run() only returns after ESP.restart(); this is a fallback:
     s_wifi_config_mode = false;

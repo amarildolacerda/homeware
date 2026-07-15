@@ -248,9 +248,20 @@ void sensor_registry_load() {
         int addr = EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE;
         uint8_t marker = EEPROM.read(addr);
         if (marker == 0xAA) {
+            uint8_t type = EEPROM.read(addr + 1);
+            uint8_t slot = EEPROM.read(addr + 2);
+            // Skip corrupt entries: an invalid sensor type or an out-of-range
+            // slot indicates garbage in EEPROM (e.g. from a different firmware
+            // layout). Loading it would produce junk cards / invalid data.
+            if (type < SENSOR_TYPE_TEMP_HUM || type > SENSOR_TYPE_REPEATER ||
+                slot >= MAX_VIRTUAL_SENSORS) {
+                console.printf("[EEPROM] Skipping corrupt entry at index %d (type=%d slot=%d)\n",
+                               i, type, slot);
+                continue;
+            }
             s_sensors[i].paired = true;
-            s_sensors[i].type = EEPROM.read(addr + 1);
-            s_sensors[i].slot = EEPROM.read(addr + 2);
+            s_sensors[i].type = type;
+            s_sensors[i].slot = slot;
             for (int j = 0; j < 6; j++) s_sensors[i].mac[j] = EEPROM.read(addr + 3 + j);
             char name[33] = {0};
             int name_len = 0;

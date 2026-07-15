@@ -111,6 +111,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar nav a.active{color:var(--primary);background:var(--primary-focus);border-left-color:var(--primary);font-weight:600}
 .sidebar nav a .icon{width:20px;text-align:center;font-size:1.1rem}
 .sidebar .footer-nav{padding:12px 20px;border-top:1px solid var(--border);font-size:0.7rem;color:var(--muted-subtle)}
+.sidebar .nav-group{margin:0}
+.sidebar .nav-group-head{display:flex;align-items:center;gap:10px;width:100%;padding:12px 20px;color:var(--muted);background:none;border:none;border-left:3px solid transparent;font-size:0.85rem;font-weight:500;cursor:pointer;transition:all .15s;text-align:left;font-family:inherit}
+.sidebar .nav-group-head:hover{color:var(--text);background:var(--primary-focus)}
+.sidebar .nav-group.collapsed .chev{transform:rotate(-90deg)}
+.sidebar .nav-group-list{padding:0 0 4px}
+.sidebar .nav-group-list a{display:flex;align-items:center;gap:8px;padding:8px 20px 8px 44px;color:var(--muted);text-decoration:none;font-size:0.78rem;transition:all .15s}
+.sidebar .nav-group-list a:hover{color:var(--text);background:var(--primary-focus)}
+.sidebar .nav-group-list .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
+.sidebar .nav-group-list .empty{font-size:0.72rem;color:var(--muted-subtle);padding:6px 20px 6px 44px}
 .main{margin-left:200px;flex:1;padding:24px;max-width:960px}
 #page{min-height:calc(100vh - 80px)}
 .mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:flex-end;gap:8px;font-size:0.78rem;z-index:10}
@@ -134,10 +143,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="sidebar">
 <div class="logo"><h1>ESP-NOW</h1><span>Gateway</span></div>
 <nav>
-<a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Visão Geral</span></a>
+<a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
 <a href="#" onclick="navigate('settings');return false" id="nav-settings"><span class="icon">&#x2699;</span><span>Configurações</span></a>
 <a href="#" onclick="navigate('logs');return false" id="nav-logs"><span class="icon">&#x1F4CB;</span><span>Logs</span></a>
 </nav>
+<div class="nav-group collapsed" id="repeater-nav" style="display:none">
+<button class="nav-group-head" onclick="toggleRepeaterNav()"><span class="icon">&#x1F504;</span><span>Repetidores</span><span class="chev">&#9662;</span></button>
+<div class="nav-group-list" id="repeater-nav-list"></div>
+</div>
 <div class="footer-nav" id="fw-sidebar">v--</div>
 </div>
 <div class="main"><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
@@ -146,6 +159,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <script>
 let s_pollTimer = null;
 let s_mqtt_connected = false;
+let s_repNavTimer = null;
 
 function navigate(page) {
   if (s_pollTimer) { clearInterval(s_pollTimer); s_pollTimer = null; }
@@ -230,6 +244,31 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+function toggleRepeaterNav() {
+  var g = document.getElementById('repeater-nav');
+  if (g) g.classList.toggle('collapsed');
+}
+async function loadRepeaterNav(sensors) {
+  var group = document.getElementById('repeater-nav');
+  var list = document.getElementById('repeater-nav-list');
+  if (!group || !list) return;
+  try {
+    if (!sensors) { var d = await api('/api/sensors'); sensors = d || []; }
+    var reps = (sensors || []).filter(function(s) { return s.type_name === 'repeater' && s.online; });
+    if (!reps.length) { group.style.display = 'none'; list.innerHTML = ''; return; }
+    group.style.display = '';
+    list.innerHTML = reps.map(function(r) {
+      return '<a href="#" onclick="navigate(\'overview\');return false"><span class="dot"></span><span>'+escHtml(r.name||'Repeater')+' &middot; Slot '+r.slot+'</span></a>';
+    }).join('');
+  } catch(e) {}
+}
+function startRepeaterNavPoll() {
+  if (s_repNavTimer) return;
+  s_repNavTimer = setInterval(loadRepeaterNav, 30000);
+  loadRepeaterNav();
+}
+
+startRepeaterNavPoll();
 navigate('overview');
 </script>
 </body>
@@ -641,6 +680,7 @@ function showPropsModal(slot) {
     '<div class="props-section"><div class="props-section-title">Dispositivo</div>'+
     '<div class="row"><span class="label">Sensores</span><span class="value">'+s_sensors.length+'/'+(s_info.max_sensors||'--')+'</span></div>'+
     (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
+    '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
     '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'&mdash;')+'</span></div>'+
@@ -749,6 +789,7 @@ async function loadData() {
       s_prevSensorMap = {};
       nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
     }
+    if (window.loadRepeaterNav) loadRepeaterNav(sensors);
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   } finally {
@@ -807,6 +848,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <div class="card-body">
 <div class="row"><span class="label">Device ID</span><span class="value" id="s-device" style="font-size:0.7rem">--</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="s-ip">--</span></div>
+<div class="row"><span class="label">MAC</span><span class="value" id="s-gw-mac" style="font-size:0.7rem">--</span></div>
 <div class="row"><span class="label">Firmware</span><span class="value" id="s-fw">--</span></div>
 <div class="row"><span class="label">Uptime</span><span class="value" id="s-uptime">--</span></div>
 <div class="row"><span class="label">Mem. Livre</span><span class="value" id="s-free-heap">--</span></div>
@@ -904,6 +946,7 @@ async function loadSettings() {
     document.getElementById('s-mqtt-uptime').textContent = info.mqtt_connected && info.mqtt_connected_since ? fmtUptime(info.uptime_ms - info.mqtt_connected_since) : '--';
     document.getElementById('s-device').textContent = info.gateway_id || '--';
     document.getElementById('s-ip').textContent = info.ip || '--';
+    document.getElementById('s-gw-mac').textContent = info.gateway_mac || '--';
     document.getElementById('s-fw').textContent = info.fw_version || '--';
     document.getElementById('s-uptime').textContent = fmtUptime(info.uptime_ms);
     document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
@@ -914,6 +957,7 @@ async function loadSettings() {
       startPairingUI(info.pairing_remaining_sec);
     }
     var wifi = await api('/api/config/wifi');
+    window.s_wifiConfig = wifi;
     document.getElementById('s-wifi-ssid').textContent = (wifi.ssid && wifi.ssid.length) ? wifi.ssid : (info.wifi_ssid || '--');
     document.getElementById('s-wifi-ip').textContent = info.ip || '--';
     var isStatic = wifi.mode === 1;
@@ -957,7 +1001,7 @@ async function saveMqttConfig() {
 
 async function showWifiForm() {
   try {
-    var wifi = await api('/api/config/wifi');
+    var wifi = window.s_wifiConfig || await api('/api/config/wifi');
     document.getElementById('wifi-ssid-input').value = wifi.ssid || '';
     document.getElementById('wifi-pass-input').value = '';
     setWifiMode(wifi.mode === 1 ? 1 : 0);

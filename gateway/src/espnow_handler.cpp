@@ -17,25 +17,11 @@ static unsigned long s_crc_errors = 0;
 
 static const uint8_t s_bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-/* ESP-NOW uses the "alt" MAC (bit 1 of byte 0 flipped) as source/destination,
-   different from the WiFi MAC. Derive it to address a peer correctly. */
-static void derive_espnow_mac(const uint8_t *wifi_mac, uint8_t *out) {
-    memcpy(out, wifi_mac, 6);
-    out[0] ^= 0x02;
-}
+/* ESP-NOW delivery uses BROADCAST (all clients receive and filter by
+   sensor_mac/target_mac). Validated with QuickESPNow (qgw/qclient, both STA on
+   the same AP): ESP8266->ESP32 unicast is silently dropped by WiFi/ESP-NOW
+   coexistence, while broadcast works in both directions. See AGENTS.md rule 18. */
 
-/* Send unicast; fall back to broadcast if the unicast queueing fails.
-   Note: a silent RX drop (ESP-NOW/AP coexistence) is NOT detected here and
-   must be handled by the receiver's ACK/retry logic. */
-static int espnow_send_uf(const uint8_t *mac, const uint8_t *data, int len) {
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    espnow_add_peer_wrapper(mac, ch);
-    int ret = esp_now_send(mac, data, len);
-    if (ret == 0) return 0;
-    espnow_add_peer_wrapper(s_bcast_addr, ch);
-    return esp_now_send(s_bcast_addr, data, len);
-}
 
 #define PENDING_PAIR_MAX 5
 typedef struct {
@@ -173,13 +159,11 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             if (hdr->version != ESPNOW_PROTOCOL_VERSION) { s_crc_errors++; return; }
 
             int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
-            {
-                char sender_str[18], sensor_str[18];
-                mac_to_str(mac, sender_str, sizeof(sender_str));
-                mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
-                console.printf("[ESP-NOW] REPEATER_STATUS: sender=%s sensor=%s slot=%d\n",
-                    sender_str, sensor_str, slot);
-            }
+            char sender_str[18], sensor_str[18];
+            mac_to_str(mac, sender_str, sizeof(sender_str));
+            mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
+            console.printf("[ESP-NOW] REPEATER_STATUS: sender=%s sensor=%s slot=%d\n",
+                sender_str, sensor_str, slot);
 
             if (slot < 0) {
                 slot = sensor_registry_find_free_slot();
@@ -189,6 +173,18 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                     return;
                 }
                 sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater");
+            } else {
+                // A device may change role (e.g. was a light, now a repeater).
+                // Re-type the existing slot so its state is parsed as a repeater.
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (s && s->type != SENSOR_TYPE_REPEATER) {
+                    s->type = SENSOR_TYPE_REPEATER;
+                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
+                    s->name[sizeof(s->name) - 1] = '\0';
+                    sensor_registry_save();
+                    console.printf("[ESP-NOW] Slot %d retyped to REPEATER (%s)\n",
+                        slot, sensor_str);
+                }
             }
 
             sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
@@ -215,11 +211,11 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    int ret = espnow_send_uf(mac, (uint8_t*)&ack, sizeof(ack));
+    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&ack, sizeof(ack));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0)
-        console.printf("[ESP-NOW] ACK sent (unicast) to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
+        console.printf("[ESP-NOW] ACK sent (broadcast) to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
     else
         console.printf("[ESP-NOW] ACK send failed to %s ret=%d\n", mac_str, ret);
 }
@@ -236,10 +232,10 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    int ret = espnow_send_uf(mac, (uint8_t*)&resp, sizeof(resp));
+    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&resp, sizeof(resp));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] Pair response sent (unicast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
+    console.printf("[ESP-NOW] Pair response sent (broadcast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
 }
 
 static void send_gw_announce(const uint8_t *mac) {
@@ -253,11 +249,11 @@ static void send_gw_announce(const uint8_t *mac) {
 
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    espnow_add_peer_wrapper(mac, ch);
-    int ret = esp_now_send((uint8_t*)mac, (uint8_t*)&ann, sizeof(ann));
+    espnow_add_peer_wrapper(s_bcast_addr, ch);
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] GW_ANNOUNCE sent to %s gw=%s ret=%d\n", mac_str,
+    console.printf("[ESP-NOW] GW_ANNOUNCE sent (broadcast) to %s gw=%s ret=%d\n", mac_str,
                    FW_VERSION, ret);
 }
 
@@ -390,13 +386,11 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    uint8_t espnow_mac[6];
-    derive_espnow_mac(mac, espnow_mac);
-    int ret = espnow_send_uf(espnow_mac, (uint8_t*)&cmd, sizeof(cmd));
+    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {
-        console.printf("[ESP-NOW] Command sent (unicast) to %s slot=%d state=%d\n", mac_str, slot, state);
+        console.printf("[ESP-NOW] Command sent (broadcast) to %s slot=%d state=%d\n", mac_str, slot, state);
         return true;
     }
     console.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
