@@ -88,6 +88,7 @@
 15. **Loop non-blocking**: `loop()` não pode conter `delay()` bloqueante. Usar máquina de estados com timestamps (`millis()`) para ESP-NOW sends, ACK wait, retries, pareamento, heartbeat e LED. Aplica-se a gateway e todos os clients.
 16. **Páginas web PROGMEM**: páginas HTML grandes (>10KB) via `FPSTR` + `send()` estouram heap no ESP8266 porque alocam String RAM. `send_P()` e `sendContent_P()` também falham se o buffer TCP encher (`write()` retorna 0). Para páginas grandes, escrever response manualmente via `WiFiClient` em chunks pequenos (256 bytes) com `yield()` entre chunks. Alternativa: manter páginas enxutas (<8KB) para usar `send_P()` sem risco.
 17. **device_name[32]**: `espnow_pair_request_t.device_name` usa32 bytes (compatível com `s_device_name[32]` dos clients). `virtual_sensor_t.name` e `pending_pair_t.name` também32. EEPROM_SENSOR_SIZE=48 (nome ocupa32 bytes no offset9). Qualquer mudança nesse campo exige atualização simultânea de gateway e todos os clients.
+18. **ESP-NOW broadcast vs unicast**: Quando ESP32 e ESP8266 estão conectados ao mesmo AP WiFi, ESP-NOW unicast NÃO funciona em NENHUMA direção (testado e comprovado). Usar endereço broadcast (FF:FF:FF:FF:FF:FF) para TODOS os envios: SENSOR_DATA, HEARTBEAT, ACK, PAIR_RESPONSE, COMMAND. O receptor identifica o destinatário pelo campo `sensor_mac` ou `target_mac` no payload.
 
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias

@@ -587,20 +587,17 @@ static bool espnow_send_data(void)
 
     hdr->payload_len = sizeof(payload_onoff_t) + 4 + 2;
 
-    if (!espnow_add_peer(s_gateway_mac))
+    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (!espnow_add_peer(bcast))
     {
-        console.printf("[%s] Failed to add gateway peer\n", TAG);
+        console.printf("[%s] Failed to add broadcast peer\n", TAG);
         return false;
     }
 
     s_ack_received = false;
     s_send_pending = true;
-    {
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Sending data to %s (%d bytes)\n", TAG, mac_str, sizeof(buf));
-    }
-    int ret = esp_now_send(s_gateway_mac, buf, sizeof(buf));
+    console.printf("[%s] Sending data broadcast (%d bytes)\n", TAG, sizeof(buf));
+    int ret = esp_now_send(bcast, buf, sizeof(buf));
     if (ret != 0)
     {
         console.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
@@ -628,11 +625,12 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_add_peer(s_gateway_mac))
+    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (!espnow_add_peer(bcast))
         return false;
 
     s_ack_received = false;
-    return esp_now_send(s_gateway_mac, buf, sizeof(buf)) == 0;
+    return esp_now_send(bcast, buf, sizeof(buf)) == 0;
 }
 
 static bool espnow_send_pair_request(void)

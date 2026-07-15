@@ -1,0 +1,6 @@
+### Network ###
+- router: 192.168.1.11
+- gateway: 192.168.1.14
+- HomeAssistant: 192.168.1.12
+- repeater: 192.168.1.15
+- lampada: 192.168.1.42
