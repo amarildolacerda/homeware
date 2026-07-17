@@ -1635,7 +1635,7 @@ void setup(void)
         console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
 
-    timer_init();
+    timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
     console.printf("[%s] Timer module initialized\n", TAG);
     load_pulse_config();
     console.printf("[%s] Pulse: %s (%d min)\n", TAG, s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);

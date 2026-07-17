@@ -90,14 +90,16 @@ input[type=text]:focus{border-color:var(--primary)}
 </div>
 <div class="card">
 <div class="card-title">Clientes Conectados</div>
-<table><thead><tr><th>#</th><th>MAC</th></tr></thead><tbody id="tbl"></tbody></table>
+<table><thead><tr><th>#</th><th>MAC</th><th>IP</th></tr></thead><tbody id="tbl"></tbody></table>
 <div id="noClients" style="color:var(--muted-subtle);font-size:.78rem;text-align:center;padding:8px 0;display:none">Nenhum cliente conectado</div>
 </div>
 <div class="card">
-<div class="row"><span class="label">Gateway</span><span class="value" id="detGateway">-</span></div>
+<div class="row"><span class="label">Gateway MAC</span><span class="value" id="detGatewayMac">-</span></div>
+<div class="row"><span class="label">Gateway IP</span><span class="value" id="detGatewayIp">-</span></div>
 <div class="row"><span class="label">Canal</span><span class="value" id="detChannel">-</span></div>
 <div class="row"><span class="label">RSSI</span><span class="value" id="detRssi">-</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="detIp">-</span></div>
+<div class="row"><span class="label">MAC</span><span class="value" id="detMac">-</span></div>
 <div class="row"><span class="label">Vers&#227;o</span><span class="value" id="detVersion">-</span></div>
 </div>
 </div>
@@ -118,6 +120,8 @@ input[type=text]:focus{border-color:var(--primary)}
 <span id="fbTime">--:--</span>
 <span class="fb-sep">|</span>
 <span id="fbUptime">0m</span>
+<span class="fb-sep">|</span>
+<span id="fbTelnet" style="cursor:pointer;text-decoration:underline" onclick="telnetClick()">Telnet</span>
 </div>
 </div>
 <script>
@@ -132,6 +136,7 @@ var fbGateway=document.getElementById('fbGateway');
 var fbTime=document.getElementById('fbTime');
 var fbUptime=document.getElementById('fbUptime');
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+s.charAt(0).toUpperCase()+s.slice(1)).classList.add('active');document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active')}
+function telnetClick(){var ip=window.location.hostname;if(confirm('Abrir cliente Telnet para '+ip+':23?')){window.open('telnet://'+ip+':23','_blank')}}
 async function saveName(){var nm=document.getElementById('deviceNameInput').value.trim();if(!nm)return;try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_name:nm})});fetchSettings()}catch(e){}}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'})}catch(e){}}
 async function fetchState(){try{var r=await fetch('/api/status');var d=await r.json();
@@ -142,16 +147,19 @@ document.getElementById('hFwd').textContent=d.forwarded||0;
 document.getElementById('hAct').textContent=d.clients||0;
 var a=d.last_activity_s;
 document.getElementById('hLast').textContent=a==null?'-':a<0?'-':a<60?a+'s':a<3600?Math.floor(a/60)+'m':Math.floor(a/3600)+'h '+Math.floor((a%3600)/60)+'m';
-var t='';var cl=d.client_list||[];
-for(var i=0;i<cl.length;i++){t+='<tr><td>'+(i+1)+'</td><td>'+cl[i]+'</td></tr>'}
+    var t='';var cl=d.client_list||[];
+    var ipMap={};
+    if(gw){try{var sr=await fetch('http://'+gw+'/api/sensors');var sa=await sr.json();for(var k=0;k<sa.length;k++){var sm=sa[k].mac;if(sm)ipMap[sm]=sa[k].ip||''}}catch(e){}}
+    for(var i=0;i<cl.length;i++){var parts=cl[i].split(':');var first=(parseInt(parts[0],16)^0x02).toString(16).toUpperCase().padStart(2,'0');var wmac=first+':'+parts.slice(1).join(':');var ip=ipMap[wmac]||'';var ipc=ip?'<a href="http://'+ip+'" target="_blank">'+ip+'</a>':'-';t+='<tr><td>'+(i+1)+'</td><td>'+cl[i]+'</td><td>'+ipc+'</td></tr>'}
 document.getElementById('tbl').innerHTML=t;
 document.getElementById('noClients').style.display=cl.length?'none':'block';
 var gwConnected=a>=0&&a<300;
-document.getElementById('detGateway').textContent=gwConnected?'Online':'Offline';
-document.getElementById('detGateway').className='value'+(gwConnected?' green':'');
+document.getElementById('detGatewayMac').textContent=d.gateway||'-';
+document.getElementById('detGatewayIp').innerHTML=gw?'<a href="http://'+gw+'">'+gw+'</a>':'-';
 document.getElementById('detChannel').textContent=d.channel||'-';
 document.getElementById('detRssi').textContent=(d.rssi||0)+' dBm';
 document.getElementById('detIp').textContent=d.ip||'-';
+document.getElementById('detMac').textContent=d.mac||'-';
 document.getElementById('detVersion').textContent=d.fw_version||'-';
 var name=d.device_name||'ESP-NOW Repeater';
 document.getElementById('pageTitle').textContent=name;

@@ -5,12 +5,12 @@
 #include "config.h"
 #include "pages.h"
 #include "log_buffer.h"
-#include "console.h"
+#include "common_console.h"
 #include "platform.h"
 #include "captive_portal.h"
 #include <uri/UriBraces.h>
 #include <ArduinoJson.h>
-#include <ArduinoOTA.h>
+
 #include <EEPROM.h>
 
 static MyWebServer s_server(80);
@@ -25,13 +25,15 @@ static unsigned long s_wifi_reconnect_deadline = 0;
 static bool wifi_creds_load(char *ssid, char *pass) {
     EEPROM.begin(EEPROM_SIZE);
     bool valid = false;
+    int pos = 0;
     for (int i = 0; i < EEPROM_WIFI_SSID_SIZE; i++) {
-        char c = EEPROM.read(EEPROM_WIFI_SSID_OFFSET + i);
-        ssid[i] = c;
-        if (c == 0) { valid = true; break; }
-        if (i == EEPROM_WIFI_SSID_SIZE - 1) { ssid[i] = '\0'; valid = true; }
+        uint8_t c = EEPROM.read(EEPROM_WIFI_SSID_OFFSET + i);
+        if (c == 0) { valid = pos > 0; break; }
+        if (c < 32 || c > 126) break;
+        ssid[pos++] = (char)c;
+        if (i == EEPROM_WIFI_SSID_SIZE - 1) valid = pos > 0;
     }
-    ssid[EEPROM_WIFI_SSID_SIZE - 1] = '\0';
+    ssid[pos] = '\0';
     for (int i = 0; i < EEPROM_WIFI_PASS_SIZE; i++) {
         pass[i] = EEPROM.read(EEPROM_WIFI_PASS_OFFSET + i);
     }
@@ -58,12 +60,14 @@ static void wifi_net_load(int *mode, char *ip, char *gw, char *mask, char *dns) 
     EEPROM.begin(EEPROM_SIZE);
     *mode = EEPROM.read(EEPROM_WIFI_MODE_OFFSET) == WIFI_MODE_STATIC ? WIFI_MODE_STATIC : WIFI_MODE_DHCP;
     auto read_str = [](int off, int size, char *buf) {
-        for (int i = 0; i < size; i++) {
-            char c = EEPROM.read(off + i);
-            buf[i] = c;
+        int pos = 0;
+        for (int i = 0; i < size - 1; i++) {
+            uint8_t c = EEPROM.read(off + i);
             if (c == 0) break;
+            if (c < 32 || c > 126) break;
+            buf[pos++] = (char)c;
         }
-        buf[size - 1] = '\0';
+        buf[pos] = '\0';
     };
     read_str(EEPROM_WIFI_IP_OFFSET, EEPROM_WIFI_IP_SIZE, ip);
     read_str(EEPROM_WIFI_GW_OFFSET, EEPROM_WIFI_GW_SIZE, gw);
@@ -281,6 +285,7 @@ void web_server_init() {
         
         String json;
         serializeJson(doc, json);
+        s_server.sendHeader("Access-Control-Allow-Origin", "*");
         s_server.send(200, "application/json", json);
     });
     
@@ -578,7 +583,6 @@ void web_server_init() {
 
 void web_server_loop() {
     s_server.handleClient();
-    ArduinoOTA.handle();
 
     if (s_wifi_config_mode) captive_dns_poll();
 

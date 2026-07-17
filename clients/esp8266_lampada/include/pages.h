@@ -218,7 +218,8 @@ footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
 fbUptime.textContent=uptimeStr;
-fbTime.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+fbTime.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+fetchRepeater(d);
 }catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 document.getElementById('deviceNameInput').value=d.device_name;
@@ -242,7 +243,7 @@ let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-async function fetchRepeater(){try{let r=await fetch('/api/state');let d=await r.json();
+async function fetchRepeater(d){try{if(!d){let r=await fetch('/api/state');d=await r.json();}
 let nav=document.getElementById('navRepeater');
 if(d.repeater_active){nav.style.display='flex';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
 let list=document.getElementById('repClientList');list.innerHTML='';
@@ -256,13 +257,13 @@ list.innerHTML='';d.pins.forEach(function(p){
 let div=document.createElement('div');div.className='row';
 div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
 list.appendChild(div)})}catch(e){}}
-setInterval(function(){fetchState();fetchRepeater();fetchPins();if(currentSection==='timer')fetchTimers()},3000);
-fetchState();fetchSettings();fetchTimers();fetchRepeater();fetchPins();
+setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pins')fetchPins()},3000);
+fetchState();fetchSettings();fetchTimers();if(currentSection==='pins')fetchPins();
 )=====";
 #else
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
-setInterval(function(){fetchState();fetchRepeater();if(currentSection==='timer')fetchTimers()},3000);
-fetchState();fetchSettings();fetchTimers();fetchRepeater();
+setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers()},3000);
+fetchState();fetchSettings();fetchTimers();
 )=====";
 #endif
 static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(

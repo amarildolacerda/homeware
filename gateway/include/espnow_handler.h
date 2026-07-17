@@ -17,5 +17,6 @@ unsigned long espnow_get_crc_errors();
 uint8_t* espnow_get_gateway_mac();
 bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state);
 void espnow_broadcast_time_sync(uint32_t epoch_seconds);
+void espnow_announce();
 
 #endif

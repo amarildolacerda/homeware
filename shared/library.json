@@ -1,0 +1,6 @@
+{
+  "name": "homeware-shared",
+  "version": "0.0.24",
+  "description": "Shared code for Homeware ESP-NOW devices",
+  "keywords": "esp-now, homeware"
+}

@@ -7,6 +7,7 @@
 #endif
 #include <EEPROM.h>
 #include <espnow.h>
+#include <ArduinoOTA.h>
 #include "config.h"
 #include "espnow_protocol.h"
 #include "console.h"
@@ -25,8 +26,9 @@ static unsigned long s_last_activity = 0;
 static bool s_has_activity = false;
 static int s_forwarded = 0;
 static int s_received = 0;
-static bool s_monitor = false;
+static bool s_monitor = true;
 static unsigned long s_last_gateway_comm = 0; // last successful comm with gateway
+static unsigned long s_last_gateway_ack = 0;  // last ACK from gateway to THIS repeater (uplink proof)
 static char s_device_name[32] = DEVICE_NAME;
 static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
@@ -39,6 +41,53 @@ typedef struct {
 
 static seq_entry_t s_seq_cache[SEQ_CACHE_SIZE];
 static uint8_t s_cache_idx = 0;
+
+/* Forward queue: esp_now_send() must be called from loop(), not from the
+   recv callback (ISR context), otherwise sends may be silently dropped
+   when the ESP-NOW stack can't process the TX queue fast enough. */
+#define FWD_BUF_SIZE 192
+#define FWD_QUEUE_SIZE 6
+
+typedef struct {
+    uint8_t dest[6];
+    uint8_t data[FWD_BUF_SIZE];
+    uint8_t len;
+    uint16_t sequence;
+    uint8_t from[6];
+    bool from_gateway;
+    bool to_all_clients;
+} fwd_entry_t;
+
+static fwd_entry_t s_fwd_queue[FWD_QUEUE_SIZE];
+static volatile uint8_t s_fwd_head = 0;
+static volatile uint8_t s_fwd_tail = 0;
+
+static bool fwd_push(const uint8_t *dest, const uint8_t *data, uint8_t len,
+                     uint16_t seq, const uint8_t *from, bool from_gw,
+                     bool to_all)
+{
+    uint8_t next = (s_fwd_head + 1) % FWD_QUEUE_SIZE;
+    if (next == s_fwd_tail) return false;
+    fwd_entry_t *e = &s_fwd_queue[s_fwd_head];
+    memcpy(e->dest, dest, 6);
+    uint8_t clen = len < FWD_BUF_SIZE ? len : FWD_BUF_SIZE;
+    memcpy(e->data, data, clen);
+    e->len = clen;
+    e->sequence = seq;
+    memcpy(e->from, from, 6);
+    e->from_gateway = from_gw;
+    e->to_all_clients = to_all;
+    s_fwd_head = next;
+    return true;
+}
+
+static bool fwd_pop(fwd_entry_t *out)
+{
+    if (s_fwd_tail == s_fwd_head) return false;
+    memcpy(out, &s_fwd_queue[s_fwd_tail], sizeof(fwd_entry_t));
+    s_fwd_tail = (s_fwd_tail + 1) % FWD_QUEUE_SIZE;
+    return true;
+}
 
 /* Peers known to be behind this repeater (learned dynamically) */
 static uint8_t s_client_peers[MAX_PEERS][6];
@@ -112,8 +161,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     s_has_activity = true;
     s_received++;
 
-    /* Learn unknown peers as clients (except gateway) */
-    if (!s_gateway_configured || !mac_equal(mac, s_gateway_mac))
+    /* Learn unknown peers as clients (except gateway and GW_ANNOUNCE) */
+    if ((!s_gateway_configured || !mac_equal(mac, s_gateway_mac)) && data[0] != ESPNOW_MSG_GW_ANNOUNCE)
     {
         if (!is_client_known(mac))
             learn_client(mac);
@@ -149,9 +198,9 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     else if (msg_type == ESPNOW_MSG_GW_ANNOUNCE && len >= sizeof(espnow_gw_announce_t))
     {
         espnow_gw_announce_t *ann = (espnow_gw_announce_t *)data;
-        if (!s_gateway_configured || !mac_equal(ann->gateway_mac, s_gateway_mac))
+        if (!s_gateway_configured || !mac_equal(mac, s_gateway_mac))
         {
-            mac_copy(s_gateway_mac, ann->gateway_mac);
+            mac_copy(s_gateway_mac, mac);
             s_gateway_configured = true;
             save_gateway_mac();
             esp_now_del_peer(s_gateway_mac);
@@ -165,49 +214,43 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 
     if (s_gateway_configured && mac_equal(mac, s_gateway_mac))
     {
-        /* From gateway → forward to client */
+        /* ACK from gateway to THIS repeater proves the uplink (gateway is
+           actually receiving our REPEATER_STATUS / forwarded frames). Use it
+           for the reachability feedback instead of downlink-only comm. */
+        if (msg_type == ESPNOW_MSG_ACK && len >= sizeof(espnow_ack_t))
+        {
+            espnow_ack_t *ack = (espnow_ack_t *)data;
+            uint8_t my_mac[6];
+            WiFi.macAddress(my_mac);
+            /* Only count as uplink proof if the ACK actually comes FROM the
+               gateway (frame sender == gateway MAC). Other clients (lights)
+               also broadcast ACKs for frames we forward, which would give a
+               false "gateway reachable" reading. */
+            if (mac_equal(mac, s_gateway_mac) && mac_equal(ack->sensor_mac, my_mac))
+            {
+                s_last_gateway_ack = millis();
+                if (s_monitor)
+                    console.printf("[%s] ACK do gateway (uplink OK) seq=%u status=%d\n",
+                                   TAG, ack->sequence, ack->status);
+                return;
+            }
+        }
+
+        /* From gateway → forward to client (deferred to loop) */
         s_last_gateway_comm = millis();
         uint8_t client_mac[6];
         if (lookup_sequence(sequence, client_mac))
-        {
-            esp_now_send(client_mac, data, len);
-            s_forwarded++;
-            if (s_monitor)
-            {
-                char m1[18], m2[18];
-                mac_to_str(mac, m1, sizeof(m1));
-                mac_to_str(client_mac, m2, sizeof(m2));
-                console.printf("[%s] GW→CLI seq=%u %s → %s\n", TAG, sequence, m1, m2);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < s_client_count; i++)
-            {
-                esp_now_send(s_client_peers[i], data, len);
-                s_forwarded++;
-            }
-            if (s_monitor)
-                console.printf("[%s] GW→BCAST seq=%u (%d clients)\n", TAG, sequence, s_client_count);
-        }
+            fwd_push(client_mac, data, len, sequence, mac, true, false);
+        else if (s_client_count > 0)
+            fwd_push(s_bcast_addr, data, len, sequence, mac, true, true);
     }
     else if (s_gateway_configured)
     {
-        /* From client → forward to gateway.
-           Must be broadcast: ESP8266→ESP32 unicast is dropped by the radio
-           (AGENTS.md rule 18). The gateway processes it by the sensor_mac in
-           the frame header, so targeting the gateway MAC is unnecessary. */
+        /* From client → forward to gateway via broadcast (deferred to loop).
+           ESP8266→ESP32 unicast is dropped by the radio (AGENTS.md rule 18). */
         cache_sequence(sequence, mac);
-        esp_now_send(s_bcast_addr, data, len);
-        s_forwarded++;
         s_last_gateway_comm = millis();
-        if (s_monitor)
-        {
-            char m1[18], m2[18];
-            mac_to_str(mac, m1, sizeof(m1));
-            mac_to_str(s_gateway_mac, m2, sizeof(m2));
-            console.printf("[%s] CLI→GW seq=%u %s → %s\n", TAG, sequence, m1, m2);
-        }
+        fwd_push(s_bcast_addr, data, len, sequence, mac, false, false);
     }
 }
 
@@ -583,13 +626,22 @@ static void handle_api_status(void)
     doc["tx_count"] = s_espnow_tx_count;
     doc["rx_count"] = s_espnow_rx_count;
     doc["last_activity_s"] = s_has_activity ? (int)((millis() - s_last_activity) / 1000) : -1;
+    doc["gateway_reachable"] = (s_gateway_configured && s_last_gateway_ack > 0) ?
+        (int)((millis() - s_last_gateway_ack) / 1000) < 90 : false;
+    doc["gateway_last_comm_s"] = (s_gateway_configured && s_last_gateway_ack > 0) ?
+        (int)((millis() - s_last_gateway_ack) / 1000) : -1;
     doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
     doc["fw_version"] = FW_VERSION;
     doc["device_id"] = String("esp8266_") + String(ESP.getChipId(), HEX);
     doc["device_name"] = s_device_name;
     JsonArray arr = doc["client_list"].to<JsonArray>();
     for (int i = 0; i < s_client_count; i++)
     {
+        bool dup = false;
+        for (int j = 0; j < i; j++)
+            if (memcmp(s_client_peers[j], s_client_peers[i], 6) == 0) { dup = true; break; }
+        if (dup) continue;
         char mac_str[18];
         mac_to_str(s_client_peers[i], mac_str, sizeof(mac_str));
         arr.add(mac_str);
@@ -603,6 +655,9 @@ static void print_status(void)
 {
     unsigned long up = (millis() - s_start_time) / 1000;
     console.printf("\n--- Repeater Status ---\n");
+    char local_mac[18];
+    WiFi.macAddress().toCharArray(local_mac, sizeof(local_mac));
+    console.printf("  MAC:       %s\n", local_mac);
     console.printf("  Uptime:    %lums\n", up);
     console.printf("  Received:  %d\n", s_received);
     console.printf("  Forwarded: %d\n", s_forwarded);
@@ -628,6 +683,16 @@ static void handle_serial(char c)
 {
     switch (c)
     {
+    case 'l':
+    case 'L':
+        console.printf("\n--- Clientes (%d) ---\n", s_client_count);
+        for (int i = 0; i < s_client_count; i++) {
+            char mac_str[18];
+            mac_to_str(s_client_peers[i], mac_str, sizeof(mac_str));
+            console.printf("  %d: %s\n", i + 1, mac_str);
+        }
+        console.printf("---------------------\n\n");
+        break;
     case 's':
     case 'S':
         print_status();
@@ -665,6 +730,7 @@ static void handle_serial(char c)
     case 'H':
     case '?':
         console.printf("\n--- Comandos ---\n");
+        console.printf("  l    - listar clientes\n");
         console.printf("  s    - status\n");
         console.printf("  d    - descobrir gateway (GW_DISCOVER)\n");
         console.printf("  w    - reconfigurar WiFi + gateway MAC\n");
@@ -729,6 +795,18 @@ void setup(void)
         });
         s_server.begin();
         console.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+        console.printf("  Telnet:    %s:23\n", WiFi.localIP().toString().c_str());
+
+        String ota_host = String("repeater_") + String(ESP.getChipId(), HEX);
+        ArduinoOTA.setHostname(ota_host.c_str());
+        ArduinoOTA.onStart([]() { console.printf("[%s] OTA update start\n", TAG); });
+        ArduinoOTA.onEnd([]() { console.printf("[%s] OTA update end\n", TAG); });
+        ArduinoOTA.onProgress([](unsigned int p, unsigned int t) {
+            console.printf("[%s] OTA progress: %u%%\r", TAG, (p * 100) / t);
+        });
+        ArduinoOTA.onError([](ota_error_t err) { console.printf("[%s] OTA error: %d\n", TAG, err); });
+        ArduinoOTA.begin();
+        console.printf("[%s] OTA ready: %s.local\n", TAG, ota_host.c_str());
     }
     else
     {
@@ -741,8 +819,46 @@ void setup(void)
         console.printf("  Repeater sem gateway! Aguardando GW_DISCOVER... (use 'd' para buscar)\n\n");
 }
 
+static void process_forward_queue(void)
+{
+    fwd_entry_t e;
+    while (fwd_pop(&e))
+    {
+        if (e.to_all_clients)
+        {
+            for (int i = 0; i < s_client_count; i++)
+            {
+                esp_now_send(s_client_peers[i], e.data, e.len);
+                s_forwarded++;
+            }
+            if (s_monitor && s_client_count > 0)
+            {
+                char m1[18];
+                mac_to_str(e.from, m1, sizeof(m1));
+                console.printf("[%s] GW→BCAST seq=%u %s (%d clients)\n",
+                               TAG, e.sequence, m1, s_client_count);
+            }
+        }
+        else
+        {
+            esp_now_send(e.dest, e.data, e.len);
+            s_forwarded++;
+            if (s_monitor)
+            {
+                char m1[18], m2[18];
+                mac_to_str(e.from, m1, sizeof(m1));
+                mac_to_str(e.dest, m2, sizeof(m2));
+                console.printf("[%s] %s seq=%u %s → %s\n",
+                               TAG, e.from_gateway ? "GW→CLI" : "CLI→GW",
+                               e.sequence, m1, m2);
+            }
+        }
+    }
+}
+
 void loop(void)
 {
+    process_forward_queue();
     console.loop();
     if (Serial.available() > 0)
         handle_serial(Serial.read());
@@ -750,27 +866,59 @@ void loop(void)
     if (tc >= 0)
         handle_serial((char)tc);
     if (WiFi.status() == WL_CONNECTED)
+    {
+        ArduinoOTA.handle();
         s_server.handleClient();
+    }
     maintain_wifi_connection();
 
-#ifdef LED_PIN
-    /* Slow heartbeat LED */
-    static unsigned long last_blink = 0;
     unsigned long now = millis();
-    if (now - last_blink > 2000)
+
+    /* Gateway reachability feedback (UPLINK).
+       s_last_gateway_ack is set only when the gateway sends us an ACK for a
+       frame WE sent — i.e. the gateway is actually receiving our ESP-NOW
+       frames. Downlink-only comm (hearing the gateway retransmit client
+       frames) is NOT enough: ESP-NOW range can be asymmetric, so a repeater
+       may hear the gateway but the gateway can't hear the repeater. We signal
+       that with a fast-blinking LED + log so the unit can be repositioned.
+       We do NOT clear the gateway config here so the operator can watch the
+       LED while moving the device. */
+    bool gw_reachable = s_gateway_configured && (s_last_gateway_ack > 0) &&
+                        (now - s_last_gateway_ack < 90000);
+    static bool s_gw_unreach_logged = false;
+    if (s_gateway_configured && !gw_reachable && !s_gw_unreach_logged)
+    {
+        console.printf("[%s] AVISO: gateway NAO recebe este repeater (uplink ESP-NOW ausente ha >90s). Reposicione o repeater.\n", TAG);
+        s_gw_unreach_logged = true;
+    }
+    else if (gw_reachable && s_gw_unreach_logged)
+    {
+        console.printf("[%s] Gateway recebendo o repeater novamente (uplink OK).\n", TAG);
+        s_gw_unreach_logged = false;
+    }
+
+#ifdef LED_PIN
+    /* LED: slow heartbeat when gateway reachable, fast blink when not */
+    static unsigned long last_blink = 0;
+    unsigned long blink_period = gw_reachable ? 2000 : 250;
+    if (now - last_blink > blink_period)
     {
         last_blink = now;
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     }
-#else
-    unsigned long now = millis();
 #endif
 
-    /* Re-add gateway periodically if WiFi channel changes */
+    /* Re-add peers periodically if WiFi channel changes. The broadcast peer
+       MUST follow the current WiFi channel too, otherwise every forwarded
+       frame and REPEATER_STATUS is sent on a stale channel and the gateway
+       (ESP32) never receives it. ESP-NOW peers are bound to a channel. */
     static unsigned long last_chk = 0;
     if (now - last_chk > 60000)
     {
         last_chk = now;
+        uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        esp_now_del_peer(broadcast_mac);
+        esp_now_add_peer(broadcast_mac, ESP_NOW_ROLE_COMBO, WiFi.channel(), NULL, 0);
         if (s_gateway_configured)
         {
             esp_now_del_peer(s_gateway_mac);

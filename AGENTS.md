@@ -61,15 +61,17 @@
 - mostrar no dashboard a versão (FW_VERSION)
 - quando conseguir resolver um problema, erro ou mudança de especificação - registrar a nova regra para aprendizado e reaproveitamento nas proximas sessões
 - cuidado com chamadas repetitivas a api, reaproveitar quando for possivel
+- **Código compartilhado**: `shared/` na raiz é a fonte única de `espnow_protocol.h`, `myWiFiManager.h/.cpp` e `shared_config.h` (wrapper cross-platform WiFi ESP8266/ESP32). Gateway e clients DEVEM incluir `shared/` e NÃO manter cópias divergentes desses arquivos (regra 17 estendida: qualquer mudança de struct/protocolo ou WiFiManager vale para todos os devices e deve ser feita uma única vez em `shared/`).
 
 ### Novos Clients
 1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações relevantes ao cliente
 2. ter um dashboard pertinente
-3. se possível ter configuração WiFi com WiFiManager
+3. Se usa WiFi, usar myWiFiManager
 4. ter atalhos de teclado no terminal
 5. seguir API do gateway
 6. ter um SPEC.md para especificação de funcionamento esperado
 7. **perguntar ao usuário** se o cliente deve incluir funções de **repeater** ESP-NOW e quais regras usar (ex: repetir broadcast do gateway, encaminhar dados de outros clients). Se for repeater, deve ser **bidirecional** (gateway ↔ clientes em ambas as direções).
+8. Incluir OTA
 
 ## Regras importantes
 1. Device ID é dinâmico (`esp8266_<chip_id>`), não configurável
@@ -89,7 +91,7 @@
 15. **Loop non-blocking**: `loop()` não pode conter `delay()` bloqueante. Usar máquina de estados com timestamps (`millis()`) para ESP-NOW sends, ACK wait, retries, pareamento, heartbeat e LED. Aplica-se a gateway e todos os clients.
 16. **Páginas web PROGMEM**: páginas HTML grandes (>10KB) via `FPSTR` + `send()` estouram heap no ESP8266 porque alocam String RAM. `send_P()` e `sendContent_P()` também falham se o buffer TCP encher (`write()` retorna 0). Para páginas grandes, escrever response manualmente via `WiFiClient` em chunks pequenos (256 bytes) com `yield()` entre chunks. Alternativa: manter páginas enxutas (<8KB) para usar `send_P()` sem risco.
 17. **device_name[32]**: `espnow_pair_request_t.device_name` usa32 bytes (compatível com `s_device_name[32]` dos clients). `virtual_sensor_t.name` e `pending_pair_t.name` também32. EEPROM_SENSOR_SIZE=48 (nome ocupa32 bytes no offset9). Qualquer mudança nesse campo exige atualização simultânea de gateway e todos os clients.
-18. **ESP-NOW broadcast vs unicast (ESP32 ↔ ESP8266, MESMO AP)**: Validado com QuickESPNow (projeto `qgw` ESP32 + `qclient` ESP8266, ambos no AP kcasa ch4): **ESP8266→ESP32 unicast FALHA** (send retorna -5 / drop silencioso por coexistência rádio); **ESP32→ESP8266 unicast FUNCIONA**; **broadcast funciona nos dois sentidos**. O fallback "unicast→broadcast se `esp_now_send` der erro" é insuficiente: no ESP32 nativo o `esp_now_send` retorna 0 (enfileirado OK) mesmo quando o frame é dropado, então o fallback nunca dispara. Estratégia: **cliente→gateway obrigatoriamente BROADCAST** (dados, heartbeat, PAIR_REQUEST); **gateway→cliente pode ser unicast** (ESP32→ESP8266 funciona) mas, para robustez, o default é **broadcast** (design original). Pré-requisito: todos no MESMO canal do AP do gateway (cliente em repetidor com canal diferente quebra qualquer ESP-NOW). `test_espnow` (teste isolado) funcionou SÓ porque ambos estavam `WiFi.disconnect()` (sem AP) + role COMBO + canal explícito.
+18. **ESP-NOW broadcast vs unicast (MESMO AP)**: Dois modos existem — unicast (MAC específico) e broadcast (`FF:FF:FF:FF:FF:FF`). **ESP8266↔ESP8266 (homogêneo): unicast funciona bem nos dois sentidos** (o repeater envia unicast para seus clients peers) e é preferível para ACKs/comandos direcionados; broadcast também funciona. **Misto ESP32↔ESP8266**: validado com QuickESPNow (qgw ESP32 + qclient ESP8266, mesmo AP): **ESP8266→ESP32 unicast FALHA** (drop silencioso por coexistência rádio); **ESP32→ESP8266 unicast FUNCIONA**; **broadcast funciona nos dois sentidos**. Conclusão: **quem envia é ESP8266 e quem recebe é ESP32 → BROADCAST obrigatório** (ex: client ESP8266 → gateway ESP32: dados, heartbeat, PAIR_REQUEST); **ESP8266→ESP8266 ou ESP32→ESP8266 → unicast OK**. O fallback "unicast→broadcast se `esp_now_send` der erro" é insuficiente: no ESP32 nativo o `esp_now_send` retorna 0 (enfileirado OK) mesmo quando o frame é dropado, então o fallback nunca dispara — escolher o modo ANTES do envio pelo par (tx_chip, rx_chip). Pré-requisito: todos no MESMO canal do AP do gateway (cliente em repetidor com canal diferente quebra qualquer ESP-NOW). `test_espnow` (teste isolado) funcionou SÓ porque ambos estavam `WiFi.disconnect()` (sem AP) + role COMBO + canal explícito.
 19. **MAC alt do ESP-NOW**: ESP-NOW usa um MAC diferente do WiFi (bit 1 do byte 0 invertido, `mac[0] ^= 0x02`). Ex: `.41` WiFi `3C:71:BF:2C:A0:79` → ESP-NOW `3E:71:BF:2C:A0:79`; gateway `B4:E6:..` → `B6:E6:..`. Para enviar unicast PARA um ESP8266, usar o MAC alt (derivar do WiFi MAC). Quem recebe PAIR_RESPONSE aprende o MAC alt do gateway pela source do frame. `espnow_send_command` (gateway) recebe o WiFi MAC do registry → derivar o alt MAC antes de enviar.
 
 20. **EEPROM string load → JSON quebra**: ao ler strings da EEPROM (host/user MQTT, SSID, nome de sensor, etc.) nunca basta achar um byte `0x00` para considerar "válido". Se a região tiver lixo com um `0x00` coincidente, bytes de controle (0x00–0x1F) vazam para o JSON e o `JSON.parse()` do browser falha ("erro de json"). Validar que todos os bytes antes do terminador são imprimíveis (0x20–0x7E) e que há terminador dentro do buffer; senão usar default/limpar. Também validar tipo de sensor (1–10) e `slot < MAX_VIRTUAL_SENSORS` em `sensor_registry_load()` para ignorar entradas corrompidas (ex: slot 251/type 161).
@@ -99,12 +101,14 @@
 1. manter skills enxutas
 2. economizar tokens simplificando a comunicação
 3. manter uma comunicação objetiva sem rodeios
+4. quando marcar estavel anotar a tag e a data
 
 ### Clientes estáveis (não modificar)
-- `gateway` — ESP8266 ESP-NOW Gateway (firmware estável em produção)
-- `clients/esp8266_chuva` — sensor de chuva ESP-NOW
 
 ### Clientes em desenvolvimento
 - `clients/esp8266_dht_gas` — sensor DHT22 + MQ-2 ESP-NOW
-- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa (Espalexa) e função repeater
+- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa - atributos exclusivo para lâmpada - (Espalexa) e função repeater
+- `clients/onoff` - rele com suporte a alexa - attibutos esclusivo para onoff
 - `clients/esp8266_repeater` — extensor de alcance ESP-NOW
+- `gateway` — ESP8266/ESP32 ESP-NOW Gateway 
+- `clients/esp8266_chuva` — sensor de chuva ESP-NOW

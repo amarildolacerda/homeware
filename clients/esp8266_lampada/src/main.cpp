@@ -3,7 +3,6 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
-#include <ArduinoOTA.h>
 #include <Updater.h>
 #include <espnow.h>
 #ifdef HABILITA_ALEXA
@@ -12,7 +11,10 @@
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
-#include "console.h"
+#include "common_console.h"
+#include "common_ota.h"
+#include "common_util.h"
+#include "common_wifi.h"
 #include "timer.h"
 
 static const char *TAG = "esp8266-lampada";
@@ -976,7 +978,9 @@ static void handle_api_state(void)
         doc["paired"] = s_paired;
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
-        doc["uptime_s"] = (millis() - s_start_time) / 1000;
+        char upbuf[32];
+        uptime_to_str(millis() - s_start_time, upbuf, sizeof(upbuf));
+        doc["uptime"] = upbuf;
         if (s_last_send_ms)
             doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
@@ -1256,7 +1260,9 @@ static void handle_console(char c)
         }
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
-        console.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
+        char upbuf[32];
+        uptime_to_str(millis() - s_start_time, upbuf, sizeof(upbuf));
+        console.printf("  Up:       %s\n", upbuf);
         console.printf("----------------\n\n");
         break;
    #ifdef HABILITA_ALEXA     
@@ -1645,6 +1651,7 @@ void setup(void)
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
     load_device_name();
+    timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
 
     console.printf("\n");
     console.printf("============================================\n");
@@ -1690,17 +1697,7 @@ void setup(void)
     s_server.begin();
 #endif
 
-    ArduinoOTA.setHostname(s_device_id);
-    ArduinoOTA.onStart([]()
-                       { console.printf("[%s] OTA update start\n", TAG); });
-    ArduinoOTA.onEnd([]()
-                     { console.printf("[%s] OTA update end\n", TAG); });
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
-                          { console.printf("[%s] OTA progress: %u%%\r", TAG, (progress * 100) / total); });
-    ArduinoOTA.onError([](ota_error_t error)
-                       { console.printf("[%s] OTA error: %d\n", TAG, error); });
-    ArduinoOTA.begin();
-    console.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
+    ota_setup(s_device_id);
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
@@ -1726,7 +1723,6 @@ void setup(void)
         console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
 
-    timer_init();
     timer_load();
     console.printf("  Timers:  %d configurados\n", MAX_TIMERS);
 
@@ -1748,7 +1744,7 @@ void loop(void)
         handle_console(console.telnet_read());
     }
     handle_wifi();
-    ArduinoOTA.handle();
+    ota_handle();
 #ifdef HABILITA_ALEXA
     s_alexa.loop();
 #else

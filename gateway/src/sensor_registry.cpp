@@ -2,7 +2,7 @@
 #include "config.h"
 #include <EEPROM.h>
 #include <Arduino.h>
-#include "console.h"
+#include "common_console.h"
 
 static virtual_sensor_t s_sensors[MAX_VIRTUAL_SENSORS];
 static bool s_initialized = false;
@@ -58,7 +58,7 @@ int sensor_registry_count_online() {
     return count;
 }
 
-bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name) {
+bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip) {
     if (slot >= MAX_VIRTUAL_SENSORS) return false;
     if (sensor_registry_find_by_mac(mac) >= 0) return false;
 
@@ -66,6 +66,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     mac_copy(s->mac, mac);
     s->type = type;
     s->slot = slot;
+    s->client_chip = client_chip;
     s->sequence = 0;
     s->battery_pct = 100;
     s->last_rssi = -127;
@@ -227,7 +228,7 @@ bool sensor_registry_save() {
                 else
                     EEPROM.write(addr + 9 + j, 0);
             }
-            EEPROM.write(addr + 41, 0);
+            EEPROM.write(addr + 41, s_sensors[i].client_chip);
             console.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
         }
     }
@@ -279,6 +280,7 @@ void sensor_registry_load() {
             s_sensors[i].last_rssi = -127;
             s_sensors[i].last_seen = 0;
             s_sensors[i].online = false;
+            s_sensors[i].client_chip = EEPROM.read(addr + 41);
             memset(&s_sensors[i].state, 0, sizeof(s_sensors[i].state));
             snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
                      "gw_%02X%02X%02X.%d",

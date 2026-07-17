@@ -7,9 +7,9 @@
 #include "espnow_handler.h"
 #include "mqtt_client.h"
 #include "web_server.h"
-#include "ota.h"
+#include "common_ota.h"
 #include "log_buffer.h"
-#include "console.h"
+#include "common_console.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
 
@@ -132,9 +132,15 @@ void setup() {
         ESP.restart();
     }
     
-    ota_init(get_gateway_device_id());
+    ota_setup(get_gateway_device_id());
     console.begin();
+    {
+        char banner[48];
+        snprintf(banner, sizeof(banner), PLATFORM_PREFIX " Gateway %s", FW_VERSION);
+        console.set_banner(banner);
+    }
     espnow_handler_init();
+    espnow_announce();
     log_buffer_init();
     
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -177,6 +183,7 @@ void loop() {
         }
     }
     
+    ota_handle();
     web_server_loop();
     web_server_maintain_wifi();
     espnow_handler_loop();

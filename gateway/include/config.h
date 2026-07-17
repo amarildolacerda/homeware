@@ -2,16 +2,11 @@
 #define CONFIG_H
 
 #include "platform.h"
+#include "shared_config.h"
 
-#define FW_VERSION "v0.0.24"
 #define DEVICE_NAME PLATFORM_PREFIX "_Gateway"
 
-#define ESP_NOW_CHANNEL 1
-#ifdef ESP32
-  #define MAX_VIRTUAL_SENSORS 64
-#else
-  #define MAX_VIRTUAL_SENSORS 64
-#endif
+#define MAX_VIRTUAL_SENSORS 64
 #define PAIRING_WINDOW_MS 60000
 #define HEARTBEAT_INTERVAL_MS 30000
 #define SENSOR_TIMEOUT_MS 300000
@@ -23,9 +18,18 @@
 #define TIME_SYNC_INTERVAL_MS 300000
 #define NTP_RETRY_INTERVAL_MS 1800000
 
+#ifndef MQTT_HOST_DEFAULT
 #define MQTT_HOST_DEFAULT "0.0.0.0"
+#endif
+#ifndef MQTT_PORT_DEFAULT
 #define MQTT_PORT_DEFAULT 1883
-
+#endif
+#ifndef MQTT_USER_DEFAULT
+#define MQTT_USER_DEFAULT ""
+#endif
+#ifndef MQTT_PASS_DEFAULT
+#define MQTT_PASS_DEFAULT ""
+#endif
 #define EEPROM_SENSOR_BASE 0
 #define EEPROM_SENSOR_SIZE 48
 #define EEPROM_SENSOR_MAX_SLOTS MAX_VIRTUAL_SENSORS
@@ -51,9 +55,6 @@
 #define EEPROM_WIFI_DNS_SIZE 16
 
 #define EEPROM_SIZE (EEPROM_WIFI_DNS_OFFSET + EEPROM_WIFI_DNS_SIZE)
-
-#define WIFI_MODE_DHCP 0
-#define WIFI_MODE_STATIC 1
 
 #define WIFI_CONFIG_PORTAL_SSID "ESPNOW_Gateway_Setup"
 #define WIFI_CONFIG_PORTAL_PASS "password123"

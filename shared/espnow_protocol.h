@@ -1,5 +1,5 @@
-#ifndef ESPNOW_PROTOCOL_H
-#define ESPNOW_PROTOCOL_H
+#ifndef HW_SHARED_ESPNOW_PROTOCOL_H
+#define HW_SHARED_ESPNOW_PROTOCOL_H
 
 #include <stdint.h>
 #include <string.h>
@@ -8,6 +8,7 @@
 #define ESPNOW_PROTOCOL_VERSION 1
 #define ESPNOW_MAX_PAYLOAD 250
 #define ESPNOW_SEQUENCE_MAX 65535
+#define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t*)0)->payload))
 
 typedef enum {
     ESPNOW_MSG_SENSOR_DATA = 0x01,
@@ -16,6 +17,13 @@ typedef enum {
     ESPNOW_MSG_ACK = 0x04,
     ESPNOW_MSG_HEARTBEAT = 0x05,
     ESPNOW_MSG_OTA_TRIGGER = 0x06,
+    ESPNOW_MSG_COMMAND = 0x07,
+    ESPNOW_MSG_TIME_SYNC = 0x08,
+    ESPNOW_MSG_GW_ANNOUNCE = 0x09,
+    ESPNOW_MSG_GW_DISCOVER = 0x0A,
+    ESPNOW_MSG_REPEATER_STATUS = 0x0B,
+    ESPNOW_MSG_RESTART = 0x0C,
+    ESPNOW_MSG_NAK = 0x0D,
 } espnow_msg_type_t;
 
 typedef enum {
@@ -26,7 +34,25 @@ typedef enum {
     SENSOR_TYPE_RAIN = 5,
     SENSOR_TYPE_TANK = 6,
     SENSOR_TYPE_DHT_GAS = 7,
+    SENSOR_TYPE_ONOFF = 8,
+    SENSOR_TYPE_LIGHT = 9,
+    SENSOR_TYPE_REPEATER = 10,
+    SENSOR_TYPE_DHT_RELE = 11,
 } sensor_type_t;
+
+typedef enum {
+    HW_CHIP_UNKNOWN = 0xFF,
+    HW_CHIP_ESP8266 = 0,
+    HW_CHIP_ESP32 = 1,
+} chip_type_t;
+
+typedef enum {
+    NAK_REASON_NONE = 0,
+    NAK_REASON_NO_GATEWAY = 1,
+    NAK_REASON_GATEWAY_LOST = 2,
+    NAK_REASON_PAIRING_DISABLED = 3,
+    NAK_REASON_FULL = 4,
+} nak_reason_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t version;
@@ -61,6 +87,13 @@ typedef struct __attribute__((packed)) {
 } payload_gas_t;
 
 typedef struct __attribute__((packed)) {
+    float temperature;
+    float humidity;
+    uint16_t gas_level;
+    uint8_t alarm;
+} payload_dht_gas_t;
+
+typedef struct __attribute__((packed)) {
     uint8_t rain_level;
     uint8_t rain_digital;
 } payload_rain_t;
@@ -69,6 +102,10 @@ typedef struct __attribute__((packed)) {
     uint16_t level_pct;
     uint16_t distance_cm;
 } payload_tank_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t state;
+} payload_onoff_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t msg_type;
@@ -84,6 +121,7 @@ typedef struct __attribute__((packed)) {
     uint8_t sensor_mac[6];
     uint8_t sensor_type;
     uint8_t firmware_version[4];
+    uint8_t client_chip;   // chip_type_t: 0=ESP8266, 1=ESP32, 0xFF=desconhecido
     char device_name[32];
 } espnow_pair_request_t;
 
@@ -95,6 +133,54 @@ typedef struct __attribute__((packed)) {
     uint8_t status;
     uint16_t assigned_slot;
 } espnow_pair_response_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+    uint16_t sequence;
+    uint8_t target_mac[6];
+    uint8_t command;   // 0=OFF, 1=ON; 0xFF reservado p/ RESTART via espnow_restart_t
+} espnow_command_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;     // ESPNOW_MSG_RESTART
+    uint16_t sequence;
+    uint8_t target_mac[6];
+} espnow_restart_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;     // ESPNOW_MSG_NAK
+    uint16_t sequence;
+    uint8_t target_mac[6]; // destino (client ou repeater)
+    uint8_t reason;        // nak_reason_t
+} espnow_nak_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+    uint16_t sequence;
+    uint8_t gateway_mac[6];
+    uint32_t epoch_seconds;
+} espnow_time_sync_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+    uint8_t gateway_mac[6];
+    uint8_t fw_version[4];
+} espnow_gw_announce_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t msg_type;
+} espnow_gw_discover_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t received;
+    uint16_t forwarded;
+    uint8_t  client_count;
+    uint8_t  channel;
+    int16_t  rssi;
+    uint32_t uptime_s;
+    uint16_t free_heap;
+    uint8_t  ack_failures;
+} payload_repeater_status_t;
 
 #define PAIR_STATUS_OK 0
 #define PAIR_STATUS_FULL 1

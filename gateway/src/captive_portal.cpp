@@ -1,6 +1,6 @@
 #include "captive_portal.h"
 #include "config.h"
-#include "console.h"
+#include "common_console.h"
 #include "web_server.h"
 #include "platform.h"
 #include <WiFiUdp.h>

@@ -5,7 +5,7 @@
 #include "platform.h"
 #include "log_buffer.h"
 #include <Arduino.h>
-#include "console.h"
+#include "common_console.h"
 
 static bool s_pairing_mode = false;
 static unsigned long s_pairing_start = 0;
@@ -29,6 +29,7 @@ typedef struct {
     uint8_t mac[6];
     uint8_t sensor_type;
     uint16_t sequence;
+    uint8_t client_chip;
     char name[32];
 } pending_pair_t;
 static pending_pair_t s_pending_pairs[PENDING_PAIR_MAX];
@@ -56,6 +57,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
 #endif
     if (!data || len < 1) {
         s_crc_errors++;
+        console.printf("Errro crc: %d",s_crc_errors);
         return;
     }
 
@@ -68,6 +70,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
 
     switch (msg_type) {
         case ESPNOW_MSG_PAIR_REQUEST: {
+            console.println("ESPNOW_MSG_PAIR_REQUEST");
             if (len < sizeof(espnow_pair_request_t)) { s_crc_errors++; return; }
             espnow_pair_request_t *req = (espnow_pair_request_t*)data;
             char sensor_mac_str[18];
@@ -80,7 +83,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                 return;
             }
 
-            if (!s_pairing_mode) { console.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
+         // test   
+         //   if (!s_pairing_mode) { console.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
 
             for (int i = 0; i < PENDING_PAIR_MAX; i++) {
                 if (s_pending_pairs[i].active && mac_equal(s_pending_pairs[i].mac, req->sensor_mac)) {
@@ -93,6 +97,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                 if (!s_pending_pairs[i].active) {
                     mac_copy(s_pending_pairs[i].mac, req->sensor_mac);
                     s_pending_pairs[i].sensor_type = req->sensor_type;
+                    s_pending_pairs[i].client_chip = req->client_chip;
                     s_pending_pairs[i].sequence = req->sequence;
                     strncpy(s_pending_pairs[i].name, req->device_name, sizeof(s_pending_pairs[i].name) - 1);
                     s_pending_pairs[i].name[sizeof(s_pending_pairs[i].name) - 1] = '\0';
@@ -107,7 +112,9 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
         }
 
         case ESPNOW_MSG_SENSOR_DATA:
+            console.println("ESPNOW_MSG_SENSOR_DATA");
         case ESPNOW_MSG_HEARTBEAT: {
+            console.println("ESPNOW_MSG_HEARTBEAT");
             if (len < ESPNOW_HEADER_FIXED_SIZE) { s_crc_errors++; return; }
             espnow_header_t *hdr = (espnow_header_t*)data;
 
@@ -145,14 +152,35 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
         }
 
         case ESPNOW_MSG_GW_DISCOVER: {
-            char from_str[18];
+            
+            console.println("ESPNOW_MSG_GW_DISCOVER");
+                char from_str[18];
             mac_to_str(mac, from_str, sizeof(from_str));
             console.printf("[ESP-NOW] GW_DISCOVER from %s\n", from_str);
+
+            int slot = sensor_registry_find_by_mac(mac);
+            if (slot < 0) {
+                slot = sensor_registry_find_free_slot();
+                if (slot >= 0) {
+                    sensor_registry_add(mac, SENSOR_TYPE_REPEATER, slot, "Repeater", HW_CHIP_ESP8266);
+                    console.printf("[ESP-NOW] Repeater registered on GW_DISCOVER slot=%d\n", slot);
+                }
+            } else {
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (s && s->type != SENSOR_TYPE_REPEATER) {
+                    s->type = SENSOR_TYPE_REPEATER;
+                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
+                    s->name[sizeof(s->name) - 1] = '\0';
+                    sensor_registry_save();
+                }
+            }
+
             send_gw_announce(mac);
             break;
         }
 
         case ESPNOW_MSG_REPEATER_STATUS: {
+            console.println("ESPNOW_MSG_REPEATER_STATUS");
             if (len < ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t)) { s_crc_errors++; return; }
             espnow_header_t *hdr = (espnow_header_t*)data;
 
@@ -172,7 +200,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                     send_ack(mac, hdr->sequence, PAIR_STATUS_FULL, 0xFF);
                     return;
                 }
-                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater");
+                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater", HW_CHIP_ESP8266);
             } else {
                 // A device may change role (e.g. was a light, now a repeater).
                 // Re-type the existing slot so its state is parsed as a repeater.
@@ -211,7 +239,7 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&ack, sizeof(ack));
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ack, sizeof(ack));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0)
@@ -232,7 +260,7 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&resp, sizeof(resp));
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&resp, sizeof(resp));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     console.printf("[ESP-NOW] Pair response sent (broadcast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
@@ -255,6 +283,22 @@ static void send_gw_announce(const uint8_t *mac) {
     mac_to_str(mac, mac_str, sizeof(mac_str));
     console.printf("[ESP-NOW] GW_ANNOUNCE sent (broadcast) to %s gw=%s ret=%d\n", mac_str,
                    FW_VERSION, ret);
+}
+
+void espnow_announce() {
+    espnow_gw_announce_t ann = {
+        .msg_type = ESPNOW_MSG_GW_ANNOUNCE,
+        .gateway_mac = {0},
+        .fw_version = {0}
+    };
+    mac_copy(ann.gateway_mac, s_gateway_mac);
+    strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
+
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper(s_bcast_addr, ch);
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann));
+    console.printf("[ESP-NOW] GW_ANNOUNCE broadcast gw=%s ret=%d\n", FW_VERSION, ret);
 }
 
 bool espnow_handler_init() {
@@ -301,7 +345,7 @@ void espnow_handler_loop() {
         }
 
         if (!sensor_registry_add(s_pending_pairs[i].mac, s_pending_pairs[i].sensor_type,
-                                 free_slot, s_pending_pairs[i].name)) {
+                                 free_slot, s_pending_pairs[i].name, s_pending_pairs[i].client_chip)) {
             int existing = sensor_registry_find_by_mac(s_pending_pairs[i].mac);
             if (existing >= 0)
                 send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, existing);
@@ -386,7 +430,7 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    int ret = esp_now_send(s_bcast_addr, (uint8_t*)&cmd, sizeof(cmd));
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {

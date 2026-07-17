@@ -6,7 +6,7 @@
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
-#include "console.h"
+#include "common_console.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -15,8 +15,8 @@ static PubSubClient s_mqtt(s_wifi_client);
 
 static char s_mqtt_host[64] = MQTT_HOST_DEFAULT;
 static uint16_t s_mqtt_port = MQTT_PORT_DEFAULT;
-static char s_mqtt_user[32] = "";
-static char s_mqtt_pass[32] = "";
+static char s_mqtt_user[32] = MQTT_USER_DEFAULT;
+static char s_mqtt_pass[32] = MQTT_PASS_DEFAULT;
 static bool s_mqtt_connected = false;
 static unsigned long s_mqtt_connected_since = 0;
 static unsigned long s_last_reconnect = 0;

@@ -122,18 +122,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .nav-group-list .empty{font-size:0.72rem;color:var(--muted-subtle);padding:6px 20px 6px 44px}
 .main{margin-left:200px;flex:1;padding:24px;max-width:960px}
 #page{min-height:calc(100vh - 80px)}
-.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:flex-end;gap:8px;font-size:0.78rem;z-index:10}
+.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
 .mqtt-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .mqtt-footer .dot.on{background:var(--success)}
 .mqtt-footer .dot.off{background:var(--danger)}
+.mqtt-footer .pairing-dot{width:8px;height:8px;border-radius:50%;display:none;background:var(--warn);margin-left:4px}
+.mqtt-footer .pairing-dot.active{display:inline-block;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .toast{position:fixed;bottom:60px;right:20px;padding:10px 16px;border-radius:8px;background:#1f2937;color:#fff;z-index:100;display:none;font-size:0.85rem}
 .toast.show{display:block;animation:slideIn .3s}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){
 .sidebar{width:60px}
-.sidebar .logo h1,.sidebar .logo span,.sidebar nav a span:last-child,.sidebar .footer-nav{display:none}
+.sidebar .logo h1,.sidebar .logo span,.sidebar nav a span:last-child,.sidebar .footer-nav,.sidebar .nav-group-head .chev,.sidebar .nav-group-head span:not(.icon){display:none}
 .sidebar nav a{justify-content:center;padding:14px;border-left:none}
 .sidebar nav a.active{border-left:none;background:var(--primary-focus)}
+.sidebar .nav-group-head{justify-content:center;padding:14px;border-left:none}
 .main{margin-left:60px;padding:16px}
 .mqtt-footer{left:60px}
 }
@@ -146,23 +150,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
 <a href="#" onclick="navigate('settings');return false" id="nav-settings"><span class="icon">&#x2699;</span><span>Configurações</span></a>
 <a href="#" onclick="navigate('logs');return false" id="nav-logs"><span class="icon">&#x1F4CB;</span><span>Logs</span></a>
-</nav>
+
 <div class="nav-group collapsed" id="repeater-nav" style="display:none">
 <button class="nav-group-head" onclick="toggleRepeaterNav()"><span class="icon">&#x1F504;</span><span>Repetidores</span><span class="chev">&#9662;</span></button>
 <div class="nav-group-list" id="repeater-nav-list"></div>
 </div>
+</nav>
 <div class="footer-nav" id="fw-sidebar">v--</div>
 </div>
 <div class="main"><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
-<div class="mqtt-footer" id="mqtt-footer"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span></div>
+<div class="mqtt-footer" id="mqtt-footer"><div style="display:flex;align-items:center;gap:6px"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span><span class="pairing-dot" id="pairing-dot"></span><span id="pairing-text" style="font-size:0.78rem;color:var(--warn)"></span></div><span id="footer-uptime" style="color:var(--muted-subtle)">--</span></div>
 <div class="toast" id="toast"></div>
 <script>
 let s_pollTimer = null;
 let s_mqtt_connected = false;
 let s_repNavTimer = null;
+let s_uptimeBase = 0;
+let s_uptimeStart = 0;
+let s_uptimeTimer = null;
 
 function navigate(page) {
   if (s_pollTimer) { clearInterval(s_pollTimer); s_pollTimer = null; }
+  if (window.s_pairingTimer) { clearInterval(window.s_pairingTimer); window.s_pairingTimer = null; }
   document.querySelectorAll('.sidebar nav a').forEach(function(a) { a.classList.remove('active'); });
   var link = document.getElementById('nav-'+page);
   if (link) link.classList.add('active');
@@ -186,6 +195,27 @@ function updateMqttFooter(connected, host, port) {
   dot.className = 'dot ' + (connected ? 'on' : 'off');
   txt.textContent = connected ? 'MQTT: Conectado ao ' + (host||'broker') : 'MQTT: desconectado';
   s_mqtt_connected = connected;
+}
+
+function updateFooterUptime(ms) {
+  var el = document.getElementById('footer-uptime');
+  if (!el) return;
+  s_uptimeBase = ms;
+  s_uptimeStart = Date.now();
+  el.textContent = fmtUptime(ms);
+  if (!s_uptimeTimer) {
+    s_uptimeTimer = setInterval(function() {
+      el.textContent = fmtUptime(s_uptimeBase + (Date.now() - s_uptimeStart));
+    }, 1000);
+  }
+}
+
+function updateFooterPairing(active, remainingSec) {
+  var dot = document.getElementById('pairing-dot');
+  var txt = document.getElementById('pairing-text');
+  if (!dot || !txt) return;
+  dot.classList.toggle('active', !!active);
+  txt.textContent = active ? 'Pareando ' + (remainingSec || 0) + 's' : '';
 }
 
 function showToast(msg, err) {
@@ -249,16 +279,19 @@ function toggleRepeaterNav() {
   if (g) g.classList.toggle('collapsed');
 }
 async function loadRepeaterNav(sensors) {
-  var group = document.getElementById('repeater-nav');
   var list = document.getElementById('repeater-nav-list');
-  if (!group || !list) return;
+  var nav = document.getElementById('repeater-nav');
+  if (!list || !nav) return;
   try {
     if (!sensors) { var d = await api('/api/sensors'); sensors = d || []; }
-    var reps = (sensors || []).filter(function(s) { return s.type_name === 'repeater' && s.online; });
-    if (!reps.length) { group.style.display = 'none'; list.innerHTML = ''; return; }
-    group.style.display = '';
+    var reps = (sensors || []).filter(function(s) { return s.type_name === 'repeater'; });
+    if (!reps.length) { nav.style.display = 'none'; list.innerHTML = ''; return; }
+    nav.style.display = '';
     list.innerHTML = reps.map(function(r) {
-      return '<a href="#" onclick="navigate(\'overview\');return false"><span class="dot"></span><span>'+escHtml(r.name||'Repeater')+' &middot; Slot '+r.slot+'</span></a>';
+      var off = r.online ? '' : ' style="opacity:.5"';
+      var href = r.ip ? 'http://'+escHtml(r.ip)+'?from='+escHtml(window.location.hostname) : '#';
+      var click = r.ip ? '' : ' onclick="navigate(\'overview\');return false"';
+      return '<a href="'+href+'"'+click+off+' target="_blank"><span class="dot" style="background:'+(r.online?'var(--success)':'var(--muted-subtle)')+'"></span><span>'+escHtml(r.name||'Repeater')+' &middot; Slot '+r.slot+'</span></a>';
     }).join('');
   } catch(e) {}
 }
@@ -277,7 +310,7 @@ navigate('overview');
 
 const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 <style>
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 6px;text-align:center}
 .stat-value{font-size:1.2rem;font-weight:700;color:var(--primary)}
 .stat-label{font-size:0.6rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
@@ -337,9 +370,9 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .btn-onoff.off:hover{background:var(--border-strong)}
 .loading{padding:40px;text-align:center;color:var(--muted)}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr);gap:6px}}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr);gap:6px}}
 @media(max-width:700px){
-  .stats{grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}
+  .stats{grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px}
   .stat{padding:6px 2px}
   .stat-value{font-size:0.9rem}
   .stat-label{font-size:0.5rem}
@@ -380,7 +413,6 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 <div class="stat" data-status="online" onclick="filterStatus('online')" style="cursor:pointer"><div class="stat-value" id="stat-online">--</div><div class="stat-label">Online</div></div>
 <div class="stat" data-status="offline" onclick="filterStatus('offline')" style="cursor:pointer"><div class="stat-value" id="stat-offline">--</div><div class="stat-label">Offline</div></div>
 <div class="stat"><div class="stat-value" id="stat-rx">--</div><div class="stat-label">RX Total</div></div>
-<div class="stat"><div class="stat-value" id="stat-uptime">--</div><div class="stat-label">Uptime</div></div>
 </div>
 <div class="filters" id="filter-bar"></div>
 <div id="sensors-grid" class="grid grid-2"><div class="loading">carregando...</div></div>
@@ -608,14 +640,19 @@ function startPairingUI(remainingSec) {
   if (s_pairingTimer) { clearInterval(s_pairingTimer); s_pairingTimer = null; }
   btn.classList.add('btn-pairing');
   btn.textContent = 'Cancelar ('+remainingSec+'s)';
-  s_pairingTimer = setInterval(function() {
+  updateFooterPairing(true, remainingSec);
+  var tid = setInterval(function() {
     remainingSec--;
     if (remainingSec > 0) {
-      btn.textContent = 'Cancelar ('+remainingSec+'s)';
+      if (btn) btn.textContent = 'Cancelar ('+remainingSec+'s)';
+      updateFooterPairing(true, remainingSec);
     } else {
+      clearInterval(tid);
+      s_pairingTimer = null;
       exitPairingMode();
     }
   }, 1000);
+  s_pairingTimer = tid;
 }
 
 function enterPairingMode() {
@@ -632,6 +669,8 @@ function exitPairingMode() {
   api('/api/pair/stop', {method:'POST'}).catch(function(){});
   var btn = document.getElementById('btn-pair');
   if (btn) { btn.classList.remove('btn-pairing'); btn.textContent = '+ Adicionar Sensor'; }
+  updateFooterPairing(false);
+  s_pairingTimer = null;
 }
 
 function toggleDeviceMenu(slot) {
@@ -756,9 +795,10 @@ async function loadData() {
     document.getElementById('stat-online').textContent = info.online_count;
     document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
-    document.getElementById('stat-uptime').textContent = fmtUptime(info.uptime_ms);
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
+    updateFooterUptime(info.uptime_ms);
+    updateFooterPairing(info.pairing_mode, info.pairing_remaining_sec);
     s_sensors = sensors;
     updateFilters(sensors);
     var nonRepeater = sensors.filter(function(s) { return s.type_name !== 'repeater'; });
@@ -789,7 +829,20 @@ async function loadData() {
       s_prevSensorMap = {};
       nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
     }
-    if (window.loadRepeaterNav) loadRepeaterNav(sensors);
+    var repList = document.getElementById('repeater-nav-list');
+    if (repList) {
+      var reps = sensors.filter(function(s) { return s.type_name === 'repeater'; });
+      if (reps.length) {
+        repList.innerHTML = reps.map(function(r) {
+          var off = r.online ? '' : ' style="opacity:.5"';
+          var href = r.ip ? 'http://'+escHtml(r.ip)+'?from='+escHtml(window.location.hostname) : '#';
+          var click = r.ip ? '' : ' onclick="navigate(\'overview\');return false"';
+          return '<a href="'+href+'"'+click+off+' target="_blank"><span class="dot" style="background:'+(r.online?'var(--success)':'var(--muted-subtle)')+'"></span><span>'+escHtml(r.name||'Repeater')+' &middot; Slot '+r.slot+'</span></a>';
+        }).join('');
+      } else {
+        repList.innerHTML = '<div class="empty">Nenhum</div>';
+      }
+    }
   } catch(e) {
     showToast('Erro ao carregar: '+e.message, true);
   } finally {
@@ -953,6 +1006,8 @@ async function loadSettings() {
     document.getElementById('bridge-sum').textContent = info.ip || '--';
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
+    updateFooterUptime(info.uptime_ms);
+    updateFooterPairing(info.pairing_mode, info.pairing_remaining_sec);
     if (info.pairing_mode && info.pairing_remaining_sec > 0) {
       startPairingUI(info.pairing_remaining_sec);
     }

@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "v0.0.24"
+#define FW_VERSION "v0.0.25"
 #define DEVICE_NAME "PIR ESP-NOW"
 
 #define STATE_UPDATE_INTERVAL 5000

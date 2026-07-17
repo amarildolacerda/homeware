@@ -7,10 +7,9 @@ static unsigned long s_last_attempt = 0;
 static unsigned long s_portal_start = 0;
 static bool s_portal_active = false;
 
-#if defined(ARDUINO_ARCH_ESP32)
-  static bool s_reconnect_active = false;
-  static unsigned long s_reconnect_deadline = 0;
-#else
+static bool s_reconnect_active = false;
+static unsigned long s_reconnect_deadline = 0;
+#if !defined(ARDUINO_ARCH_ESP32)
   static WiFiManager s_wm;
 #endif
 
@@ -117,7 +116,10 @@ void mywifi_loop() {
         if (s_portal_active && millis() - s_portal_start > 300000)
             s_portal_active = false;
 #if !defined(ARDUINO_ARCH_ESP32)
+        // WiFiManager >= 2.0 has process(); 0.16 doesn't need it (blocking).
+        #if defined(WIFIMANAGER_VERSION)
         s_wm.process();
+        #endif
 #endif
         return;
     }
