@@ -117,6 +117,23 @@ static void apply_wifi_static_ip() {
                    ip, gw, mask[0] ? mask : "255.255.255.0", dns[0] ? dns : (gw[0] ? gw : "none"));
 }
 
+#define PAIRING_ENABLED_DEFAULT false
+
+static bool pairing_config_load() {
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_PAIRING_EN_OFFSET);
+    EEPROM.end();
+    if (val == 0 || val == 1) return (bool)val;
+    return PAIRING_ENABLED_DEFAULT;
+}
+
+static void pairing_config_save(bool enabled) {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_PAIRING_EN_OFFSET, enabled ? 1 : 0);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
 static void serve_pgm_page(const char* page) {
     size_t total = strlen_P(page);
     WiFiClient cl = s_server.client();
@@ -175,6 +192,7 @@ void web_server_init() {
         doc["crc_errors"] = espnow_get_crc_errors();
         doc["uptime_ms"] = millis();
         doc["pairing_mode"] = espnow_is_pairing();
+        doc["pairing_required"] = pairing_config_load();
         doc["pairing_window_sec"] = PAIRING_WINDOW_MS / 1000;
         doc["pairing_remaining_sec"] = espnow_pairing_remaining_ms() / 1000;
         doc["mqtt_host"] = mqtt_client_get_host();
@@ -362,6 +380,17 @@ void web_server_init() {
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else
                 s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
+        } else if (action == "restart") {
+            virtual_sensor_t *s = sensor_registry_get(slot);
+            if (!s || !s->paired) {
+                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                return;
+            }
+            if (espnow_send_restart(s->mac)) {
+                log_add("info", "Restart enviado para slot %d", slot);
+                s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+            } else
+                s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "remove") {
             if (sensor_registry_remove(slot)) {
                 log_add("warn", "Sensor slot %d removido", slot);
@@ -446,6 +475,26 @@ void web_server_init() {
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         delay(300);
         ESP.restart();
+    });
+
+    s_server.on("/api/config/pairing", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["enabled"] = pairing_config_load();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    });
+
+    s_server.on("/api/config/pairing", HTTP_POST, []() {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        if (err || !doc.containsKey("enabled")) {
+            s_server.send(400, "application/json", "{\"error\":\"enabled required\"}");
+            return;
+        }
+        bool enabled = doc["enabled"];
+        pairing_config_save(enabled);
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {

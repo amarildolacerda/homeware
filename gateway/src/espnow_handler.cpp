@@ -83,8 +83,26 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                 return;
             }
 
-         // test   
+         // test
          //   if (!s_pairing_mode) { console.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
+
+            /* Pairing flag check (SPEC_ESPNOW §6) */
+            {
+                EEPROM.begin(EEPROM_SIZE);
+                bool pairing_required = EEPROM.read(EEPROM_PAIRING_EN_OFFSET) == 1;
+                EEPROM.end();
+                if (pairing_required && !s_pairing_mode) {
+                    console.printf("[ESP-NOW] Pair request ignored (pairing disabled, window closed)\n");
+                    espnow_nak_t nak;
+                    memset(&nak, 0, sizeof(nak));
+                    nak.msg_type = ESPNOW_MSG_NAK;
+                    nak.sequence = req->sequence;
+                    mac_copy(nak.target_mac, req->sensor_mac);
+                    nak.reason = NAK_REASON_PAIRING_DISABLED;
+                    esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+                    return;
+                }
+            }
 
             for (int i = 0; i < PENDING_PAIR_MAX; i++) {
                 if (s_pending_pairs[i].active && mac_equal(s_pending_pairs[i].mac, req->sensor_mac)) {
@@ -438,6 +456,24 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
         return true;
     }
     console.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
+    return false;
+}
+
+bool espnow_send_restart(const uint8_t *mac) {
+    espnow_restart_t rst;
+    memset(&rst, 0, sizeof(rst));
+    rst.msg_type = ESPNOW_MSG_RESTART;
+    rst.sequence = 0;
+    mac_copy(rst.target_mac, mac);
+
+    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&rst, sizeof(rst));
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+    if (ret == 0) {
+        console.printf("[ESP-NOW] Restart sent (broadcast) to %s\n", mac_str);
+        return true;
+    }
+    console.printf("[ESP-NOW] Restart send failed to %s ret=%d\n", mac_str, ret);
     return false;
 }
 
