@@ -494,6 +494,19 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         }
         break;
     }
+    case ESPNOW_MSG_NAK:
+    {
+        if (len < sizeof(espnow_nak_t)) return;
+        espnow_nak_t *nak = (espnow_nak_t *)data;
+        if (nak->reason == NAK_REASON_GATEWAY_LOST)
+        {
+            console.printf("[%s] Gateway lost notification (NAK), re-pairing...\n", TAG);
+            s_paired = false;
+            s_gateway_connected = false;
+            s_pair_attempts = 0;
+        }
+        break;
+    }
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))

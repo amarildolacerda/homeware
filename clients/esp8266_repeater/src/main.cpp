@@ -965,17 +965,30 @@ void loop(void)
         }
     }
 
-    /* Gateway timeout: if no communication for 60s, clear config and rediscover */
-    if (s_gateway_configured && s_last_gateway_comm > 0 && (now - s_last_gateway_comm > 60000))
+    /* Gateway timeout: if no communication for 60s, notify clients (§13.3) and
+       clear config so the repeater rediscovers the gateway. */
+    static unsigned long s_last_gateway_check = 0;
+    if (now - s_last_gateway_check > 5000)
     {
-        console.printf("[%s] Gateway timeout (no comm for 1min), clearing config\n", TAG);
-        s_gateway_configured = false;
-        memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
-        /* Clear from EEPROM */
-        EEPROM.begin(EEPROM_SIZE);
-        EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, 0);
-        EEPROM.commit();
-        EEPROM.end();
+        s_last_gateway_check = now;
+        if (s_gateway_configured && s_last_gateway_comm > 0 && (now - s_last_gateway_comm > GATEWAY_TIMEOUT_MS))
+        {
+            console.printf("[%s] Gateway lost! Notifying clients...\n", TAG);
+            espnow_nak_t nak;
+            memset(&nak, 0, sizeof(nak));
+            nak.msg_type = ESPNOW_MSG_NAK;
+            nak.sequence = 0;
+            memset(nak.target_mac, 0xFF, 6);  /* broadcast */
+            nak.reason = NAK_REASON_GATEWAY_LOST;
+            esp_now_send(s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+            s_gateway_configured = false;
+            memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
+            /* Clear from EEPROM */
+            EEPROM.begin(EEPROM_SIZE);
+            EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, 0);
+            EEPROM.commit();
+            EEPROM.end();
+        }
     }
 
     /* Gateway discovery: broadcast if no gateway configured */
