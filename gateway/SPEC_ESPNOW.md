@@ -122,6 +122,8 @@ typedef struct __attribute__((packed)) {
 | 0x09 | `ESPNOW_MSG_GW_ANNOUNCE` | Gateway → Client | Anúncio presença gateway |
 | 0x0A | `ESPNOW_MSG_GW_DISCOVER` | Repeater → Gateway | Descoberta de repeater |
 | 0x0B | `ESPNOW_MSG_REPEATER_STATUS` | Repeater → Gateway | Status do repeater |
+| 0x0C | `ESPNOW_MSG_RESTART` | Gateway → Client | Reinicia dispositivo alvo |
+| 0x0D | `ESPNOW_MSG_NAK` | Gateway/Repeater → Client | Negativa de pareamento/falha |
 
 ## 5. Tipos de Sensor (`sensor_type_t`)
 
@@ -137,6 +139,7 @@ typedef struct __attribute__((packed)) {
 | 8 | `SENSOR_TYPE_ONOFF` | `payload_onoff_t` | state |
 | 9 | `SENSOR_TYPE_LIGHT` | `payload_onoff_t` | state |
 | 10 | `SENSOR_TYPE_REPEATER` | `payload_repeater_status_t` | received, forwarded, client_count, channel, uptime_s, free_heap, ack_failures |
+| 11 | `SENSOR_TYPE_DHT_RELE` | (reservado) | temperature, humidity, state |
 
 ### Payloads (structs packed)
 
