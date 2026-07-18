@@ -1,7 +1,10 @@
 import shutil, os
 
-shared_src = os.path.join(os.path.dirname(__file__), '..', 'shared', 'src')
-gateway_src = os.path.join(os.path.dirname(__file__), 'src')
+# Pre-scripts run with cwd = project dir; __file__ may be undefined under SCons.
+here = os.getcwd()
+
+shared_src = os.path.join(here, '..', 'shared', 'src')
+gateway_src = os.path.join(here, 'src')
 
 files = ['common_ota.cpp', 'common_console.cpp']
 for f in files:

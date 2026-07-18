@@ -5,6 +5,7 @@
 #include "platform.h"
 #include "log_buffer.h"
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "common_console.h"
 
 static bool s_pairing_mode = false;
@@ -440,6 +441,16 @@ unsigned long espnow_pairing_remaining_ms() {
     return PAIRING_WINDOW_MS - elapsed;
 }
 
+const uint8_t* espnow_dest_for_chip(const uint8_t *mac, uint8_t client_chip) {
+    if (client_chip == HW_CHIP_ESP8266) {
+        /* Unicast funciona para ESP8266->ESP8266 e ESP32->ESP8266 */
+        espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
+        return mac;
+    }
+    /* ESP32 destino ou desconhecido → broadcast seguro */
+    return s_bcast_addr;
+}
+
 bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     espnow_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -448,7 +459,11 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&cmd, sizeof(cmd));
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
+    const uint8_t *dest = espnow_dest_for_chip(mac, chip);
+
+    int ret = esp_now_send((uint8_t*)dest, (uint8_t*)&cmd, sizeof(cmd));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {
@@ -459,14 +474,18 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     return false;
 }
 
-bool espnow_send_restart(const uint8_t *mac) {
+bool espnow_send_restart(const uint8_t *mac, uint8_t slot) {
     espnow_restart_t rst;
     memset(&rst, 0, sizeof(rst));
     rst.msg_type = ESPNOW_MSG_RESTART;
     rst.sequence = 0;
     mac_copy(rst.target_mac, mac);
 
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&rst, sizeof(rst));
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
+    const uint8_t *dest = espnow_dest_for_chip(mac, chip);
+
+    int ret = esp_now_send((uint8_t*)dest, (uint8_t*)&rst, sizeof(rst));
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     if (ret == 0) {

@@ -386,7 +386,7 @@ void web_server_init() {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
-            if (espnow_send_restart(s->mac)) {
+            if (espnow_send_restart(s->mac, s->slot)) {
                 log_add("info", "Restart enviado para slot %d", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else
