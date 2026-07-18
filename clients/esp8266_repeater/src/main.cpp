@@ -15,6 +15,8 @@
 
 static const char *TAG = "repeater";
 
+#define GATEWAY_TIMEOUT_MS 60000
+
 static uint8_t s_gateway_mac[6];
 // Broadcast address used for all gateway-bound traffic. ESP8266→ESP32 ESP-NOW
 // unicast is dropped by the radio (see homeware AGENTS.md rule 18), so the
@@ -211,6 +213,26 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             console.printf("[%s] Gateway discovered: %s\n", TAG, mac_str);
         }
         return;
+    }
+
+    /* NAK se não temos gateway (SPEC_ESPNOW §13.2) */
+    if (msg_type == ESPNOW_MSG_PAIR_REQUEST && len >= sizeof(espnow_pair_request_t))
+    {
+        if (!s_gateway_configured || (millis() - s_last_gateway_comm > GATEWAY_TIMEOUT_MS))
+        {
+            espnow_pair_request_t *req = (espnow_pair_request_t *)data;
+            espnow_nak_t nak;
+            memset(&nak, 0, sizeof(nak));
+            nak.msg_type = ESPNOW_MSG_NAK;
+            nak.sequence = req->sequence;
+            mac_copy(nak.target_mac, req->sensor_mac);
+            nak.reason = NAK_REASON_NO_GATEWAY;
+            esp_now_send(s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+            console.printf("[%s] NAK sent: no gateway for PAIR_REQUEST from %02X:%02X:%02X:%02X:%02X:%02X\n",
+                           TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            return;  /* não repassa */
+        }
+        /* Se tem gateway, deixa o fluxo normal de forwarding repassar */
     }
 
     /* Restart command targeting this repeater */
