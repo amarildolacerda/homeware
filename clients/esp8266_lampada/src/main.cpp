@@ -471,6 +471,22 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         }
         break;
     }
+    case ESPNOW_MSG_RESTART:
+    {
+        if (len < sizeof(espnow_restart_t)) return;
+        espnow_restart_t *rst = (espnow_restart_t *)data;
+        if (mac_equal(rst->target_mac, s_my_mac))
+        {
+            console.printf("[%s] Restart command received, rebooting...\n", TAG);
+            if (s_paired) {
+                espnow_send_heartbeat();
+                delay(50);
+            }
+            delay(100);
+            ESP.restart();
+        }
+        break;
+    }
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))

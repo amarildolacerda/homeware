@@ -30,6 +30,7 @@ static bool s_monitor = true;
 static unsigned long s_last_gateway_comm = 0; // last successful comm with gateway
 static unsigned long s_last_gateway_ack = 0;  // last ACK from gateway to THIS repeater (uplink proof)
 static char s_device_name[32] = DEVICE_NAME;
+static uint8_t s_my_mac[6];
 static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 
@@ -210,6 +211,21 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             console.printf("[%s] Gateway discovered: %s\n", TAG, mac_str);
         }
         return;
+    }
+
+    /* Restart command targeting this repeater */
+    if (msg_type == ESPNOW_MSG_RESTART && len >= sizeof(espnow_restart_t))
+    {
+        espnow_restart_t *rst = (espnow_restart_t *)data;
+        if (mac_equal(rst->target_mac, s_my_mac))
+        {
+            console.printf("[%s] Restart command received, rebooting...\n", TAG);
+            /* Enviar último status antes de resetar */
+            send_repeater_status();
+            delay(50);
+            delay(100);
+            ESP.restart();
+        }
     }
 
     if (s_gateway_configured && mac_equal(mac, s_gateway_mac))
@@ -767,6 +783,7 @@ void setup(void)
     wifi_setup(false);
 
     init_espnow();
+    WiFi.macAddress(s_my_mac);
 
     bool has_wifi = (WiFi.status() == WL_CONNECTED);
     if (has_wifi)

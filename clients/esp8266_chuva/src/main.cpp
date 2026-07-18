@@ -30,6 +30,7 @@ static int s_pair_attempts = 0;
 static bool s_ack_received = false;
 static bool s_send_pending = false;
 static bool s_espnow_ready = false;
+static uint8_t s_my_mac[6];
 
 static unsigned long s_pair_cooldown_end = 0;
 
@@ -188,6 +189,22 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
                 s_gateway_connected = true;
             }
             s_ack_received = true;
+            break;
+        }
+        case ESPNOW_MSG_RESTART:
+        {
+            if (len < sizeof(espnow_restart_t)) return;
+            espnow_restart_t *rst = (espnow_restart_t *)data;
+            if (mac_equal(rst->target_mac, s_my_mac))
+            {
+                console.printf("[%s] Restart command received, rebooting...\n", TAG);
+                if (s_paired) {
+                    espnow_send_heartbeat();
+                    delay(50);
+                }
+                delay(100);
+                ESP.restart();
+            }
             break;
         }
     }
@@ -758,6 +775,7 @@ void setup(void)
     }
 
     espnow_init_client();
+    WiFi.macAddress(s_my_mac);
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []() { serve_pgm_page(PAGE_DOCS); });
