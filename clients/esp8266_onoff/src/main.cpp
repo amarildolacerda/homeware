@@ -433,6 +433,8 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
     }
 }
 
+static bool espnow_send_heartbeat(void);
+
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
     s_espnow_rx_count++;

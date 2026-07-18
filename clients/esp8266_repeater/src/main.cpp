@@ -155,6 +155,8 @@ static void learn_client(const uint8_t *mac)
     s_client_count++;
 }
 
+static void send_repeater_status(void);
+
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
     if (!data || len < 1) return;
