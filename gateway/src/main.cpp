@@ -188,6 +188,19 @@ void loop() {
     web_server_maintain_wifi();
     espnow_handler_loop();
     mqtt_client_loop();
+
+    /* LED pisca durante o modo de pareamento */
+    {
+        static unsigned long s_led_toggle = 0;
+        static bool s_led_state = false;
+        if (espnow_is_pairing()) {
+            if (millis() - s_led_toggle > 300) {
+                s_led_toggle = millis();
+                s_led_state = !s_led_state;
+                digitalWrite(STATUS_LED_GPIO, s_led_state ? LOW : HIGH);
+            }
+        }
+    }
     
     unsigned long now = millis();
     
