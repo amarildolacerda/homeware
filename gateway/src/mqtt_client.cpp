@@ -63,9 +63,9 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
     if (id_start >= id_end) return;
     String entity_id = topicStr.substring(id_start, id_end);
 
-    int dot = entity_id.lastIndexOf('.');
-    if (dot < 0) return;
-    int slot = atoi(entity_id.c_str() + dot + 1);
+    int sep = entity_id.lastIndexOf('_');
+    if (sep < 0) return;
+    int slot = atoi(entity_id.c_str() + sep + 1);
 
     uint8_t state = 0;
     if (strcmp(buf, "ON") == 0 || strcmp(buf, "1") == 0 || strcmp(buf, "true") == 0) {

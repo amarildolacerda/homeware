@@ -69,6 +69,7 @@ static uint32_t s_repeater_fwd = 0;
 
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
+static unsigned long s_sync_millis = 0;
 static bool s_tz_changed = false;
 
 static char s_device_id[32];
@@ -508,6 +509,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             return;
         espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
         s_synced_epoch = ts->epoch_seconds;
+        s_sync_millis = millis();
         console.printf("[%s] Time sync: epoch=%lu seq=%d\n", TAG, s_synced_epoch, ts->sequence);
         break;
     }
@@ -1519,7 +1521,7 @@ static void apply_timer(int action)
 static unsigned long get_epoch(void)
 {
     if (s_synced_epoch > 0)
-        return s_synced_epoch + (millis() / 1000);
+        return s_synced_epoch + ((millis() - s_sync_millis) / 1000);
     return 0;
 }
 

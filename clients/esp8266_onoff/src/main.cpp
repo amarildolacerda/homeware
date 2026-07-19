@@ -71,6 +71,8 @@ static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 
 static unsigned long get_synced_epoch(void) {
+    time_t t = time(NULL);
+    if (t > 100000) return (unsigned long)t;
     if (s_synced_epoch > 0)
         return s_synced_epoch + (millis() / 1000);
     return 0;
