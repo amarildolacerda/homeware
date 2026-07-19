@@ -15,13 +15,6 @@
 
 static const char *TAG = "esp8266-dht-gas";
 
-typedef struct __attribute__((packed)) {
-    float temperature;
-    float humidity;
-    uint16_t gas_level;
-    uint8_t alarm;
-} payload_dht_gas_t;
-
 static DHT *s_dht = nullptr;
 
 static unsigned long s_last_state_update = 0;
@@ -153,6 +146,8 @@ static void load_device_name(void)
     }
     EEPROM.end();
 }
+
+static bool espnow_send_heartbeat(void);
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {

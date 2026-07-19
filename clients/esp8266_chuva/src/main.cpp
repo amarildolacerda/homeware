@@ -139,6 +139,8 @@ static void load_device_name(void)
     EEPROM.end();
 }
 
+static bool espnow_send_heartbeat(void);
+
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
