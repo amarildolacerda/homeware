@@ -61,7 +61,7 @@
 - mostrar no dashboard a versão (FW_VERSION)
 - quando conseguir resolver um problema, erro ou mudança de especificação - registrar a nova regra para aprendizado e reaproveitamento nas proximas sessões
 - cuidado com chamadas repetitivas a api, reaproveitar quando for possivel
-- **Código compartilhado**: `shared/` na raiz é a fonte única de `espnow_protocol.h`, `myWiFiManager.h/.cpp` e `shared_config.h` (wrapper cross-platform WiFi ESP8266/ESP32). Gateway e clients DEVEM incluir `shared/` e NÃO manter cópias divergentes desses arquivos (regra 17 estendida: qualquer mudança de struct/protocolo ou WiFiManager vale para todos os devices e deve ser feita uma única vez em `shared/`).
+- **Código compartilhado**: `shared/` é um **submodule** (`homeware_shared.git`) e é a fonte única de código cross-platform (regra 17 estendida). Estrutura de lib PlatformIO: `library.json` na raiz + **todo o código (`.h` e `.cpp`) em `src/`**. Contém: `espnow_protocol.h`, `myWiFiManager.h/.cpp`, `shared_config.h`, `platform.h` (wrappers `MyWebServer`/`chip_id()`/`espnow_add_peer_wrapper`), `common_console.*` (telnet), `common_ota.*` (ArduinoOTA), `common_util.*` (`uptime_to_str`), `common_wifi.*` (delegators p/ myWiFiManager), `timer.*` (agendamento parametrizado). Gateway e clients DEVEM consumir via `lib_extra_dirs` (gateway: `../shared`; clients: `../../shared`) e NÃO manter cópias divergentes nem usar `-I` manual ou scripts de cópia. Qualquer mudança de struct/protocolo/WiFiManager/common vale para todos os devices e deve ser feita uma única vez no submodule `shared/` (commitar e pushar o submodule, depois bump no homeware).
 
 ### Novos Clients
 1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações relevantes ao cliente
