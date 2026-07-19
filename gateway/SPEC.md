@@ -89,3 +89,6 @@ enterPairingMode()
 - Se max sensors atingido (400), mostra toast de erro
 - Se erro de rede, mostra toast de erro
 - `pairingWindowSec` atualizado do backend via `/api/info` no `loadData()`
+
+## MQTT integração com HomeAssistant
+- seguir: https://www.home-assistant.io/integrations/mqtt/#discovery-topic
