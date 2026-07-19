@@ -52,6 +52,8 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
     memcpy(buf, payload, len);
     buf[len] = '\0';
 
+    console.printf("[MQTT RX] topic=%s payload=%s (len=%u)\n", topic, buf, length);
+
     String topicStr(topic);
     bool is_switch = topicStr.startsWith(MQTT_TOPIC_PREFIX "/switch/");
     bool is_light = topicStr.startsWith(MQTT_TOPIC_PREFIX "/light/");
@@ -114,6 +116,7 @@ static void publish_entity_config(const char *component, const char *entity_id,
 
     String json;
     serializeJson(doc, json);
+    console.printf("[MQTT TX] topic=%s payload=%s\n", topic, json.c_str());
     if (s_mqtt.beginPublish(topic, json.length(), true)) {
         s_mqtt.print(json.c_str());
         s_mqtt.endPublish();
@@ -123,6 +126,7 @@ static void publish_entity_config(const char *component, const char *entity_id,
 static void publish_entity_state(const char *component, const char *entity_id, const char *value) {
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/%s/%s/state", MQTT_TOPIC_PREFIX, component, entity_id);
+    console.printf("[MQTT TX] topic=%s payload=%s\n", topic, value);
     s_mqtt.publish(topic, value, false);
 }
 
@@ -221,6 +225,7 @@ bool mqtt_client_connect() {
         console.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
 
         s_mqtt.subscribe("homeassistant/switch/+/set");
+        s_mqtt.subscribe("homeassistant/light/+/set");
 
         mqtt_client_publish_all();
     } else {
