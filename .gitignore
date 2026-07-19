@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 .git_token
+.deepseek*
 mosquitto/
 data/
 .pio
