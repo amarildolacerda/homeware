@@ -7,3 +7,6 @@
 [submodule "espnow_gateway"]
 	path = espnow_gateway
 	url = https://github.com/amarildolacerda/espnow_gateway.git
+[submodule "shared"]
+	path = shared
+	url = https://github.com/amarildolacerda/homeware_shared.git

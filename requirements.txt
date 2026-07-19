@@ -1,0 +1,24 @@
+# Homeware — Python dependencies (tests + bridge tools)
+# Install: python3 -m pip install -r requirements.txt
+
+# Web framework / API (bridge)
+fastapi
+uvicorn
+pydantic
+python-multipart
+
+# HTTP client (tests / bridge)
+httpx
+
+# MQTT (bridge discovery)
+paho-mqtt
+
+# Config / discovery
+pyyaml
+
+# Testing
+pytest
+pytest-asyncio
+
+# Serial / flashing helpers
+pyserial

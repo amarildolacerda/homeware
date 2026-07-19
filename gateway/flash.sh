@@ -2,6 +2,11 @@
 set -e
 cd "$(dirname "$0")"
 
+ROOT_DIR="$(cd .. && pwd)"
+if [ -f "$ROOT_DIR/.venv/bin/activate" ]; then
+    source "$ROOT_DIR/.venv/bin/activate"
+fi
+
 PORT="/dev/ttyUSB0"
 MODE="serial"
 
