@@ -77,6 +77,8 @@ static char s_device_name[32] = DEVICE_NAME;
 
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
+static bool s_ota_in_progress = false;
+static uint32_t s_ota_bytes = 0;
 static bool s_use_repeater = false;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
@@ -125,6 +127,7 @@ static void track_repeater_client(const uint8_t *mac)
 #define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
 #define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
 #define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
+#define EEPROM_REPEATER_EN_ADDR (EEPROM_STARTUP_MODE_ADDR + 1)
 #define EEPROM_SSID_ADDR 64
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
@@ -174,6 +177,24 @@ static void load_relay_state(void)
     EEPROM.end();
     s_relay_state = (val == 1);
 }
+
+#ifdef HABILITA_REPEATER
+static void save_repeater_en(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_REPEATER_EN_ADDR, s_use_repeater ? 1 : 0);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
+static void load_repeater_en(void)
+{
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_REPEATER_EN_ADDR);
+    EEPROM.end();
+    s_use_repeater = (val == 1);
+}
+#endif
 
 static void save_relay_pin(void)
 {
@@ -427,6 +448,8 @@ static bool espnow_send_heartbeat(void);
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
+    if (s_ota_in_progress)
+        return;
     s_espnow_rx_count++;
     if (!data || len < 1)
         return;
@@ -546,9 +569,12 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         }
         else
         {
-            /* From client → forward to gateway */
+            /* From client → forward to gateway.
+               Broadcast obrigatorio: ESP8266->ESP32 (gateway) unicast falha
+               quando conectado no AP (AGENTS.md regra 18). O repeater real
+               (ESP8266) tambem recebe broadcast sem problema. */
             track_repeater_client(mac);
-            espnow_send_wrapper(s_gateway_mac, data, len, TAG);
+            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
             s_repeater_fwd++;
         }
     }
@@ -747,6 +773,9 @@ static void init_hardware(void)
     {
         load_relay_state();
     }
+#ifdef HABILITA_REPEATER
+    load_repeater_en();
+#endif
     digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
     pinMode(s_button_pin, INPUT_PULLUP);
     s_button_last = digitalRead(s_button_pin);
@@ -981,6 +1010,10 @@ static void handle_root(void)
     page += FPSTR(PAGE_PINS_NAV);
     page += FPSTR(PAGE_DASHBOARD_CONT1);
     page += FPSTR(PAGE_PINS_SEC);
+#ifdef HABILITA_REPEATER
+    page += FPSTR(PAGE_DASHBOARD_REPEATER_CFG);
+#endif
+    page += FPSTR(PAGE_DASHBOARD_CONT3);
     page += FPSTR(PAGE_DASHBOARD_CONT2);
     page += FPSTR(PAGE_SCRIPT_PINS);
     page += FPSTR(PAGE_DASHBOARD_END);
@@ -1020,7 +1053,9 @@ static void handle_api_state(void)
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
 #ifdef HABILITA_REPEATER
-        doc["repeater_active"] = (s_repeater_fwd > 0);
+        doc["repeater_supported"] = true;
+        doc["repeater_active"] = (s_repeater_fwd > 0) || s_use_repeater;
+        doc["repeater_enabled"] = s_use_repeater;
         if (s_use_repeater)
         {
             doc["repeater_fwd"] = s_repeater_fwd;
@@ -1081,6 +1116,49 @@ static void handle_api_relay(void)
         }
     }
 }
+
+#ifdef HABILITA_REPEATER
+static void handle_api_repeater(void)
+{
+    if (s_server.method() == HTTP_GET)
+    {
+        String json;
+        JsonDocument doc;
+        doc["enabled"] = s_use_repeater;
+        doc["forwarded"] = s_repeater_fwd;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    }
+    else if (s_server.method() == HTTP_POST)
+    {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err)
+        {
+            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
+            return;
+        }
+        if (doc.containsKey("enabled"))
+        {
+            bool en = doc["enabled"];
+            s_use_repeater = en;
+            save_repeater_en();
+            console.printf("[%s] Repeater %s via API\n", TAG, en ? "ATIVADO" : "desativado");
+            String json;
+            JsonDocument resp;
+            resp["enabled"] = s_use_repeater;
+            resp["status"] = "ok";
+            serializeJson(resp, json);
+            s_server.send(200, "application/json", json);
+        }
+        else
+        {
+            s_server.send(400, "application/json", "{\"error\":\"missing enabled\"}");
+        }
+    }
+}
+#endif
 
 static void handle_api_pin(void)
 {
@@ -1266,6 +1344,7 @@ static void handle_console(char c)
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
 #ifdef HABILITA_REPEATER
+        console.printf("  e    - ligar/desligar repeater\n");
         console.printf("  x    - repeater stats\n");
 #endif
         console.printf("  c    - zerar contadores\n");
@@ -1301,6 +1380,12 @@ static void handle_console(char c)
         break;
         #endif
 #ifdef HABILITA_REPEATER
+    case 'e':
+    case 'E':
+        s_use_repeater = !s_use_repeater;
+        save_repeater_en();
+        console.printf("[%s] Repeater %s\n", TAG, s_use_repeater ? "ATIVADO" : "DESATIVADO");
+        break;
     case 'x':
     case 'X':
         if (s_use_repeater)
@@ -1630,12 +1715,15 @@ static void handle_ota(void)
 {
     if (!Update.hasError())
     {
+        console.printf("[%s] OTA concluido, reiniciando...\n", TAG);
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         delay(500);
         ESP.restart();
     }
     else
     {
+        s_ota_in_progress = false;
+        console.printf("[%s] OTA falhou\n", TAG);
         s_server.send(500, "application/json", "{\"status\":\"error\"}");
     }
 }
@@ -1645,19 +1733,22 @@ static void handle_ota_upload(void)
     HTTPUpload &upload = s_server.upload();
     if (upload.status == UPLOAD_FILE_START)
     {
-        console.printf("[%s] OTA update started: %s (%d bytes)\n", TAG, upload.filename.c_str(), upload.totalSize);
-        if (!Update.begin(upload.totalSize))
+        s_ota_in_progress = true;
+        s_ota_bytes = 0;
+        console.printf("[%s] OTA update started: %s\n", TAG, upload.filename.c_str());
+        if (!Update.begin(ESP.getFreeSketchSpace()))
             Update.printError(Serial);
     }
     else if (upload.status == UPLOAD_FILE_WRITE)
     {
+        s_ota_bytes += upload.currentSize;
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
             Update.printError(Serial);
     }
     else if (upload.status == UPLOAD_FILE_END)
     {
         if (Update.end(true))
-            console.printf("[%s] OTA update success: %d bytes\n", TAG, upload.totalSize);
+            console.printf("[%s] OTA update success: %u bytes\n", TAG, s_ota_bytes);
         else
             Update.printError(Serial);
     }
@@ -1705,6 +1796,9 @@ void setup(void)
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
+#ifdef HABILITA_REPEATER
+    s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
+#endif
     s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
 #ifdef HABILITA_PINOS
     s_server.on("/api/pins", HTTP_GET, handle_api_pins);
@@ -1773,6 +1867,13 @@ void loop(void)
 #else
     s_server.handleClient();
 #endif
+
+    if (s_ota_in_progress)
+    {
+        // Pausa ESP-NOW / envios durante OTA para evitar WDT e interrupção do upload
+        yield();
+        return;
+    }
 
     {
         bool btn = digitalRead(s_button_pin);

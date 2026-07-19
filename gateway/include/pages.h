@@ -159,7 +159,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="footer-nav" id="fw-sidebar">v--</div>
 </div>
 <div class="main"><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
-<div class="mqtt-footer" id="mqtt-footer"><div style="display:flex;align-items:center;gap:6px"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span><span class="pairing-dot" id="pairing-dot"></span><span id="pairing-text" style="font-size:0.78rem;color:var(--warn)"></span></div><span id="footer-uptime" style="color:var(--muted-subtle)">--</span></div>
+<div class="mqtt-footer" id="mqtt-footer"><div style="display:flex;align-items:center;gap:6px"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span><span class="pairing-dot" id="pairing-dot"></span><span id="pairing-text" style="font-size:0.78rem;color:var(--warn)"></span></div><span style="display:flex;align-items:center;gap:12px"><span id="footer-clock" style="color:var(--muted-subtle)">--:--:--</span><span id="footer-uptime" style="color:var(--muted-subtle)">--</span></span></div>
 <div class="toast" id="toast"></div>
 <script>
 let s_pollTimer = null;
@@ -168,6 +168,9 @@ let s_repNavTimer = null;
 let s_uptimeBase = 0;
 let s_uptimeStart = 0;
 let s_uptimeTimer = null;
+let s_clockBase = 0;
+let s_clockStart = 0;
+let s_clockTimer = null;
 
 function navigate(page) {
   if (s_pollTimer) { clearInterval(s_pollTimer); s_pollTimer = null; }
@@ -208,6 +211,22 @@ function updateFooterUptime(ms) {
       el.textContent = fmtUptime(s_uptimeBase + (Date.now() - s_uptimeStart));
     }, 1000);
   }
+}
+
+function updateFooterClock(epoch) {
+  var el = document.getElementById('footer-clock');
+  if (!el) return;
+  if (!epoch) { el.textContent = 'sem hora NTP'; return; }
+  s_clockBase = epoch;
+  s_clockStart = Date.now();
+  function tick() {
+    var e = s_clockBase + Math.floor((Date.now() - s_clockStart) / 1000);
+    var d = new Date(e * 1000);
+    var p = function(n) { return (n < 10 ? '0' : '') + n; };
+    el.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  if (!s_clockTimer) s_clockTimer = setInterval(tick, 1000);
 }
 
 function updateFooterPairing(active, remainingSec) {
@@ -301,7 +320,15 @@ function startRepeaterNavPoll() {
   loadRepeaterNav();
 }
 
+function syncBrowserTime() {
+  try {
+    var epoch = Math.floor(Date.now() / 1000);
+    fetch('/api/time', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({epoch: epoch})});
+  } catch(e) {}
+}
+
 startRepeaterNavPoll();
+syncBrowserTime();
 navigate('overview');
 </script>
 </body>
@@ -798,6 +825,7 @@ async function loadData() {
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
+    updateFooterClock(info.epoch);
     updateFooterPairing(info.pairing_mode, info.pairing_remaining_sec);
     s_sensors = sensors;
     updateFilters(sensors);
@@ -1007,6 +1035,7 @@ async function loadSettings() {
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
+    updateFooterClock(info.epoch);
     updateFooterPairing(info.pairing_mode, info.pairing_remaining_sec);
     if (info.pairing_mode && info.pairing_remaining_sec > 0) {
       startPairingUI(info.pairing_remaining_sec);

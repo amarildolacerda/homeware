@@ -19,6 +19,7 @@ static bool s_ntp_synced = false;
 static unsigned long s_last_ntp_retry = 0;
 static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
+static time_t s_browser_epoch = 0;
 
 void print_help() {
     console.println("\n=== Comandos ===");
@@ -143,8 +144,8 @@ void setup() {
     espnow_announce();
     log_buffer_init();
     
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    console.printf("[%s] NTP: pool.ntp.org, non-blocking sync\n", TAG);
+    configTime(0, 0, "162.159.200.123", "216.239.35.0");
+    console.printf("[%s] NTP: 162.159.200.123 (cloudflare), non-blocking sync\n", TAG);
     
     mqtt_client_connect();
     
@@ -239,4 +240,11 @@ void loop() {
     }
     
     delay(1);
+}
+
+bool gateway_ntp_synced() { return s_ntp_synced; }
+time_t gateway_ntp_epoch() { return s_ntp_synced ? s_ntp_epoch : s_browser_epoch; }
+
+void gateway_set_browser_epoch(time_t epoch) {
+    if (epoch > 100000 && !s_ntp_synced) s_browser_epoch = epoch;
 }

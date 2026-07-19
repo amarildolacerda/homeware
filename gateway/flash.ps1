@@ -38,7 +38,7 @@ if (-not $pio) {
 }
 
 if ($o) {
-    $envName = if ($e) { $e } else { "esp8266_gateway_ota" }
+    $envName = if ($e) { $e } else { "esp32_gateway_ota" }
     Write-Host "Building + OTA upload to $o (env: $envName)..." -ForegroundColor Cyan
     & $pio run -e $envName --target upload --upload-port "$o"
     if ($LASTEXITCODE -ne 0) { Write-Error "OTA upload failed"; exit 1 }

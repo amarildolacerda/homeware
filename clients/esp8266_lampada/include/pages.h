@@ -31,7 +31,7 @@ body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;backgroun
 .stats-header .stat-value{font-size:.82rem;font-weight:700;color:var(--primary)}
 .stats-header .stat-label{font-size:.52rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.03em;margin-top:1px}
 .content{flex:1;padding:20px;max-width:480px;width:100%;margin:0 auto}
-.footer-bar{display:flex;align-items:center;gap:16px;padding:8px 20px;border-top:1px solid var(--border);background:var(--surface);font-size:.75rem;color:var(--muted-subtle);flex-wrap:wrap;justify-content:flex-end}
+.footer-bar{display:flex;align-items:center;gap:16px;padding:8px 20px;border-top:1px solid var(--border);background:var(--surface);font-size:.75rem;color:var(--muted-subtle);flex-wrap:wrap;justify-content:flex-end;margin-top:auto}
 .fb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .fb-dot.online{background:var(--success)}
 .fb-dot.offline{background:var(--danger)}
@@ -99,6 +99,7 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="stat"><div class="stat-value" id="txVal">0</div><div class="stat-label">TX</div></div>
 <div class="stat"><div class="stat-value" id="memVal">-</div><div class="stat-label">Mem</div></div>
 <div class="stat"><div class="stat-value" id="onVal">0</div><div class="stat-label">Liga</div></div>
+<div class="stat" id="fwdStat" style="display:none"><div class="stat-value" id="fwdVal">0</div><div class="stat-label">Retransm.</div></div>
 </div>
 <div class="content">
 <div class="section active" id="secHome">
@@ -127,9 +128,22 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
 <div class="row"><span class="label">Estado ao Iniciar</span><select id="startupModeSelect" onchange="savePins()">
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
+)=====";
+#ifdef HABILITA_REPEATER
+static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
+<div class="row"><span class="label">Modo repetidor</span><button class="btn btn-sm" id="repBtn" onclick="toggleRepeater()">-</button></div>
+)=====";
+#endif
+static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
+</div>
+<div class="row" style="margin-top:14px;flex-direction:column;align-items:stretch;gap:6px">
+<span class="label">Atualizar Firmware</span>
+<input type="file" id="otaFile" accept=".bin">
+<button class="btn btn-primary btn-sm" onclick="doUpdate()">Enviar e Atualizar</button>
+<span class="value" id="otaStatus" style="font-size:.72rem;color:var(--muted-subtle)"></span>
 </div>
 </div>
 <div class="section" id="secPropriedades">
@@ -154,6 +168,7 @@ static const char PAGE_PINS_SEC[] PROGMEM = R"=====()=====";
 static const char PAGE_DASHBOARD_CONT2[] PROGMEM = R"=====(
 <div class="section" id="secRepeater">
 <h1>Repeater</h1>
+<div class="row"><span class="label">Função</span><span class="value" id="repState">-</span></div>
 <div class="row"><span class="label">Total Retransmitidos</span><span class="value" id="repFwd">0</span></div>
 <div id="repClientList"></div>
 </div>
@@ -190,7 +205,7 @@ const fbTime=document.getElementById('fbTime');
 const fbUptime=document.getElementById('fbUptime');
 let loading=false,cicloOpen=false,currentSection='home';
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
-document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s}
+document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins()}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
@@ -204,6 +219,8 @@ async function fetchState(){try{let r=await fetch('/api/state');let d=await r.js
   txVal.textContent=d.tx_count||0;
   memVal.textContent=d.free_heap||0;
   onVal.textContent=d.on_count||0;
+  let fwdStat=document.getElementById('fwdStat');let fwdVal=document.getElementById('fwdVal');
+  if(fwdStat&&fwdVal){if(d.repeater_active){fwdStat.style.display='flex';fwdVal.textContent=d.repeater_fwd||0;}else{fwdStat.style.display='none'}}
   let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
   let uptimeStr=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 alexaEl.textContent=d.alexa_connected?'Conectado':'-';alexaEl.className='value'+(d.alexa_connected?' green':'');
@@ -245,10 +262,12 @@ async function addTimer(){let h=document.getElementById('timerHour').value;let m
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
 async function fetchRepeater(d){try{if(!d){let r=await fetch('/api/state');d=await r.json();}
 let nav=document.getElementById('navRepeater');
-if(d.repeater_active){nav.style.display='flex';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
+if(d.repeater_supported&&d.repeater_enabled){nav.style.display='flex';document.getElementById('repState').textContent='ATIVADO';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
 let list=document.getElementById('repClientList');list.innerHTML='';
 if(d.repeater_clients&&d.repeater_clients.length){d.repeater_clients.forEach(function(c){
-let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none'}}catch(e){}}
+let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none';let rs=document.getElementById('repState');if(rs)rs.textContent='DESATIVADO'}}catch(e){}}
+async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn btn-sm '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){if(rb)rb.textContent='ERRO'}}
+function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 )=====";
 #ifdef HABILITA_PINOS
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(

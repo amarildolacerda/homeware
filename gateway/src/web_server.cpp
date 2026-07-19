@@ -11,6 +11,10 @@
 #include <uri/UriBraces.h>
 #include <ArduinoJson.h>
 
+extern bool gateway_ntp_synced();
+extern time_t gateway_ntp_epoch();
+extern void gateway_set_browser_epoch(time_t epoch);
+
 #include <EEPROM.h>
 #ifdef ESP32
 #include <Update.h>
@@ -210,6 +214,8 @@ void web_server_init() {
         doc["fw_version"] = FW_VERSION;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
+        doc["ntp_synced"] = gateway_ntp_synced();
+        doc["epoch"] = (uint32_t)gateway_ntp_epoch();
         doc["ip"] = WiFi.localIP().toString();
         doc["wifi_ssid"] = WiFi.SSID();
         {
@@ -219,11 +225,23 @@ void web_server_init() {
             wifi_net_load(&wmode, wip, wgw, wmask, wdns);
             doc["wifi_mode"] = wmode;
         }
-        
         String json;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     });
+
+    s_server.on("/api/time", HTTP_POST, []() {
+        if (s_server.hasArg("plain")) {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+            if (!err && doc["epoch"].is<uint32_t>()) {
+                gateway_set_browser_epoch((time_t)doc["epoch"].as<uint32_t>());
+                console.printf("[TIME] hora ajustada via browser (epoch=%u)\n", doc["epoch"].as<uint32_t>());
+            }
+        }
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
     
     s_server.on("/api/sensors", HTTP_GET, []() {
         JsonDocument doc;
@@ -507,28 +525,38 @@ void web_server_init() {
         ESP.restart();
     });
     
-    s_server.on("/api/ota", HTTP_POST, []() {
-        if (!Update.hasError()) {
-            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-            delay(500);
-            ESP.restart();
-        } else {
+    s_server.on("/update", HTTP_POST, []() {
+        if (Update.hasError()) {
+            console.printf("[OTA] Error: %s\n", Update.errorString());
             s_server.send(500, "application/json", "{\"status\":\"error\"}");
+            return;
         }
+        if (!Update.end()) {
+            console.printf("[OTA] End failed: %s\n", Update.errorString());
+            s_server.send(500, "application/json", "{\"status\":\"error\"}");
+            return;
+        }
+        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        delay(500);
+        ESP.restart();
     }, []() {
         HTTPUpload &upload = s_server.upload();
         if (upload.status == UPLOAD_FILE_START) {
             console.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-            if (!Update.begin(upload.totalSize)) Update.printError(console);
+            if (!Update.begin()) {
+                Update.printError(console);
+                console.printf("[OTA] Begin failed (no OTA partition space?)\n");
+            }
         } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
+            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                console.printf("[OTA] Write failed at %d\n", upload.currentSize);
                 Update.printError(console);
-        } else if (upload.status == UPLOAD_FILE_END) {
-            if (Update.end(true))
-                console.printf("[OTA] Success: %d bytes\n", upload.totalSize);
-            else
-                Update.printError(console);
+            }
         }
+    });
+
+    s_server.on("/api/ota", HTTP_POST, []() {
+        s_server.send(200, "application/json", "{\"status\":\"deprecated\"}");
     });
     
     s_server.on("/favicon.ico", HTTP_GET, []() {
