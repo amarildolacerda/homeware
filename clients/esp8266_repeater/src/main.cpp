@@ -229,7 +229,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             nak.sequence = req->sequence;
             mac_copy(nak.target_mac, req->sensor_mac);
             nak.reason = NAK_REASON_NO_GATEWAY;
-            esp_now_send(s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+            espnow_send_wrapper(s_bcast_addr, (uint8_t*)&nak, sizeof(nak), TAG);
             console.printf("[%s] NAK sent: no gateway for PAIR_REQUEST from %02X:%02X:%02X:%02X:%02X:%02X\n",
                            TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             return;  /* não repassa */
@@ -548,7 +548,7 @@ static void send_gw_discover(void)
 {
     espnow_gw_discover_t disc = { .msg_type = ESPNOW_MSG_GW_DISCOVER };
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcast_mac, (uint8_t *)&disc, sizeof(disc));
+    espnow_send_wrapper(broadcast_mac, (uint8_t *)&disc, sizeof(disc), TAG);
     console.printf("[%s] GW_DISCOVER sent\n", TAG);
 }
 
@@ -590,7 +590,7 @@ static void send_repeater_status(void)
 
     // Broadcast: ESP8266→ESP32 ESP-NOW unicast is dropped by the radio
     // (AGENTS.md rule 18). The gateway ACKs this via broadcast.
-    esp_now_send(s_bcast_addr, buf, sizeof(buf));
+    espnow_send_wrapper(s_bcast_addr, buf, sizeof(buf), TAG);
 }
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
@@ -869,7 +869,7 @@ static void process_forward_queue(void)
         {
             for (int i = 0; i < s_client_count; i++)
             {
-                esp_now_send(s_client_peers[i], e.data, e.len);
+                espnow_send_wrapper(s_client_peers[i], e.data, e.len, TAG);
                 s_forwarded++;
             }
             if (s_monitor && s_client_count > 0)
@@ -882,7 +882,7 @@ static void process_forward_queue(void)
         }
         else
         {
-            esp_now_send(e.dest, e.data, e.len);
+            espnow_send_wrapper(e.dest, e.data, e.len, TAG);
             s_forwarded++;
             if (s_monitor)
             {
@@ -982,7 +982,7 @@ void loop(void)
             nak.sequence = 0;
             memset(nak.target_mac, 0xFF, 6);  /* broadcast */
             nak.reason = NAK_REASON_GATEWAY_LOST;
-            esp_now_send(s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+            espnow_send_wrapper(s_bcast_addr, (uint8_t*)&nak, sizeof(nak), TAG);
             s_gateway_configured = false;
             memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
             /* Clear from EEPROM */

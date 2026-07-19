@@ -96,6 +96,8 @@
 
 20. **EEPROM string load → JSON quebra**: ao ler strings da EEPROM (host/user MQTT, SSID, nome de sensor, etc.) nunca basta achar um byte `0x00` para considerar "válido". Se a região tiver lixo com um `0x00` coincidente, bytes de controle (0x00–0x1F) vazam para o JSON e o `JSON.parse()` do browser falha ("erro de json"). Validar que todos os bytes antes do terminador são imprimíveis (0x20–0x7E) e que há terminador dentro do buffer; senão usar default/limpar. Também validar tipo de sensor (1–10) e `slot < MAX_VIRTUAL_SENSORS` em `sensor_registry_load()` para ignorar entradas corrompidas (ex: slot 251/type 161).
 
+21. **MQTT Discovery topic sem ponto**: o tópico de discovery do HA (`homeassistant/<component>/<entity_id>/config`) NÃO permite o caractere `.` no `<entity_id>` (warning "illegal discovery topic"). O `entity_id` (montado em `mqtt_client.cpp:build_entity_id`) e o `bridge_device_id` devem usar `_` em vez de `.` como separador (ex: `gw_294F55_lgt_0`). O `.` no `device.identifiers` do payload JSON é aceito (não é tópico), mas manter `_` por consistência.
+
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias
 1. manter skills enxutas

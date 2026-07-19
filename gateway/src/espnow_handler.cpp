@@ -100,7 +100,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                     nak.sequence = req->sequence;
                     mac_copy(nak.target_mac, req->sensor_mac);
                     nak.reason = NAK_REASON_PAIRING_DISABLED;
-                    esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&nak, sizeof(nak));
+                    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&nak, sizeof(nak), "ESP-NOW");
                     return;
                 }
             }
@@ -258,13 +258,7 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ack, sizeof(ack));
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    if (ret == 0)
-        console.printf("[ESP-NOW] ACK sent (broadcast) to %s seq=%d status=%d slot=%d\n", mac_str, sequence, status, slot);
-    else
-        console.printf("[ESP-NOW] ACK send failed to %s ret=%d\n", mac_str, ret);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ack, sizeof(ack), "ESP-NOW");
 }
 
 void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
@@ -279,10 +273,7 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&resp, sizeof(resp));
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] Pair response sent (broadcast) to %s slot=%d seq=%d ret=%d\n", mac_str, slot, sequence, ret);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&resp, sizeof(resp), "ESP-NOW");
 }
 
 static void send_gw_announce(const uint8_t *mac) {
@@ -297,11 +288,7 @@ static void send_gw_announce(const uint8_t *mac) {
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
     espnow_add_peer_wrapper(s_bcast_addr, ch);
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann));
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] GW_ANNOUNCE sent (broadcast) to %s gw=%s ret=%d\n", mac_str,
-                   FW_VERSION, ret);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann), "ESP-NOW");
 }
 
 void espnow_announce() {
@@ -316,8 +303,7 @@ void espnow_announce() {
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
     espnow_add_peer_wrapper(s_bcast_addr, ch);
-    int ret = esp_now_send((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann));
-    console.printf("[ESP-NOW] GW_ANNOUNCE broadcast gw=%s ret=%d\n", FW_VERSION, ret);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann), "ESP-NOW");
 }
 
 bool espnow_handler_init() {
@@ -463,15 +449,7 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
     const uint8_t *dest = espnow_dest_for_chip(mac, chip);
 
-    int ret = esp_now_send((uint8_t*)dest, (uint8_t*)&cmd, sizeof(cmd));
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    if (ret == 0) {
-        console.printf("[ESP-NOW] Command sent (broadcast) to %s slot=%d state=%d\n", mac_str, slot, state);
-        return true;
-    }
-    console.printf("[ESP-NOW] Command send failed to %s ret=%d\n", mac_str, ret);
-    return false;
+    return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&cmd, sizeof(cmd), "ESP-NOW");
 }
 
 bool espnow_send_restart(const uint8_t *mac, uint8_t slot) {
@@ -485,15 +463,7 @@ bool espnow_send_restart(const uint8_t *mac, uint8_t slot) {
     uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
     const uint8_t *dest = espnow_dest_for_chip(mac, chip);
 
-    int ret = esp_now_send((uint8_t*)dest, (uint8_t*)&rst, sizeof(rst));
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    if (ret == 0) {
-        console.printf("[ESP-NOW] Restart sent (broadcast) to %s\n", mac_str);
-        return true;
-    }
-    console.printf("[ESP-NOW] Restart send failed to %s ret=%d\n", mac_str, ret);
-    return false;
+    return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&rst, sizeof(rst), "ESP-NOW");
 }
 
 static uint8_t s_time_sync_sequence = 0;
@@ -510,13 +480,7 @@ void espnow_broadcast_time_sync(uint32_t epoch_seconds) {
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
     espnow_add_peer_wrapper((uint8_t*)s_broadcast_mac, ch);
-    int ret = esp_now_send((uint8_t*)s_broadcast_mac, (uint8_t*)&ts, sizeof(ts));
-    if (ret == 0) {
-        console.printf("[ESP-NOW] Time sync broadcast sent (epoch=%u seq=%d)\n",
-                      (unsigned)epoch_seconds, ts.sequence);
-    } else {
-        console.printf("[ESP-NOW] Time sync broadcast FAILED ret=%d\n", ret);
-    }
+    espnow_send_wrapper((uint8_t*)s_broadcast_mac, (uint8_t*)&ts, sizeof(ts), "ESP-NOW");
 }
 
 unsigned long espnow_get_rx_count() { return s_rx_count; }

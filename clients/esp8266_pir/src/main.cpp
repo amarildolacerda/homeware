@@ -291,10 +291,8 @@ static bool espnow_send_data(void)
 
     s_ack_received = false;
     s_send_pending = true;
-    int ret = esp_now_send(s_gateway_mac, buf, sizeof(buf));
-    if (ret != 0)
+    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
     {
-        console.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
         s_send_pending = false;
         return false;
     }
@@ -321,7 +319,7 @@ static bool espnow_send_heartbeat(void)
     if (!espnow_add_peer(s_gateway_mac)) return false;
 
     s_ack_received = false;
-    return esp_now_send(s_gateway_mac, buf, sizeof(buf)) == 0;
+    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -347,13 +345,7 @@ static bool espnow_send_pair_request(void)
     if (!espnow_add_peer(s_broadcast_mac)) return false;
 
     s_ack_received = false;
-    int ret = esp_now_send(s_broadcast_mac, buf, sizeof(buf));
-    if (ret != 0)
-    {
-        console.printf("[%s] Pair request send failed: %d\n", TAG, ret);
-        return false;
-    }
-    return true;
+    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
 static void read_pir(void)

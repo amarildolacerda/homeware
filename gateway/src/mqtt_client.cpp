@@ -37,7 +37,7 @@ static void build_device_info(JsonDocument &doc, const char *name, const char *b
 }
 
 static void build_entity_id(char *buf, size_t len, const uint8_t *mac, int slot, const char *suffix) {
-    snprintf(buf, len, "gw_%02X%02X%02X.%s.%d", mac[3], mac[4], mac[5], suffix, slot);
+    snprintf(buf, len, "gw_%02X%02X%02X_%s_%d", mac[3], mac[4], mac[5], suffix, slot);
 }
 
 static bool is_valid_host() {
@@ -273,7 +273,7 @@ void mqtt_client_generate_device_ids() {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) == 0) {
             snprintf(s->bridge_device_id, sizeof(s->bridge_device_id),
-                     "gw_%02X%02X%02X.%d", s->mac[3], s->mac[4], s->mac[5], i);
+                     "gw_%02X%02X%02X_%d", s->mac[3], s->mac[4], s->mac[5], i);
         }
     }
 }

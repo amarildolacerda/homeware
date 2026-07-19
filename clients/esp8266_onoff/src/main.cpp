@@ -547,12 +547,12 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (mac_equal(mac, s_gateway_mac))
         {
             /* From gateway → broadcast (other devices check target_mac) */
-            esp_now_send(s_broadcast_mac, data, len);
+            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
         }
         else
         {
             /* From client → forward to gateway */
-            esp_now_send(s_gateway_mac, data, len);
+            espnow_send_wrapper(s_gateway_mac, data, len, TAG);
         }
     }
 }
@@ -632,15 +632,8 @@ static bool espnow_send_data(void)
 
     s_ack_received = false;
     s_send_pending = true;
+    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
     {
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Sending data to %s (%d bytes)\n", TAG, mac_str, sizeof(buf));
-    }
-    int ret = esp_now_send(s_gateway_mac, buf, sizeof(buf));
-    if (ret != 0)
-    {
-        console.printf("[%s] ESP-NOW send failed: %d\n", TAG, ret);
         s_send_pending = false;
         return false;
     }
@@ -669,7 +662,7 @@ static bool espnow_send_heartbeat(void)
         return false;
 
     s_ack_received = false;
-    return esp_now_send(s_gateway_mac, buf, sizeof(buf)) == 0;
+    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -697,13 +690,7 @@ static bool espnow_send_pair_request(void)
         return false;
 
     s_ack_received = false;
-    int ret = esp_now_send(s_broadcast_mac, buf, sizeof(buf));
-    if (ret != 0)
-    {
-        console.printf("[%s] Pair request send failed: %d\n", TAG, ret);
-        return false;
-    }
-    return true;
+    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
 static void set_relay(bool state)

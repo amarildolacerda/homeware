@@ -12,6 +12,9 @@
 #include <ArduinoJson.h>
 
 #include <EEPROM.h>
+#ifdef ESP32
+#include <Update.h>
+#endif
 
 static MyWebServer s_server(80);
 static bool s_wifi_config_mode = false;
