@@ -387,6 +387,10 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         }
     }
 
+    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+    publish_entity_config("sensor", entity, name, "Bateria", "battery", "%", false, id, model);
+    publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
+
     return true;
 }
 
@@ -480,6 +484,9 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
             break;
         }
     }
+
+    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+    publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
 
     return true;
 }
