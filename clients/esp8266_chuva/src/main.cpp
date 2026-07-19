@@ -10,7 +10,7 @@
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
-#include "console.h"
+#include "common_console.h"
 
 static const char *TAG = "esp8266-chuva";
 

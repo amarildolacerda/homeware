@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 #define FW_VERSION "v0.0.27"
-#define DEVICE_NAME "DHT+Gas ESP-NOW"
+#define DEVICE_NAME "DHT+Gas"
 
 #define STATE_UPDATE_INTERVAL 5000
 #define STATE_SEND_THRESHOLD_TEMP 0.5

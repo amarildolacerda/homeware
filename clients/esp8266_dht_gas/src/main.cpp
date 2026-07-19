@@ -11,9 +11,9 @@
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
-#include "console.h"
+#include "common_console.h"
 
-static const char *TAG = "esp8266-dht-gas";
+static const char *TAG = "dht-gas";
 
 static DHT *s_dht = nullptr;
 
@@ -305,7 +305,7 @@ static bool espnow_send_data(void)
 
     s_ack_received = false;
     s_send_pending = true;
-    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
+    if (!espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG))
     {
         s_send_pending = false;
         return false;
@@ -330,10 +330,10 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_add_peer(s_gateway_mac)) return false;
+    if (!espnow_add_peer(s_broadcast_mac)) return false;
 
     s_ack_received = false;
-    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
+    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -787,6 +787,9 @@ static void handle_serial(char c)
         unsigned long up = (millis() - s_start_time) / 1000;
         console.printf("\n--- Status ---\n");
         console.printf("  Dispositivo: %s\n", s_device_id);
+        char mac_str[18];
+        mac_to_str(s_my_mac, mac_str, sizeof(mac_str));
+        console.printf("  MAC:         %s\n", mac_str);
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Temperatura: %.1f C%s\n", s_temperature, s_dht_valid ? "" : " (invalido)");
         console.printf("  Umidade:     %.1f %%\n", s_humidity);

@@ -83,9 +83,9 @@ input[type=text]:focus{border-color:var(--primary)}
 <div class="dev-id" id="sbId">-</div>
 </div>
 <div class="nav">
-<div class="nav-item active" data-section="home" onclick="showSection('home')"><span>\uD83C\uDFE0</span><span>Home</span></div>
-<div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>\uD83D\uDCCB</span><span>Propriedades</span></div>
-<div class="nav-item" data-section="config" onclick="showSection('config')"><span>\u2699</span><span>Configura\u00E7\u00F5es</span></div>
+<div class="nav-item active" data-section="home" onclick="showSection('home')"><span>Home</span></div>
+<div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>Propriedades</span></div>
+<div class="nav-item" data-section="config" onclick="showSection('config')"><span>Configurações</span></div>
 </div>
 <div class="sidebar-bottom"><span id="sbVersion">...</span></div>
 </div>
@@ -120,15 +120,14 @@ input[type=text]:focus{border-color:var(--primary)}
 <span class="arrow" id="detArrow">&#9654;</span>
 </div>
 <div class="collapse-body open" id="detBody">
-<div class="row"><span class="label">G&aacute;s %</span><span class="value" id="detGas">--</span></div>
-<div class="row"><span class="label">Alarme</span><span class="value" id="detAlarm">--</span></div>
-<div class="row"><span class="label">DHT Pin</span><span class="value" id="detDhtPin">--</span></div>
-<div class="row"><span class="label">Bateria</span><span class="value" id="detBattery">--</span></div>
-<div class="row"><span class="label">RSSI</span><span class="value" id="detRssi">--</span></div>
+<div class="row"><span class="label">Device</span><span class="value" id="detDevice">--</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="detIp">--</span></div>
+<div class="row"><span class="label">RSSI</span><span class="value" id="detRssi">--</span></div>
 <div class="row"><span class="label">Vers&atilde;o</span><span class="value" id="detVersion">--</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="detSlot">--</span></div>
 <div class="row"><span class="label">Gateway</span><span class="value" id="detGateway">--</span></div>
+<div class="row"><span class="label">Bateria</span><span class="value" id="detBattery">--</span></div>
+<div class="row"><span class="label">DHT Pin</span><span class="value" id="detDhtPin">--</span></div>
 </div>
 </div>
 <div class="footer" id="footer">Carregando...</div>
@@ -199,18 +198,15 @@ gasBadge.textContent=gasLabel(lvl);
 gasBadge.className='badge '+gc;
 rxVal.textContent=d.rx_count||0;txVal.textContent=d.tx_count||0;
 memVal.textContent=d.free_heap||0;
-document.getElementById('detGas').textContent=lvl+'%';
-var alm=d.alarm;
-document.getElementById('detAlarm').textContent=alm?'\u26A0 SIM':'Seguro';
-document.getElementById('detAlarm').className='value'+(alm?'':' green');
-document.getElementById('detDhtPin').textContent=d.dht_pin!==undefined?'GPIO '+d.dht_pin:'--';
-document.getElementById('detBattery').textContent=(d.battery!=null?d.battery:'--')+'%';
-document.getElementById('detRssi').textContent=(d.rssi||0)+' dBm';
+document.getElementById('detDevice').textContent=d.device_id||'--';
 document.getElementById('detIp').textContent=d.ip||'--';
+document.getElementById('detRssi').textContent=(d.rssi||0)+' dBm';
 document.getElementById('detVersion').textContent=d.fw_version||'--';
 document.getElementById('detSlot').textContent=d.slot!==undefined&&d.slot!==null?d.slot:'--';
 document.getElementById('detGateway').textContent=d.gateway_connected?'Online':'Offline';
 document.getElementById('detGateway').className='value'+(d.gateway_connected?' green':'');
+document.getElementById('detBattery').textContent=(d.battery!=null?d.battery:'--')+'%';
+document.getElementById('detDhtPin').textContent=d.dht_pin!==undefined?'GPIO '+d.dht_pin:'--';
 document.getElementById('propId').textContent=d.device_id||'--';
 document.getElementById('propIp').textContent=d.ip||'--';
 document.getElementById('propRssi').textContent=(d.rssi||0)+' dBm';

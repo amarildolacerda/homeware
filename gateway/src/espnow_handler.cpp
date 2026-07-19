@@ -324,10 +324,10 @@ bool espnow_handler_init() {
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     espnow_add_peer_wrapper(broadcast_mac, WiFi.channel());
     
-    console.printf("[ESP-NOW] Initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X WiFi ch=%d\n",
-                  s_gateway_mac[0], s_gateway_mac[1], s_gateway_mac[2],
-                  s_gateway_mac[3], s_gateway_mac[4], s_gateway_mac[5],
-                  WiFi.channel());
+    char gateway_mac_str[18];
+    mac_to_str(s_gateway_mac, gateway_mac_str, sizeof(gateway_mac_str));
+    console.printf("[ESP-NOW] Initialized, MAC: %s WiFi ch=%d\n",
+                  gateway_mac_str, WiFi.channel());
     return true;
 }
 
@@ -365,12 +365,10 @@ void espnow_handler_loop() {
         if (mqtt_client_is_connected())
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
 
-        console.printf("[ESP-NOW] Paired sensor slot %d: %02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
-                      free_slot,
-                      s_pending_pairs[i].mac[0], s_pending_pairs[i].mac[1],
-                      s_pending_pairs[i].mac[2], s_pending_pairs[i].mac[3],
-                      s_pending_pairs[i].mac[4], s_pending_pairs[i].mac[5],
-                      s_pending_pairs[i].sensor_type);
+        char pending_mac_str[18];
+        mac_to_str(s_pending_pairs[i].mac, pending_mac_str, sizeof(pending_mac_str));
+        console.printf("[ESP-NOW] Paired sensor slot %d: %s type=%d\n",
+                      free_slot, pending_mac_str, s_pending_pairs[i].sensor_type);
     }
 
     while (s_pending_state_tail != s_pending_state_head) {
