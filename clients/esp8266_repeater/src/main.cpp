@@ -12,6 +12,7 @@
 #include "espnow_protocol.h"
 #include "console.h"
 #include "pages.h"
+#include "common_espnow.h"
 
 static const char *TAG = "repeater";
 
@@ -96,8 +97,6 @@ static bool fwd_pop(fwd_entry_t *out)
 static uint8_t s_client_peers[MAX_PEERS][6];
 static int s_client_count = 0;
 
-static void save_gateway_mac(void);
-static bool load_gateway_mac(void);
 static bool wifi_setup(bool force_portal);
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
