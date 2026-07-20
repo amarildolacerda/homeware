@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "v0.0.28"
+#define FW_VERSION "v0.0.29"
 #define DEVICE_NAME "DHT+Gas"
 
 #define STATE_UPDATE_INTERVAL 5000
