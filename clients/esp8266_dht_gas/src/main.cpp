@@ -236,6 +236,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 
 static bool espnow_init_client(void)
 {
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
     if (esp_now_init() != 0)
     {
         console.printf("[%s] ESP-NOW init failed\n", TAG);
@@ -687,6 +688,13 @@ static void handle_api_pin(void)
     }
 }
 
+static void handle_api_restart(void)
+{
+    s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
+    delay(100);
+    ESP.restart();
+}
+
 static void handle_serial(char c)
 {
     switch (c)
@@ -835,8 +843,8 @@ static void handle_ota_upload(void)
     HTTPUpload &upload = s_server.upload();
     if (upload.status == UPLOAD_FILE_START)
     {
-        console.printf("[%s] OTA update started: %s (%d bytes)\n", TAG, upload.filename.c_str(), upload.totalSize);
-        if (!Update.begin(upload.totalSize))
+        console.printf("[%s] OTA update started: %s\n", TAG, upload.filename.c_str());
+        if (!Update.begin(ESP.getFreeSketchSpace()))
             Update.printError(Serial);
     }
     else if (upload.status == UPLOAD_FILE_WRITE)
@@ -891,6 +899,7 @@ void setup(void)
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/pin", handle_api_pin);
+    s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
     s_server.begin();
 
