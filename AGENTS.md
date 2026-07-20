@@ -12,6 +12,7 @@
 - antes de passar o dev para main gerar um branch do main_vx.x.x
 - quando gerar uma nova tag (ex: v0.0.17) tornar a versão a mesma da tag em todos os bridges (Python) e clients ESP8266 (FW_VERSION)
 - procurar por .git_token a ser usado com git
+- **NÃO fazer push para `dev` automaticamente**: commitar localmente no dev durante o trabalho, mas só dar `push` para `origin/dev` quando o usuário confirmar que a implementação está concluída/refinada. Aguardar o sinal do usuário antes de subir.
 
 ## Ambiente
 
