@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "v0.0.27"
+#define FW_VERSION "v0.0.28"
 #define DEVICE_NAME "DHT+Gas"
 
 #define STATE_UPDATE_INTERVAL 5000
@@ -37,4 +37,8 @@
 
 #define WIFI_CONFIG_PORTAL_SSID "ESP8266_DHT_Gas"
 #define WIFI_CONFIG_PORTAL_PASS "password123"
+
+#define EEPROM_ENABLE_ADDR 60
+#define EEPROM_ENABLE_TEMP_OFFSET 0
+#define EEPROM_ENABLE_GAS_OFFSET 1
 

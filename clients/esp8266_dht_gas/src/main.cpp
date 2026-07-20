@@ -59,6 +59,8 @@ static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
 static int s_dht_pin = DHT_PIN;
+static bool s_enable_temp = true;
+static bool s_enable_gas = true;
 static bool s_wifi_configuration_mode = false;
 static unsigned long s_wifi_config_start_time = 0;
 
@@ -144,6 +146,23 @@ static void load_device_name(void)
             s_device_name[sizeof(s_device_name) - 1] = '\0';
         }
     }
+    EEPROM.end();
+}
+
+static void load_enable_flags(void)
+{
+    EEPROM.begin(128);
+    s_enable_temp = EEPROM.read(EEPROM_ENABLE_ADDR + EEPROM_ENABLE_TEMP_OFFSET) != 0;
+    s_enable_gas = EEPROM.read(EEPROM_ENABLE_ADDR + EEPROM_ENABLE_GAS_OFFSET) != 0;
+    EEPROM.end();
+}
+
+static void save_enable_flags(void)
+{
+    EEPROM.begin(128);
+    EEPROM.write(EEPROM_ENABLE_ADDR + EEPROM_ENABLE_TEMP_OFFSET, s_enable_temp ? 1 : 0);
+    EEPROM.write(EEPROM_ENABLE_ADDR + EEPROM_ENABLE_GAS_OFFSET, s_enable_gas ? 1 : 0);
+    EEPROM.commit();
     EEPROM.end();
 }
 
@@ -285,10 +304,26 @@ static bool espnow_send_data(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
 
     payload_dht_gas_t *pl = (payload_dht_gas_t *)hdr->payload;
-    pl->temperature = s_temperature;
-    pl->humidity = s_humidity;
-    pl->gas_level = (uint16_t)s_gas_level;
-    pl->alarm = s_alarm ? 1 : 0;
+    if (s_enable_temp)
+    {
+        pl->temperature = s_temperature;
+        pl->humidity = s_humidity;
+    }
+    else
+    {
+        pl->temperature = 0;
+        pl->humidity = 0;
+    }
+    if (s_enable_gas)
+    {
+        pl->gas_level = (uint16_t)s_gas_level;
+        pl->alarm = s_alarm ? 1 : 0;
+    }
+    else
+    {
+        pl->gas_level = 0;
+        pl->alarm = 0;
+    }
 
     IPAddress ip = WiFi.localIP();
     uint8_t *ip_ptr = hdr->payload + sizeof(payload_dht_gas_t);
@@ -365,32 +400,47 @@ static bool espnow_send_pair_request(void)
 
 static void read_sensors(void)
 {
-    float temp = s_dht->readTemperature();
-    float hum = s_dht->readHumidity();
-    if (!isnan(temp) && !isnan(hum))
+    if (s_enable_temp)
     {
-        s_temperature = temp;
-        s_humidity = hum;
-        s_dht_valid = true;
+        float temp = s_dht->readTemperature();
+        float hum = s_dht->readHumidity();
+        if (!isnan(temp) && !isnan(hum))
+        {
+            s_temperature = temp;
+            s_humidity = hum;
+            s_dht_valid = true;
+        }
+        else
+        {
+            s_dht_valid = false;
+            s_temperature += (random(-10, 10) / 20.0);
+            s_humidity += (random(-20, 20) / 10.0);
+            if (s_temperature < 18.0) s_temperature = 18.0;
+            if (s_temperature > 30.0) s_temperature = 30.0;
+            if (s_humidity < 30.0) s_humidity = 30.0;
+            if (s_humidity > 70.0) s_humidity = 70.0;
+        }
     }
     else
     {
         s_dht_valid = false;
-        s_temperature += (random(-10, 10) / 20.0);
-        s_humidity += (random(-20, 20) / 10.0);
-        if (s_temperature < 18.0) s_temperature = 18.0;
-        if (s_temperature > 30.0) s_temperature = 30.0;
-        if (s_humidity < 30.0) s_humidity = 30.0;
-        if (s_humidity > 70.0) s_humidity = 70.0;
     }
 
-    int raw = analogRead(GAS_ANALOG_PIN);
-    s_sensor_error = (raw == 0 || raw == 1024);
-    s_gas_level = constrain(map(raw, 0, 1024, 0, 100), 0, 100);
+    if (s_enable_gas)
+    {
+        int raw = analogRead(GAS_ANALOG_PIN);
+        s_sensor_error = (raw == 0 || raw == 1024);
+        s_gas_level = constrain(map(raw, 0, 1024, 0, 100), 0, 100);
 
-    bool alarm = (s_gas_level >= GAS_ALARM_THRESHOLD);
-    bool alert = (s_gas_level >= GAS_ALERT_THRESHOLD && s_gas_level < GAS_ALARM_THRESHOLD);
-    s_alarm = alarm || alert;
+        bool alarm = (s_gas_level >= GAS_ALARM_THRESHOLD);
+        bool alert = (s_gas_level >= GAS_ALERT_THRESHOLD && s_gas_level < GAS_ALARM_THRESHOLD);
+        s_alarm = alarm || alert;
+    }
+    else
+    {
+        s_gas_level = 0;
+        s_alarm = false;
+    }
 
     static int counter = 0;
     counter++;
@@ -549,7 +599,8 @@ static void handle_api_settings(void)
     {
         DynamicJsonDocument doc(256);
         doc["device_name"] = s_device_name;
-        JsonArray pins = doc["available_pins"].to<JsonArray>();
+        doc["enable_temp"] = s_enable_temp;
+        doc["enable_gas"] = s_enable_gas;
         String json;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
@@ -566,11 +617,18 @@ static void handle_api_settings(void)
                 save_device_name(name.c_str());
                 strncpy(s_device_name, name.c_str(), sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
-                s_server.send(200, "application/json", "{\"ok\":true}");
-                return;
             }
         }
-        s_server.send(400, "application/json", "{\"error\":\"invalid\"}");
+        if (doc.containsKey("enable_temp"))
+        {
+            s_enable_temp = doc["enable_temp"].as<bool>();
+        }
+        if (doc.containsKey("enable_gas"))
+        {
+            s_enable_gas = doc["enable_gas"].as<bool>();
+        }
+        save_enable_flags();
+        s_server.send(200, "application/json", "{\"ok\":true}");
     }
 }
 
@@ -604,12 +662,16 @@ static void handle_api_state(void)
     String json;
     {
         JsonDocument doc;
-        if (s_dht_valid) {
+        doc["enable_temp"] = s_enable_temp;
+        doc["enable_gas"] = s_enable_gas;
+        if (s_enable_temp && s_dht_valid) {
             doc["temperature"] = s_temperature;
             doc["humidity"] = s_humidity;
         }
-        doc["gas_level"] = s_gas_level;
-        doc["alarm"] = s_alarm;
+        if (s_enable_gas) {
+            doc["gas_level"] = s_gas_level;
+            doc["alarm"] = s_alarm;
+        }
         doc["battery"] = s_battery;
         doc["dht_pin"] = s_dht_pin;
         doc["dht_valid"] = s_dht_valid;
@@ -872,6 +934,7 @@ void setup(void)
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
     load_device_name();
+    load_enable_flags();
 
     console.printf("\n");
     console.printf("============================================\n");

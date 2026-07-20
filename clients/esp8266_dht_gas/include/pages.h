@@ -28,7 +28,7 @@ body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;backgroun
 .stats-header .stat{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 2px;text-align:center}
 .stats-header .stat-value{font-size:.82rem;font-weight:700;color:var(--primary)}
 .stats-header .stat-label{font-size:.52rem;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.03em;margin-top:1px}
-.content{flex:1;padding:20px;max-width:480px;width:100%;margin:0 auto}
+.content{flex:1;padding:20px;max-width:480px;width:100%;margin:0 auto;display:flex;flex-direction:column}
 .footer-bar{display:flex;align-items:center;gap:16px;padding:8px 20px;border-top:1px solid var(--border);background:var(--surface);font-size:.75rem;color:var(--muted-subtle);flex-wrap:wrap;justify-content:flex-end}
 .fb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .fb-dot.online{background:var(--success)}
@@ -71,6 +71,12 @@ input[type=text]:focus{border-color:var(--primary)}
 .collapsible{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between}
 .collapsible .arrow{font-size:.65rem;transition:transform .2s}
 .collapsible.open .arrow{transform:rotate(90deg)}
+.switch{position:relative;display:inline-block;width:40px;height:22px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--muted-subtle);border-radius:22px;transition:.2s}
+.slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--primary)}
+.switch input:checked + .slider:before{transform:translateX(18px)}
 .collapse-body{display:none}
 .collapse-body.open{display:block}
 @media(max-width:600px){.sidebar{width:48px}.sidebar-top .dev-name,.sidebar-top .dev-id,.sidebar-bottom{display:none}.nav-item{justify-content:center;padding:10px 4px}.nav-item span{display:none}.nav-item span:first-child{display:inline;font-size:1.1rem}.main{margin-left:48px}.stats-header{padding:5px 10px}.content{padding:12px}.footer-bar{padding:6px 12px;font-size:.7rem;gap:8px}}
@@ -114,22 +120,6 @@ input[type=text]:focus{border-color:var(--primary)}
 <div class="gas-val safe" id="gasLevel">---%</div>
 <div><span class="badge safe" id="gasBadge">Seguro</span></div>
 </div>
-<div class="card">
-<div class="collapsible open" onclick="toggleDetails()">
-<span style="font-size:.85rem;font-weight:600;color:var(--primary)">Detalhes</span>
-<span class="arrow" id="detArrow">&#9654;</span>
-</div>
-<div class="collapse-body open" id="detBody">
-<div class="row"><span class="label">Device</span><span class="value" id="detDevice">--</span></div>
-<div class="row"><span class="label">IP</span><span class="value" id="detIp">--</span></div>
-<div class="row"><span class="label">RSSI</span><span class="value" id="detRssi">--</span></div>
-<div class="row"><span class="label">Vers&atilde;o</span><span class="value" id="detVersion">--</span></div>
-<div class="row"><span class="label">Slot</span><span class="value" id="detSlot">--</span></div>
-<div class="row"><span class="label">Gateway</span><span class="value" id="detGateway">--</span></div>
-<div class="row"><span class="label">Bateria</span><span class="value" id="detBattery">--</span></div>
-<div class="row"><span class="label">DHT Pin</span><span class="value" id="detDhtPin">--</span></div>
-</div>
-</div>
 <div class="footer" id="footer">Carregando...</div>
 </div>
 <div class="section" id="secPropriedades">
@@ -141,14 +131,33 @@ input[type=text]:focus{border-color:var(--primary)}
 <div class="row"><span class="label">Vers&atilde;o</span><span class="value" id="propVersion">--</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="propSlot">--</span></div>
 </div>
+<div class="card">
+<div class="collapsible open" onclick="toggleDetails()">
+<span style="font-size:.85rem;font-weight:600;color:var(--primary)">Detalhes</span>
+<span class="arrow" id="detArrow">&#9654;</span>
+</div>
+<div class="collapse-body open" id="detBody">
+<div class="row"><span class="label">Gateway</span><span class="value" id="detGateway">--</span></div>
+<div class="row"><span class="label">Bateria</span><span class="value" id="detBattery">--</span></div>
+<div class="row"><span class="label">DHT Pin</span><span class="value" id="detDhtPin">--</span></div>
+</div>
+</div>
 </div>
 <div class="section" id="secConfig">
 <h1>Configura&ccedil;&atilde;o</h1>
 <div class="card">
 <div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
+<div class="row"><span class="label">Temperatura</span><label class="switch"><input type="checkbox" id="enTemp"><span class="slider"></span></label></div>
+<div class="row"><span class="label">Sensor de G&aacute;s</span><label class="switch"><input type="checkbox" id="enGas"><span class="slider"></span></label></div>
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="saveName()">Salvar</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
+</div>
+<div class="row" style="margin-top:14px;flex-direction:column;align-items:stretch;gap:6px">
+<span class="label">Atualizar Firmware (OTA)</span>
+<input type="file" id="otaFile" accept=".bin">
+<button class="btn btn-primary btn-sm" onclick="doUpdate()">Enviar e Atualizar</button>
+<span class="value" id="otaStatus" style="font-size:.72rem;color:var(--muted-subtle)"></span>
 </div>
 </div>
 </div>
@@ -225,9 +234,10 @@ fbTime.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:
 var ls=d.last_send_s;var lastSend=ls==null?'':ls<60?ls+'s':ls<3600?Math.floor(ls/60)+'m':Math.floor(ls/3600)+'h';
 footerEl.textContent=d.device_id+(lastSend?' \u00B7 \u00FAltimo envio: '+lastSend:'');
 }catch(e){footerEl.textContent='Erro: '+e.message}}
-async function fetchSettings(){try{var r=await fetch('/api/settings');var d=await r.json();document.getElementById('deviceNameInput').value=d.device_name||''}catch(e){}}
-async function saveName(){var nm=document.getElementById('deviceNameInput').value.trim();if(!nm)return;try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_name:nm})});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function fetchSettings(){try{var r=await fetch('/api/settings');var d=await r.json();document.getElementById('deviceNameInput').value=d.device_name||'';document.getElementById('enTemp').checked=!!d.enable_temp;document.getElementById('enGas').checked=!!d.enable_gas}catch(e){}}
+async function saveName(){var nm=document.getElementById('deviceNameInput').value.trim();if(!nm)return;var enTemp=document.getElementById('enTemp').checked;var enGas=document.getElementById('enGas').checked;try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_name:nm,enable_temp:enTemp,enable_gas:enGas})});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
+function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 setInterval(function(){fetchState()},3000);
 fetchState();fetchSettings();
 </script>
