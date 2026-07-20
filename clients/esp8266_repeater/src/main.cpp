@@ -104,9 +104,12 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
     s_espnow_tx_count++;
-    if (status != 0)
-        console.printf("[%s] Send fail to %02X:%02X:%02X:%02X:%02X:%02X status=%d\n",
-                      TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], status);
+    if (status != 0) {
+        char mac_str[18];
+        mac_to_str(mac, mac_str, sizeof(mac_str));
+        console.printf("[%s] Send fail to %s status=%d\n",
+                      TAG, mac_str, status);
+    }
 }
 
 static void cache_sequence(uint16_t seq, const uint8_t *mac)
@@ -230,8 +233,10 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             mac_copy(nak.target_mac, req->sensor_mac);
             nak.reason = NAK_REASON_NO_GATEWAY;
             espnow_send_wrapper(s_bcast_addr, (uint8_t*)&nak, sizeof(nak), TAG);
-            console.printf("[%s] NAK sent: no gateway for PAIR_REQUEST from %02X:%02X:%02X:%02X:%02X:%02X\n",
-                           TAG, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            char mac_str[18];
+            mac_to_str(mac, mac_str, sizeof(mac_str));
+            console.printf("[%s] NAK sent: no gateway for PAIR_REQUEST from %s\n",
+                           TAG, mac_str);
             return;  /* não repassa */
         }
         /* Se tem gateway, deixa o fluxo normal de forwarding repassar */

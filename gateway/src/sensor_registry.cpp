@@ -83,8 +83,10 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->name[sizeof(s->name) - 1] = '\0';
 
     sensor_registry_save();
-    console.printf("[Gateway] Added sensor slot %d: MAC=%02X:%02X:%02X:%02X:%02X:%02X type=%d\n",
-                  slot, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], type);
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+    console.printf("[Gateway] Added sensor slot %d: MAC=%s type=%d\n",
+                  slot, mac_str, type);
     return true;
 }
 
