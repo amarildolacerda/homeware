@@ -3,6 +3,7 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <LittleFS.h>
 #include <Updater.h>
 #include <espnow.h>
 #ifdef HABILITA_ALEXA
@@ -17,6 +18,7 @@
 #include "common_wifi.h"
 #include "common_espnow.h"
 #include "common_web.h"
+#include "common_repeater.h"
 #include "timer.h"
 
 static const char *TAG = "esp8266-lampada";
@@ -55,20 +57,6 @@ static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
-#ifdef HABILITA_REPEATER
-#define MAX_REPEATER_CLIENTS 5
-
-typedef struct
-{
-    uint8_t mac[6];
-    uint32_t pkt_count;
-} repeater_client_t;
-
-static repeater_client_t s_rep_clients[MAX_REPEATER_CLIENTS];
-static int s_rep_client_num = 0;
-static uint32_t s_repeater_fwd = 0;
-#endif
-
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 static unsigned long s_sync_millis = 0;
@@ -81,7 +69,6 @@ static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
 static bool s_ota_in_progress = false;
 static uint32_t s_ota_bytes = 0;
-static bool s_use_repeater = false;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
@@ -95,26 +82,6 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 #endif
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-#ifdef HABILITA_REPEATER
-static void track_repeater_client(const uint8_t *mac)
-{
-    for (int i = 0; i < s_rep_client_num; i++)
-    {
-        if (memcmp(s_rep_clients[i].mac, mac, 6) == 0)
-        {
-            s_rep_clients[i].pkt_count++;
-            return;
-        }
-    }
-    if (s_rep_client_num < MAX_REPEATER_CLIENTS)
-    {
-        memcpy(s_rep_clients[s_rep_client_num].mac, mac, 6);
-        s_rep_clients[s_rep_client_num].pkt_count = 1;
-        s_rep_client_num++;
-    }
-}
-#endif
 
 // D1-MINI é invtido
 #define LED_ON LOW   // GPIO2 acende com LOW
@@ -136,6 +103,46 @@ static void track_repeater_client(const uint8_t *mac)
 #define EEPROM_PASS_MAX 64
 #define EEPROM_MAGIC 0xAA
 
+#define SYNC_LITTLEFS_FILE "/sync.json"
+
+typedef struct {
+    bool enabled;
+    char target_device_id[32];
+} sync_config_t;
+
+static sync_config_t s_sync_cfg = {false, ""};
+
+static void sync_load(void)
+{
+    if (!LittleFS.exists(SYNC_LITTLEFS_FILE)) return;
+    File f = LittleFS.open(SYNC_LITTLEFS_FILE, "r");
+    if (!f) return;
+    StaticJsonDocument<128> doc;
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) return;
+    s_sync_cfg.enabled = doc["enabled"] | false;
+    const char *tid = doc["target_device_id"] | "";
+    strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
+    s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+}
+
+static void sync_save(void)
+{
+    StaticJsonDocument<128> doc;
+    doc["enabled"] = s_sync_cfg.enabled;
+    doc["target_device_id"] = s_sync_cfg.target_device_id;
+    File f = LittleFS.open(SYNC_LITTLEFS_FILE, "w");
+    if (!f) return;
+    serializeJson(doc, f);
+    f.close();
+}
+
+static void repeater_send_adapter(const uint8_t *mac, const uint8_t *data, int len, const char *tag)
+{
+    espnow_send_wrapper(mac, data, (size_t)len, tag);
+}
+
 static void save_relay_state(void)
 {
     EEPROM.begin(EEPROM_SIZE);
@@ -151,24 +158,6 @@ static void load_relay_state(void)
     EEPROM.end();
     s_relay_state = (val == 1);
 }
-
-#ifdef HABILITA_REPEATER
-static void save_repeater_en(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_REPEATER_EN_ADDR, s_use_repeater ? 1 : 0);
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static void load_repeater_en(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t val = EEPROM.read(EEPROM_REPEATER_EN_ADDR);
-    EEPROM.end();
-    s_use_repeater = (val == 1);
-}
-#endif
 
 static void save_relay_pin(void)
 {
@@ -375,7 +364,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (resp->status == PAIR_STATUS_OK)
         {
 #ifdef HABILITA_REPEATER
-            if (!s_use_repeater)
+            if (!repeater_is_enabled())
             {
 #endif
                 mac_copy(s_gateway_mac, mac);
@@ -469,26 +458,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
 #ifdef HABILITA_REPEATER
-    /* Repeater: forward messages between clients and gateway */
-    if (s_paired && s_use_repeater)
-    {
-        if (mac_equal(mac, s_gateway_mac))
-        {
-            /* From gateway → broadcast (other devices check target_mac) */
-            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
-            s_repeater_fwd++;
-        }
-        else
-        {
-            /* From client → forward to gateway.
-               Broadcast obrigatorio: ESP8266->ESP32 (gateway) unicast falha
-               quando conectado no AP (AGENTS.md regra 18). O repeater real
-               (ESP8266) tambem recebe broadcast sem problema. */
-            track_repeater_client(mac);
-            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
-            s_repeater_fwd++;
-        }
-    }
+    repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac,
+                     repeater_send_adapter, TAG);
 #endif
 }
 
@@ -608,6 +579,8 @@ static void set_relay(bool state)
     save_relay_state();
     if (state)
         s_on_count++;
+    else
+        cyclic_reset();
     s_last_espnow_send = 0;
 }
 
@@ -651,7 +624,7 @@ static void init_hardware(void)
         load_relay_state();
     }
 #ifdef HABILITA_REPEATER
-    load_repeater_en();
+    repeater_init(EEPROM_REPEATER_EN_ADDR);
 #endif
     digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
     pinMode(s_button_pin, INPUT_PULLUP);
@@ -832,7 +805,8 @@ static void handle_api_wifi(void)
                 const char *mac_str = doc["repeater_mac"];
                 if (strlen(mac_str) > 0 && mac_parse(mac_str, s_gateway_mac))
                 {
-                    s_use_repeater = true;
+                    repeater_set_enabled(true);
+                    repeater_save_enable();
                     s_paired = true;
                     espnow_save_gateway_mac(s_gateway_mac, TAG);
                 }
@@ -911,19 +885,21 @@ static void handle_api_state(void)
         doc["free_heap"] = ESP.getFreeHeap();
 #ifdef HABILITA_REPEATER
         doc["repeater_supported"] = true;
-        doc["repeater_active"] = (s_repeater_fwd > 0) || s_use_repeater;
-        doc["repeater_enabled"] = s_use_repeater;
-        if (s_use_repeater)
+        doc["repeater_active"] = (repeater_get_fwd_count() > 0) || repeater_is_enabled();
+        doc["repeater_enabled"] = repeater_is_enabled();
+        if (repeater_is_enabled())
         {
-            doc["repeater_fwd"] = s_repeater_fwd;
+            doc["repeater_fwd"] = repeater_get_fwd_count();
             JsonArray rep_clients = doc["repeater_clients"].to<JsonArray>();
-            for (int i = 0; i < s_rep_client_num; i++)
+            const repeater_client_t *clients = repeater_get_clients();
+            int client_count = repeater_get_client_count();
+            for (int i = 0; i < client_count; i++)
             {
                 JsonObject obj = rep_clients.add<JsonObject>();
                 char mac_str[18];
-                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                mac_to_str(clients[i].mac, mac_str, sizeof(mac_str));
                 obj["mac"] = mac_str;
-                obj["packets"] = s_rep_clients[i].pkt_count;
+                obj["packets"] = clients[i].pkt_count;
             }
         }
 #endif
@@ -981,8 +957,8 @@ static void handle_api_repeater(void)
     {
         String json;
         JsonDocument doc;
-        doc["enabled"] = s_use_repeater;
-        doc["forwarded"] = s_repeater_fwd;
+        doc["enabled"] = repeater_is_enabled();
+        doc["forwarded"] = repeater_get_fwd_count();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -999,12 +975,12 @@ static void handle_api_repeater(void)
         if (doc.containsKey("enabled"))
         {
             bool en = doc["enabled"];
-            s_use_repeater = en;
-            save_repeater_en();
+            repeater_set_enabled(en);
+            repeater_save_enable();
             console.printf("[%s] Repeater %s via API\n", TAG, en ? "ATIVADO" : "desativado");
             String json;
             JsonDocument resp;
-            resp["enabled"] = s_use_repeater;
+            resp["enabled"] = repeater_is_enabled();
             resp["status"] = "ok";
             serializeJson(resp, json);
             s_server.send(200, "application/json", json);
@@ -1191,22 +1167,27 @@ static void handle_console(char c)
 #ifdef HABILITA_REPEATER
     case 'e':
     case 'E':
-        s_use_repeater = !s_use_repeater;
-        save_repeater_en();
-        console.printf("[%s] Repeater %s\n", TAG, s_use_repeater ? "ATIVADO" : "DESATIVADO");
+    {
+        bool en = !repeater_is_enabled();
+        repeater_set_enabled(en);
+        repeater_save_enable();
+        console.printf("[%s] Repeater %s\n", TAG, en ? "ATIVADO" : "DESATIVADO");
         break;
+    }
     case 'x':
     case 'X':
-        if (s_use_repeater)
+        if (repeater_is_enabled())
         {
             console.printf("\n--- Repeater Stats ---\n");
-            console.printf("  Forwarded: %lu\n", s_repeater_fwd);
-            console.printf("  Clients:   %d\n", s_rep_client_num);
-            for (int i = 0; i < s_rep_client_num; i++)
+            console.printf("  Forwarded: %lu\n", repeater_get_fwd_count());
+            int cnt = repeater_get_client_count();
+            console.printf("  Clients:   %d\n", cnt);
+            const repeater_client_t *clients = repeater_get_clients();
+            for (int i = 0; i < cnt; i++)
             {
                 char mac_str[18];
-                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
-                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, s_rep_clients[i].pkt_count);
+                mac_to_str(clients[i].mac, mac_str, sizeof(mac_str));
+                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, clients[i].pkt_count);
             }
             console.printf("----------------------\n\n");
         }
@@ -1222,9 +1203,7 @@ static void handle_console(char c)
         s_espnow_rx_count = 0;
         s_on_count = 0;
 #ifdef HABILITA_REPEATER
-        s_repeater_fwd = 0;
-        for (int i = 0; i < s_rep_client_num; i++)
-            s_rep_clients[i].pkt_count = 0;
+        repeater_reset_stats();
 #endif
         console.printf("[%s] Contadores zerados\n", TAG);
         break;
@@ -1258,7 +1237,7 @@ static void handle_console(char c)
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
         #endif
 #ifdef HABILITA_REPEATER
-        if (s_use_repeater)
+        if (repeater_is_enabled())
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1426,6 +1405,15 @@ static void handle_api_timers(void)
         String json;
         JsonDocument doc;
         timer_to_json(doc);
+        JsonObject cyc = doc["cyclic"].to<JsonObject>();
+        cyc["enabled"] = cyclic_get_enabled();
+        cyc["duration_min"] = cyclic_get_duration();
+        JsonObject pulse = doc["pulse"].to<JsonObject>();
+        pulse["enabled"] = timer_pulse_get_enabled();
+        pulse["duration_min"] = timer_pulse_get_duration();
+        JsonObject sync = doc["sync"].to<JsonObject>();
+        sync["enabled"] = s_sync_cfg.enabled;
+        sync["target_device_id"] = s_sync_cfg.target_device_id;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1439,6 +1427,35 @@ static void handle_api_timers(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
+        if (doc.containsKey("cyclic"))
+        {
+            JsonObject c = doc["cyclic"];
+            if (c.containsKey("enabled"))
+                cyclic_set_enabled(c["enabled"].as<bool>());
+            if (c.containsKey("duration_min"))
+                cyclic_set_duration(c["duration_min"].as<uint16_t>());
+        }
+        if (doc.containsKey("pulse"))
+        {
+            JsonObject p = doc["pulse"];
+            if (p.containsKey("enabled"))
+                timer_pulse_set_enabled(p["enabled"].as<bool>());
+            if (p.containsKey("duration_min"))
+                timer_pulse_set_duration(p["duration_min"].as<uint16_t>());
+        }
+        if (doc.containsKey("sync"))
+        {
+            JsonObject s = doc["sync"];
+            if (s.containsKey("enabled"))
+                s_sync_cfg.enabled = s["enabled"].as<bool>();
+            if (s.containsKey("target_device_id"))
+            {
+                const char *tid = s["target_device_id"] | "";
+                strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
+                s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+            }
+            sync_save();
+        }
         if (doc.containsKey("index"))
         {
             int idx = doc["index"];
@@ -1451,9 +1468,6 @@ static void handle_api_timers(void)
                 cfg.days_mask = doc["days_mask"] | 0;
                 cfg.enabled = doc["enabled"] | true;
                 timer_set(idx, &cfg);
-                timer_save();
-                console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
-                               cfg.action ? "ON" : "OFF");
             }
         }
         else if (doc.containsKey("hour"))
@@ -1477,15 +1491,14 @@ static void handle_api_timers(void)
             cfg.days_mask = doc["days_mask"] | 0;
             cfg.enabled = doc["enabled"] | true;
             timer_set(idx, &cfg);
-            timer_save();
             console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
                            cfg.action ? "ON" : "OFF");
         }
-        else
+        else if (doc.containsKey("timers"))
         {
             timer_from_json(doc);
-            timer_save();
         }
+        timer_save_littlefs();
         String json;
         JsonDocument resp;
         resp["status"] = "ok";
@@ -1570,11 +1583,15 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
+    LittleFS.begin();
+
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
+    timer_load_littlefs();
+    sync_load();
 
     console.printf("\n");
     console.printf("============================================\n");
@@ -1635,7 +1652,8 @@ void setup(void)
 #ifdef HABILITA_REPEATER
     if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
     {
-        s_use_repeater = true;
+        repeater_set_enabled(true);
+        repeater_save_enable();
         s_paired = true;
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1652,7 +1670,6 @@ void setup(void)
         console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
 
-    timer_load();
     console.printf("  Timers:  %d configurados\n", MAX_TIMERS);
 
     console.printf("============================================\n");
@@ -1785,6 +1802,27 @@ void loop(void)
                     apply_timer(action);
                     s_last_espnow_send = 0;
                 }
+            }
+        }
+    }
+
+    {
+        static unsigned long last_cyclic_check = 0;
+        if (now - last_cyclic_check > CYCLIC_CHECK_INTERVAL_MS)
+        {
+            last_cyclic_check = now;
+            int8_t cyc_action = cyclic_check(now, s_relay_state);
+            if (cyc_action == 1)
+            {
+                set_relay(true);
+                console.printf("[%s] Cyclic ON\n", TAG);
+                s_last_espnow_send = 0;
+            }
+            else if (cyc_action == -1)
+            {
+                set_relay(false);
+                console.printf("[%s] Cyclic OFF\n", TAG);
+                s_last_espnow_send = 0;
             }
         }
     }
