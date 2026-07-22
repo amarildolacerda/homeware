@@ -99,6 +99,12 @@
 #define REPEATER_MAC ""
 #endif
 
+/* EEPROM address for repeater enable flag (byte 8, free area between gateway MAC and name) */
+#define EEPROM_REPEATER_EN_ADDR 8
+
+/* Cyclic timer check interval (ms) */
+#define CYCLIC_CHECK_INTERVAL_MS 1000
+
 /* Pinos GPIO disponiveis para configuracao do relé */
 static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};
 static const int AVAILABLE_GPIOS_COUNT = 9;
