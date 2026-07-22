@@ -1590,7 +1590,14 @@ void setup(void)
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
-    timer_load_littlefs();
+    if (timer_load_littlefs()) {
+        EEPROM.begin(EEPROM_SIZE);
+        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
+            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
+        EEPROM.commit();
+        EEPROM.end();
+        console.printf("[%s] EEPROM timer region cleared\n", TAG);
+    }
     sync_load();
 
     console.printf("\n");

@@ -1485,6 +1485,14 @@ void setup(void)
         timer_load();  /* EEPROM migration */
         timer_save_littlefs();
     }
+    if (timer_load_littlefs()) {
+        EEPROM.begin(EEPROM_SIZE);
+        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
+            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
+        EEPROM.commit();
+        EEPROM.end();
+        console.printf("[%s] EEPROM timer region cleared\n", TAG);
+    }
     console.printf("[%s] Timer module initialized (LittleFS)\n", TAG);
 
     s_pulse_enabled = timer_pulse_get_enabled();
