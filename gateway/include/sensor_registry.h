@@ -42,6 +42,7 @@ typedef struct {
 
 bool sensor_registry_init();
 int sensor_registry_find_by_mac(const uint8_t *mac);
+int sensor_registry_find_by_name(const char *name);
 int sensor_registry_find_free_slot();
 virtual_sensor_t* sensor_registry_get(int slot);
 int sensor_registry_count_paired();

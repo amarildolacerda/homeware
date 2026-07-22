@@ -25,6 +25,16 @@ int sensor_registry_find_by_mac(const uint8_t *mac) {
     return -1;
 }
 
+int sensor_registry_find_by_name(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        if (s_sensors[i].paired && strcmp(s_sensors[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int sensor_registry_find_free_slot() {
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         if (!s_sensors[i].paired) {
