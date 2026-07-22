@@ -77,6 +77,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div id="cicloSub" class="nav-sub" style="display:none">
 <div class="nav-item" data-section="timer" onclick="showSection('timer')"><span>⏰</span><span>Timer</span></div>
 <div class="nav-item" data-section="pulse" onclick="showSection('pulse')"><span>⏱</span><span>Pulsação</span></div>
+<div class="nav-item" data-section="cyclic" onclick="showSection('cyclic')"><span>🔁</span><span>Cíclico</span></div>
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
@@ -119,6 +120,15 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <span style="color:var(--muted-subtle);font-size:.75rem">min</span></span></div>
 <div class="row"><span class="label">Restante</span><span class="value" id="pulseRemaining">-</span></div>
 <div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="savePulse()">Salvar</button></div>
+</div>
+<div class="section" id="secCyclic">
+<h1>Cíclico</h1>
+<p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">Alterna o relé ON/OFF em intervalos regulares.</p>
+<div class="row"><span class="label">Ativado</span><label style="font-size:.82rem;color:var(--text)"><input type="checkbox" id="cyclicEnabledCheck" onchange="saveCyclic()"> habilitado</label></div>
+<div class="row"><span class="label">Duração</span><span style="display:flex;gap:4px;align-items:center">
+<input type="number" id="cyclicDurationInput" min="1" max="1440" style="width:70px">
+<span style="color:var(--muted-subtle);font-size:.75rem">min</span></span></div>
+<div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="saveCyclic()">Salvar</button></div>
 </div>
 <div class="section" id="secConfig">
 <h1>Configuração</h1>
@@ -185,6 +195,9 @@ try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'applicat
 async function savePulse(){let en=document.getElementById('pulseEnabledCheck').checked;let dur=parseInt(document.getElementById('pulseDurationInput').value)||60;
 if(dur<1)dur=1;if(dur>1440)dur=1440;
 try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
+async function saveCyclic(){let en=document.getElementById('cyclicEnabledCheck').checked;let dur=parseInt(document.getElementById('cyclicDurationInput').value)||60;
+if(dur<1)dur=1;if(dur>1440)dur=1440;
+try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:en,duration_min:dur}})})}catch(e){}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
   const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADO':'DESLIGADO';badge.className='badge '+(on?'on':'off');
   rxVal.textContent=d.rx_count||0;
@@ -229,11 +242,12 @@ let div=document.createElement('div');div.className='row';
 let lbl=document.createElement('span');lbl.className='label';lbl.textContent=('0'+t.hour).slice(-2)+':'+('0'+t.minute).slice(-2)+' '+(t.action?'ON':'OFF');
 let cb=document.createElement('input');cb.type='checkbox';cb.checked=t.enabled;cb.onchange=function(){t.enabled=cb.checked;fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,...t})})};
 div.appendChild(lbl);div.appendChild(cb);timerList.appendChild(div)})}else{timerList.innerHTML='<div class="row"><span class="label">Nenhum timer</span></div>'}
+if(d.cyclic){document.getElementById('cyclicEnabledCheck').checked=d.cyclic.enabled;document.getElementById('cyclicDurationInput').value=d.cyclic.duration_min}
 let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pulse')fetchPulse()},3000);
+setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pulse')fetchPulse();if(currentSection==='cyclic')fetchTimers()},3000);
 fetchState();fetchSettings();fetchTimers();fetchPulse();
 </script>
 </body>
