@@ -179,15 +179,15 @@ static bool espnow_send_data(void)
     ip_ptr[3] = ip[3];
     hdr->payload_len = sizeof(payload_motion_t) + 4;
 
-    if (!espnow_client_add_peer(s_gateway_mac, TAG))
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG))
     {
-        console.printf("[%s] Failed to add gateway peer\n", TAG);
+        console.printf("[%s] Failed to add broadcast peer\n", TAG);
         return false;
     }
 
     s_ack_received = false;
     s_send_pending = true;
-    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
+    if (!espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG))
     {
         s_send_pending = false;
         return false;
@@ -212,10 +212,10 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_client_add_peer(s_gateway_mac, TAG)) return false;
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG)) return false;
 
     s_ack_received = false;
-    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
+    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -472,6 +472,7 @@ static void handle_serial(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+
         console.printf("  u    - info OTA\n");
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
@@ -595,6 +596,11 @@ void setup(void)
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/pin", HTTP_ANY, []() { handle_api_pin(s_server); });
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
+    s_server.on("/api/restart", HTTP_POST, []() {
+        s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
+        delay(200);
+        ESP.restart();
+    });
     s_server.begin();
 
     ArduinoOTA.setHostname(s_device_id);

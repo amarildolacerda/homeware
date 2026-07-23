@@ -37,6 +37,10 @@ static unsigned long s_pair_wait_until = 0;
 static bool s_gateway_connected = false;
 static bool s_paired = false;
 static uint8_t s_gateway_mac[6];
+
+static bool mac_is_nonzero(const uint8_t *mac) {
+    return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
+}
 static uint16_t s_sequence = 0;
 static uint16_t s_assigned_slot = 0;
 static int s_pair_attempts = 0;
@@ -104,6 +108,8 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_MAGIC 0xAA
 
 #define SYNC_LITTLEFS_FILE "/sync.json"
+#define KNOWN_DEVICES_FILE "/known_devices.json"
+#define MAX_KNOWN_DEVICES 16
 
 typedef struct {
     bool enabled;
@@ -125,6 +131,38 @@ static void sync_load(void)
     const char *tid = doc["target_device_id"] | "";
     strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
     s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+}
+
+static void devices_load(JsonDocument &doc)
+{
+    if (!LittleFS.exists(KNOWN_DEVICES_FILE))
+    {
+        JsonArray arr = doc.to<JsonArray>();
+        arr.add(s_device_id);
+        return;
+    }
+    File f = LittleFS.open(KNOWN_DEVICES_FILE, "r");
+    if (!f) { doc.to<JsonArray>(); return; }
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) doc.to<JsonArray>();
+}
+
+static void devices_add(const char *device_id)
+{
+    if (!device_id || strlen(device_id) == 0) return;
+    JsonDocument doc;
+    devices_load(doc);
+    JsonArray arr = doc.as<JsonArray>();
+    for (JsonVariant v : arr)
+        if (strcmp(v, device_id) == 0) return;
+    if (arr.size() >= MAX_KNOWN_DEVICES)
+        arr.remove(0);
+    arr.add(device_id);
+    File f = LittleFS.open(KNOWN_DEVICES_FILE, "w");
+    if (!f) return;
+    serializeJson(doc, f);
+    f.close();
 }
 
 static void sync_save(void)
@@ -361,6 +399,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (len < sizeof(espnow_pair_response_t))
             return;
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
+        if (mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
+            return;
         if (resp->status == PAIR_STATUS_OK)
         {
 #ifdef HABILITA_REPEATER
@@ -389,6 +429,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
+        if (!mac_equal(mac, s_gateway_mac))
+            return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
         {
@@ -400,6 +442,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_RESTART:
     {
         if (len < sizeof(espnow_restart_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_restart_t *rst = (espnow_restart_t *)data;
         if (mac_equal(rst->target_mac, s_my_mac))
         {
@@ -416,6 +459,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_NAK:
     {
         if (len < sizeof(espnow_nak_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_nak_t *nak = (espnow_nak_t *)data;
         if (nak->reason == NAK_REASON_GATEWAY_LOST)
         {
@@ -429,6 +473,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))
+            return;
+        if (!mac_equal(mac, s_gateway_mac))
             return;
         espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
         s_synced_epoch = ts->epoch_seconds;
@@ -840,11 +886,11 @@ static void handle_root(void)
     page = FPSTR(PAGE_DASHBOARD);
     page += FPSTR(PAGE_PINS_NAV);
     page += FPSTR(PAGE_DASHBOARD_CONT1);
-    page += FPSTR(PAGE_PINS_SEC);
 #ifdef HABILITA_REPEATER
     page += FPSTR(PAGE_DASHBOARD_REPEATER_CFG);
 #endif
     page += FPSTR(PAGE_DASHBOARD_CONT3);
+    page += FPSTR(PAGE_PINS_SEC);
     page += FPSTR(PAGE_DASHBOARD_CONT2);
     page += FPSTR(PAGE_SCRIPT_PINS);
     page += FPSTR(PAGE_DASHBOARD_END);
@@ -1398,6 +1444,15 @@ static unsigned long get_epoch(void)
     return 0;
 }
 
+static void handle_api_devices(void)
+{
+    String json;
+    JsonDocument doc;
+    devices_load(doc);
+    serializeJson(doc, json);
+    s_server.send(200, "application/json", json);
+}
+
 static void handle_api_timers(void)
 {
     if (s_server.method() == HTTP_GET)
@@ -1455,6 +1510,8 @@ static void handle_api_timers(void)
                 s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
             }
             sync_save();
+            if (strlen(s_sync_cfg.target_device_id) > 0)
+                devices_add(s_sync_cfg.target_device_id);
         }
         if (doc.containsKey("index"))
         {
@@ -1531,6 +1588,19 @@ static void handle_api_restart(void)
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     delay(500);
     ESP.restart();
+}
+
+static void handle_api_pair(void)
+{
+    s_paired = false;
+    s_gateway_connected = false;
+    s_pair_attempts = 0;
+    s_pair_wait_until = 0;
+    bool sent = espnow_send_pair_request();
+    if (sent)
+        s_server.send(200, "application/json", "{\"status\":\"pairing\"}");
+    else
+        s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
 }
 
 static void handle_ota(void)
@@ -1642,8 +1712,10 @@ void setup(void)
 #endif
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
+    s_server.on("/api/devices", HTTP_GET, handle_api_devices);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
+    s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
 #ifdef HABILITA_ALEXA
     /* s_server.begin() is called by Espalexa internally */
@@ -1728,23 +1800,11 @@ void loop(void)
 
     unsigned long now = millis();
 
+    /* Manual pairing only — no auto-pair in loop */
     if (!s_paired)
     {
         if (s_pair_wait_until > 0 && now < s_pair_wait_until)
             return;
-        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
-        {
-            s_last_espnow_pair = now;
-            s_pair_attempts++;
-            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
-            espnow_send_pair_request();
-            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
-            {
-                s_pair_attempts = 0;
-                s_pair_wait_until = now + 5000;
-                console.printf("[%s] Max pair attempts, waiting 60s\n", TAG);
-            }
-        }
         return;
     }
 

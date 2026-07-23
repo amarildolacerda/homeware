@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "v0.0.29"
+#define FW_VERSION "v0.0.30"
 #define DEVICE_NAME "Rain ESP-NOW"
 
 #define STATE_UPDATE_INTERVAL 5000

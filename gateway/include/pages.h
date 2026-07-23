@@ -571,6 +571,7 @@ function buildSensorCard(s) {
           '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
             '<button onclick="showPropsModal('+s.slot+')">Propriedades</button>'+
             '<button onclick="renameSensor('+s.slot+')">Renomear</button>'+
+            '<button onclick="restartSensor('+s.slot+')">Reiniciar</button>'+
             '<button class="danger" onclick="removeSensor('+s.slot+')">Remover</button>'+
           '</div>'+
         '</div>'+
@@ -800,6 +801,14 @@ async function removeSensor(slot) {
     await api('/api/sensor/'+slot+'/remove', {method:'POST'});
     showToast('Sensor removido');
     loadData();
+  } catch(e) { showToast('Erro: '+e.message, true); }
+}
+
+async function restartSensor(slot) {
+  if (!confirm('Reiniciar dispositivo no slot '+slot+'?')) return;
+  try {
+    await api('/api/sensor/'+slot+'/restart', {method:'POST'});
+    showToast('Restart enviado');
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
 

@@ -34,6 +34,10 @@ static unsigned long s_pair_wait_until = 0;
 static bool s_gateway_connected = false;
 static bool s_paired = false;
 static uint8_t s_gateway_mac[6];
+
+static bool mac_is_nonzero(const uint8_t *mac) {
+    return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
+}
 static uint16_t s_sequence = 0;
 static uint16_t s_assigned_slot = 0;
 static int s_pair_attempts = 0;
@@ -342,6 +346,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (len < sizeof(espnow_pair_response_t))
             return;
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
+        if (mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
+            return;
         if (resp->status == PAIR_STATUS_OK)
         {
             if (!repeater_is_enabled())
@@ -366,6 +372,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
+        if (!mac_equal(mac, s_gateway_mac))
+            return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
         {
@@ -377,6 +385,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_RESTART:
     {
         if (len < sizeof(espnow_restart_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_restart_t *rst = (espnow_restart_t *)data;
         if (mac_equal(rst->target_mac, s_my_mac))
         {
@@ -393,6 +402,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_NAK:
     {
         if (len < sizeof(espnow_nak_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_nak_t *nak = (espnow_nak_t *)data;
         if (nak->reason == NAK_REASON_GATEWAY_LOST)
         {
@@ -406,6 +416,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))
+            return;
+        if (!mac_equal(mac, s_gateway_mac))
             return;
         espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
         s_synced_epoch = ts->epoch_seconds;
