@@ -34,6 +34,7 @@ static void build_device_info(JsonDocument &doc, const char *name, const char *b
     device["sw_version"] = FW_VERSION;
     device["manufacturer"] = GW_MANUFACTURER;
     device["model"] = model;
+    device["suggested_area"] = "matter";
 }
 
 static void build_entity_id(char *buf, size_t len, const uint8_t *mac, int slot, const char *suffix) {

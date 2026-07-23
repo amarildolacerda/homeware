@@ -158,6 +158,7 @@ static void learn_client(const uint8_t *mac)
 }
 
 static void send_repeater_status(void);
+static void save_gateway_mac(void);
 
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
@@ -677,6 +678,7 @@ static void handle_api_status(void)
     doc["ip"] = WiFi.localIP().toString();
     doc["mac"] = WiFi.macAddress();
     doc["fw_version"] = FW_VERSION;
+    doc["type"] = "repeater";
     doc["device_id"] = String("esp8266_") + String(ESP.getChipId(), HEX);
     doc["device_name"] = s_device_name;
     JsonArray arr = doc["client_list"].to<JsonArray>();
@@ -819,6 +821,7 @@ void setup(void)
         s_server.on("/", handle_root);
         s_server.on("/docs", []() { serve_pgm_page(PAGE_DOCS); });
         s_server.on("/api/status", handle_api_status);
+        s_server.on("/api/state", handle_api_status);
         s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
         s_server.on("/api/restart", HTTP_POST, []() {
             s_server.send(200, "application/json", "{\"ok\":true}");

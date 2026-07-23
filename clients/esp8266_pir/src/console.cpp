@@ -1,5 +1,6 @@
 #include "console.h"
 #include "config.h"
+#include "espnow_protocol.h"
 
 void ConsoleOutput::begin() {
     m_server.begin();

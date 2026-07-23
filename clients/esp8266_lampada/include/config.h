@@ -1,9 +1,5 @@
 #pragma once
 
-#ifndef FW_VERSION
-#define FW_VERSION "v0.0.30"
-#endif
-
 #ifndef DEVICE_NAME
 #define DEVICE_NAME "ESP01-Relay"
 #endif

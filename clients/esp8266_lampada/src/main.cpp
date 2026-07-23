@@ -83,6 +83,7 @@ static ESP8266WebServer s_server(DASHBOARD_PORT);
 #ifdef HABILITA_ALEXA
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
+static bool s_alexa_initialized = false;
 #endif
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -762,6 +763,12 @@ static void handle_wifi(void)
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef HABILITA_ALEXA
+            if (!s_alexa_initialized)
+            {
+                s_alexa.begin(&s_server);
+                s_alexa_initialized = true;
+                console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+            }
             console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
 #endif
             console.printf("  => Terminal:  'h' comando de ajuda\n");
@@ -925,6 +932,7 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["type"] = "lampada";
         doc["tx_count"] = s_espnow_tx_count;
         doc["rx_count"] = s_espnow_rx_count;
         doc["on_count"] = s_on_count;
@@ -1693,9 +1701,8 @@ void setup(void)
 #ifdef HABILITA_ALEXA
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
-    s_alexa.begin(&s_server);
-    console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
 #endif
+    s_server.begin();
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1717,11 +1724,6 @@ void setup(void)
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
-#ifdef HABILITA_ALEXA
-    /* s_server.begin() is called by Espalexa internally */
-#else
-    s_server.begin();
-#endif
 
     ota_setup(s_device_id);
 
