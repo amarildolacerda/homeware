@@ -5,6 +5,7 @@
 #include <EEPROM.h>
 #include <espnow.h>
 #include "config.h"
+#include "shared_config.h"
 #include "espnow_protocol.h"
 #include "common_console.h"
 #include "common_espnow.h"
@@ -34,7 +35,6 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_NAME_ADDR 10
 #define EEPROM_NAME_MAX 48
 #define EEPROM_INTERVAL_ADDR 60
-#define EEPROM_INTERVAL_SIZE 2
 
 static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
@@ -195,8 +195,10 @@ static bool wifi_setup(bool force_config_portal)
         if (new_interval >= DEEP_SLEEP_INTERVAL_MIN && new_interval <= DEEP_SLEEP_INTERVAL_MAX)
         {
             s_interval_s = new_interval;
+            EEPROM.begin(128);
             EEPROM.put(EEPROM_INTERVAL_ADDR, s_interval_s);
             EEPROM.commit();
+            EEPROM.end();
         }
         s_config_mode = false;
         return true;
@@ -215,6 +217,7 @@ void setup(void)
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
+    EEPROM.begin(128);
     EEPROM.get(EEPROM_INTERVAL_ADDR, s_interval_s);
     if (s_interval_s < DEEP_SLEEP_INTERVAL_MIN || s_interval_s > DEEP_SLEEP_INTERVAL_MAX)
         s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
@@ -266,13 +269,6 @@ void setup(void)
             delay(LED_BLINK_SEND_MS);
             digitalWrite(LED_PIN, HIGH);
         }
-        do_deep_sleep();
-        return;
-    }
-
-    if (!s_has_gateway)
-    {
-        console.printf("[%s] No gateway MAC saved, sleeping\n", TAG);
         do_deep_sleep();
         return;
     }
