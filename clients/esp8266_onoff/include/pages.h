@@ -81,6 +81,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
+<div class="nav-item" data-section="repeater" id="navRepeater" onclick="showSection('repeater')" style="display:none"><span>🔄</span><span>Repetidor</span></div>
 </div>
 <div class="sidebar-bottom"><span id="sbVersion">...</span></div>
 </div>
@@ -138,6 +139,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
 <div class="row"><span class="label">Estado ao Iniciar</span><select id="startupModeSelect" onchange="savePins()">
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
+<div class="row"><span class="label">Repetidor</span><button class="btn" id="repBtn" onclick="toggleRepeater()" style="display:none">-</button></div>
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
@@ -150,6 +152,12 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
+</div>
+<div class="section" id="secRepeater">
+<h1>Repetidor</h1>
+<div class="row"><span class="label">Função</span><span class="value" id="repState">-</span></div>
+<div class="row"><span class="label">Total Retransmitidos</span><span class="value" id="repFwd">0</span></div>
+<div id="repClientList"></div>
 </div>
 </div>
 <div class="footer-bar">
@@ -215,6 +223,7 @@ document.getElementById('sbName').textContent=name;
 document.getElementById('sbId').textContent=d.device_id||'';
 const ve=document.getElementById('sbVersion');if(ve&&d.fw_version)ve.textContent=d.fw_version;
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
+fetchRepeater(d);
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
 fbUptime.textContent=uptimeStr;
@@ -247,6 +256,15 @@ let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
+async function fetchRepeater(d){try{if(!d){let r=await fetch('/api/state');d=await r.json();}
+let nav=document.getElementById('navRepeater');
+if(d.repeater_supported&&d.repeater_enabled){nav.style.display='flex';document.getElementById('repState').textContent='ATIVADO';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
+let list=document.getElementById('repClientList');list.innerHTML='';
+if(d.repeater_clients&&d.repeater_clients.length){d.repeater_clients.forEach(function(c){
+let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none';let rs=document.getElementById('repState');if(rs)rs.textContent='DESATIVADO'}
+let rb=document.getElementById('repBtn');
+if(rb&&d.repeater_supported){rb.style.display='inline-block';rb.textContent=d.repeater_enabled?'DESATIVAR':'ATIVAR';rb.className='btn '+(d.repeater_enabled?'btn-danger':'btn-primary')}}catch(e){}}
+async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){let rb=document.getElementById('repBtn');if(rb)rb.textContent='ERRO'}}
 setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pulse')fetchPulse();if(currentSection==='cyclic')fetchTimers()},3000);
 fetchState();fetchSettings();fetchTimers();fetchPulse();
 </script>

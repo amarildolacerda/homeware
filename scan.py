@@ -3,6 +3,7 @@ import os
 import socket
 import json
 import argparse
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.request import urlopen, Request
 from urllib.error import URLError
@@ -17,7 +18,7 @@ def get_local_ip():
     except:
         return None
 
-def check_port(ip, port=80, timeout=1):
+def check_port(ip, port=80, timeout=2):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
@@ -53,60 +54,82 @@ def get_mac_via_arp(ip):
     except: pass
     return None
 
+def detect_device_type(data):
+    t = data.get("type")
+    if t:
+        return t
+    keys = data.keys()
+    if "temperature" in keys or "humidity" in keys:
+        return "dht_gas"
+    if "motion_detected" in keys:
+        return "pir"
+    if "state" in keys:
+        return "lampada"
+    if "repeater_supported" in keys:
+        return "repeater"
+    return "unknown"
+
 def identify(ip, port):
     title = fetch_title(ip, port)
     mac = None
-    
-    # Try gateway /api/info
-    try:
-        req = Request(f"http://{ip}:{port}/api/info", method="GET", headers={"User-Agent": "scan.py"})
-        resp = urlopen(req, timeout=2)
-        data = json.loads(resp.read())
-        gw_id = data.get("gateway_id", "")
-        fw = data.get("fw_version", "")
-        paired = data.get("paired_count", "?")
-        online = data.get("online_count", "?")
-        mac = data.get("gateway_mac") or data.get("mac") or data.get("sta_mac")
-        is_gateway = "gateway" in gw_id or "gateway" in str(mac) or mac is not None
-        label = "GATEWAY" if is_gateway else "bridge"
-        info = f"  [{label}] {ip}:{port}  FW={fw}  paired={paired} online={online}  id={gw_id}"
-        if mac: info += f"  MAC={mac}"
-        if title: info += f"  title=\"{title}\""
-        return (info, mac)
-    except:
-        pass
 
-    # Try client /api/state (lampada, sensor, etc.)
-    try:
-        req = Request(f"http://{ip}:{port}/api/state", method="GET", headers={"User-Agent": "scan.py"})
-        resp = urlopen(req, timeout=2)
-        data = json.loads(resp.read())
-        dev_id = data.get("device_id", "")
-        dev_name = data.get("device_name", "")
-        fw = data.get("fw_version", "")
-        relay = data.get("state", None)
-        gw_con = data.get("gateway_connected", False)
-        label = "DEVICE"
-        info = f"  [{label}] {ip}:{port}  name=\"{dev_name}\"  id={dev_id}  FW={fw}"
-        if relay is not None: info += f"  relay={'ON' if relay else 'OFF'}"
-        info += f"  gw={gw_con}"
-        if title and title != dev_name: info += f"  title=\"{title}\""
-        return (info, None)
-    except:
-        pass
+    # Try gateway /api/info (retry 1x)
+    for attempt in range(2):
+        try:
+            req = Request(f"http://{ip}:{port}/api/info", method="GET", headers={"User-Agent": "scan.py"})
+            resp = urlopen(req, timeout=4)
+            data = json.loads(resp.read())
+            gw_id = data.get("gateway_id", "")
+            fw = data.get("fw_version", "")
+            paired = data.get("paired_count", "?")
+            online = data.get("online_count", "?")
+            mac = data.get("gateway_mac") or data.get("mac") or data.get("sta_mac")
+            is_gateway = "gateway" in gw_id or "gateway" in str(mac) or mac is not None
+            label = "GATEWAY" if is_gateway else "bridge"
+            info = f"  [{label}] {ip}:{port}  type=gateway  FW={fw}  paired={paired} online={online}  id={gw_id}"
+            if mac: info += f"  MAC={mac}"
+            if title: info += f"  title=\"{title}\""
+            return (info, mac, "gateway", fw, ip)
+        except:
+            if attempt == 0:
+                time.sleep(1)
+            pass
+
+    # Try client /api/state (retry 1x)
+    for attempt in range(2):
+        try:
+            req = Request(f"http://{ip}:{port}/api/state", method="GET", headers={"User-Agent": "scan.py"})
+            resp = urlopen(req, timeout=4)
+            data = json.loads(resp.read())
+            dev_id = data.get("device_id", "")
+            dev_name = data.get("device_name", "")
+            fw = data.get("fw_version", "")
+            relay = data.get("state", None)
+            gw_con = data.get("gateway_connected", False)
+            dtype = detect_device_type(data)
+            info = f"  [DEVICE] {ip}:{port}  name=\"{dev_name}\"  id={dev_id}  FW={fw}  type={dtype}"
+            if relay is not None: info += f"  relay={'ON' if relay else 'OFF'}"
+            info += f"  gw={gw_con}"
+            if title and title != dev_name: info += f"  title=\"{title}\""
+            return (info, None, dtype, fw, ip)
+        except:
+            if attempt == 0:
+                time.sleep(1)
+            pass
 
     # Fallback: just show title
     mac = get_mac_via_arp(ip) if not mac else mac
     if title:
         info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
         if mac: info += f"  MAC={mac}"
-        return (info, mac)
+        return (info, mac, "unknown", None, ip)
     return None
 
 def main():
     parser = argparse.ArgumentParser(description="Scan for ESP-NOW gateway on local network")
     parser.add_argument("-p", "--port", type=int, default=80, help="Port to scan (default: 80)")
     parser.add_argument("--mac", action="store_true", help="Show only gateway MAC (for repeater config)")
+    parser.add_argument("--json", action="store_true", help="Output JSON for consumption by other tools")
     args = parser.parse_args()
 
     local_ip = get_local_ip()
@@ -116,8 +139,9 @@ def main():
     subnet = ".".join(local_ip.split(".")[:3]) + "."
     ips = [f"{subnet}{i}" for i in range(1, 253)]
 
-    print(f"Scanning {len(ips)} IPs on {subnet}0/24 for port {args.port}...")
-    print(f"Local IP: {local_ip}")
+    if not args.json:
+        print(f"Scanning {len(ips)} IPs on {subnet}0/24 for port {args.port}...")
+        print(f"Local IP: {local_ip}")
     found = []
 
     with ThreadPoolExecutor(max_workers=50) as executor:
@@ -125,27 +149,41 @@ def main():
         for future in as_completed(futures):
             result = future.result()
             if result:
-                marker = "  <--" if result == local_ip else ""
-                print(f"  Found: {result}:{args.port}{marker}")
+                if not args.json:
+                    marker = "  <--" if result == local_ip else ""
+                    print(f"  Found: {result}:{args.port}{marker}")
                 found.append(result)
             else:
                 pass
 
     if not found:
-        print(f"\nNo devices found with port {args.port} open")
+        if not args.json:
+            print(f"\nNo devices found with port {args.port} open")
+        else:
+            print("[]")
         return
 
-    print(f"\nIdentificando dispositivos...")
+    if not args.json:
+        print(f"\nIdentificando dispositivos...")
     found_gateway_mac = None
+    devices = []
+
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(identify, ip, args.port): ip for ip in found}
         for future in as_completed(futures):
             result = future.result()
             if result:
-                info, mac = result
-                print(info)
+                info, mac, dtype, fw, ip = result
+                if not args.json:
+                    print(info)
+                else:
+                    devices.append({"ip": ip, "port": args.port, "type": dtype, "fw_version": fw})
                 if mac and not found_gateway_mac:
                     found_gateway_mac = mac
+
+    if args.json:
+        print(json.dumps(devices, indent=2))
+        return
 
     if args.mac:
         if found_gateway_mac:

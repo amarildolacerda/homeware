@@ -71,6 +71,7 @@ static bool s_wifi_connected = false;
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
+static bool s_alexa_initialized = false;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static unsigned long s_last_timer_check = 0;
@@ -490,15 +491,16 @@ static bool espnow_send_data(void)
 
     hdr->payload_len = sizeof(payload_onoff_t) + 4 + 2;
 
-    if (!espnow_client_add_peer(s_gateway_mac, TAG))
+    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (!espnow_client_add_peer(bcast, TAG))
     {
-        console.printf("[%s] Failed to add gateway peer\n", TAG);
+        console.printf("[%s] Failed to add broadcast peer\n", TAG);
         return false;
     }
 
     s_ack_received = false;
     s_send_pending = true;
-    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
+    if (!espnow_send_wrapper(bcast, buf, sizeof(buf), TAG))
     {
         s_send_pending = false;
         return false;
@@ -524,11 +526,12 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_client_add_peer(s_gateway_mac, TAG))
+    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (!espnow_client_add_peer(bcast, TAG))
         return false;
 
     s_ack_received = false;
-    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
+    return espnow_send_wrapper(bcast, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -687,6 +690,12 @@ static void handle_wifi(void)
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
           #ifdef HABILITA_ALEXA
+            if (!s_alexa_initialized)
+            {
+                s_alexa.begin(&s_server);
+                s_alexa_initialized = true;
+                console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+            }
             console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
           #endif  
             console.printf("  => Terminal:  'h' comando de ajuda\n");
@@ -834,10 +843,30 @@ static void handle_api_state(void)
         doc["pulse_duration_min"] = s_pulse_duration_min;
         if (s_pulse_enabled && s_relay_state)
             doc["pulse_remaining_s"] = (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000;
+        doc["type"] = "onoff";
         doc["tx_count"] = s_espnow_tx_count;
         doc["rx_count"] = s_espnow_rx_count;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["on_count"] = s_on_count;
+#ifdef HABILITA_REPEATER
+        doc["repeater_supported"] = true;
+        doc["repeater_enabled"] = repeater_is_enabled();
+        doc["repeater_fwd"] = repeater_get_fwd_count();
+        {
+            JsonArray arr = doc["repeater_clients"].to<JsonArray>();
+            int n = repeater_get_client_count();
+            const repeater_client_t *clients = repeater_get_clients();
+            for (int i = 0; i < n; i++) {
+                JsonObject c = arr.add<JsonObject>();
+                char mac[18];
+                snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                         clients[i].mac[0], clients[i].mac[1], clients[i].mac[2],
+                         clients[i].mac[3], clients[i].mac[4], clients[i].mac[5]);
+                c["mac"] = mac;
+                c["packets"] = clients[i].pkt_count;
+            }
+        }
+#endif
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
@@ -1359,6 +1388,38 @@ static void handle_api_pulse(void)
     }
 }
 
+#ifdef HABILITA_REPEATER
+static void handle_api_repeater(void)
+{
+    if (s_server.method() == HTTP_GET) {
+        String json;
+        JsonDocument doc;
+        doc["enabled"] = repeater_is_enabled();
+        doc["fwd_count"] = repeater_get_fwd_count();
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    } else if (s_server.method() == HTTP_POST) {
+        String body = s_server.arg("plain");
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err) {
+            s_server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"invalid JSON\"}");
+            return;
+        }
+        if (doc.containsKey("enabled")) {
+            repeater_set_enabled(doc["enabled"]);
+            repeater_save_enable();
+        }
+        String json;
+        JsonDocument resp;
+        resp["status"] = "ok";
+        resp["enabled"] = repeater_is_enabled();
+        serializeJson(resp, json);
+        s_server.send(200, "application/json", json);
+    }
+}
+#endif
+
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1437,8 +1498,7 @@ void setup(void)
 
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
-    s_alexa.begin(&s_server);
-    console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+    console.printf("[%s] Alexa device created: %s (begin() postponed until WiFi connects)\n", TAG, s_device_name);
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1453,6 +1513,9 @@ void setup(void)
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/pulse", HTTP_ANY, handle_api_pulse);
+#ifdef HABILITA_REPEATER
+    s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
+#endif
     /* s_server.begin() is called by Espalexa internally */
 
     ArduinoOTA.setHostname(s_device_id);
