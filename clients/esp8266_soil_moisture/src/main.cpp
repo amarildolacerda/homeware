@@ -300,6 +300,8 @@ void setup(void)
         esp_now_register_recv_cb(espnow_recv_cb);
     }
 
+    espnow_send_pair_request();
+    delay(50);
     read_sensor();
     digitalWrite(LED_PIN, LOW);
     espnow_send_data();
