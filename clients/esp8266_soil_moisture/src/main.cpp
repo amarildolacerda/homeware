@@ -214,7 +214,7 @@ void setup(void)
     console.begin();
     s_active_start = millis();
 
-    WiFi.disconnect();
+    WiFi.forceSleepWake();
     delay(10);
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
