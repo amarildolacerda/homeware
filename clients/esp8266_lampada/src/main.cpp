@@ -3,6 +3,7 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <LittleFS.h>
 #include <Updater.h>
 #include <espnow.h>
 #ifdef HABILITA_ALEXA
@@ -15,6 +16,9 @@
 #include "common_ota.h"
 #include "common_util.h"
 #include "common_wifi.h"
+#include "common_espnow.h"
+#include "common_web.h"
+#include "common_repeater.h"
 #include "timer.h"
 
 static const char *TAG = "esp8266-lampada";
@@ -33,6 +37,10 @@ static unsigned long s_pair_wait_until = 0;
 static bool s_gateway_connected = false;
 static bool s_paired = false;
 static uint8_t s_gateway_mac[6];
+
+static bool mac_is_nonzero(const uint8_t *mac) {
+    return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
+}
 static uint16_t s_sequence = 0;
 static uint16_t s_assigned_slot = 0;
 static int s_pair_attempts = 0;
@@ -53,20 +61,6 @@ static uint32_t s_espnow_tx_count = 0;
 static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
-#ifdef HABILITA_REPEATER
-#define MAX_REPEATER_CLIENTS 5
-
-typedef struct
-{
-    uint8_t mac[6];
-    uint32_t pkt_count;
-} repeater_client_t;
-
-static repeater_client_t s_rep_clients[MAX_REPEATER_CLIENTS];
-static int s_rep_client_num = 0;
-static uint32_t s_repeater_fwd = 0;
-#endif
-
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 static unsigned long s_sync_millis = 0;
@@ -79,7 +73,6 @@ static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
 static bool s_ota_in_progress = false;
 static uint32_t s_ota_bytes = 0;
-static bool s_use_repeater = false;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
@@ -93,26 +86,6 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 #endif
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-#ifdef HABILITA_REPEATER
-static void track_repeater_client(const uint8_t *mac)
-{
-    for (int i = 0; i < s_rep_client_num; i++)
-    {
-        if (memcmp(s_rep_clients[i].mac, mac, 6) == 0)
-        {
-            s_rep_clients[i].pkt_count++;
-            return;
-        }
-    }
-    if (s_rep_client_num < MAX_REPEATER_CLIENTS)
-    {
-        memcpy(s_rep_clients[s_rep_client_num].mac, mac, 6);
-        s_rep_clients[s_rep_client_num].pkt_count = 1;
-        s_rep_client_num++;
-    }
-}
-#endif
 
 // D1-MINI é invtido
 #define LED_ON LOW   // GPIO2 acende com LOW
@@ -134,32 +107,78 @@ static void track_repeater_client(const uint8_t *mac)
 #define EEPROM_PASS_MAX 64
 #define EEPROM_MAGIC 0xAA
 
-static void save_gateway_mac(const uint8_t *mac)
+#define SYNC_LITTLEFS_FILE "/sync.json"
+#define KNOWN_DEVICES_FILE "/known_devices.json"
+#define MAX_KNOWN_DEVICES 16
+
+typedef struct {
+    bool enabled;
+    char target_device_id[32];
+} sync_config_t;
+
+static sync_config_t s_sync_cfg = {false, ""};
+
+static void sync_load(void)
 {
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, EEPROM_MAGIC);
-    for (int i = 0; i < 6; i++)
-        EEPROM.write(EEPROM_GATEWAY_MAC_ADDR + 1 + i, mac[i]);
-    EEPROM.commit();
-    EEPROM.end();
+    if (!LittleFS.exists(SYNC_LITTLEFS_FILE)) return;
+    File f = LittleFS.open(SYNC_LITTLEFS_FILE, "r");
+    if (!f) return;
+    StaticJsonDocument<128> doc;
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) return;
+    s_sync_cfg.enabled = doc["enabled"] | false;
+    const char *tid = doc["target_device_id"] | "";
+    strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
+    s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
 }
 
-static bool load_gateway_mac(void)
+static void devices_load(JsonDocument &doc)
 {
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR);
-    if (marker == EEPROM_MAGIC)
+    if (!LittleFS.exists(KNOWN_DEVICES_FILE))
     {
-        for (int i = 0; i < 6; i++)
-            s_gateway_mac[i] = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR + 1 + i);
-        EEPROM.end();
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Loaded gateway MAC: %s\n", TAG, mac_str);
-        return true;
+        JsonArray arr = doc.to<JsonArray>();
+        arr.add(s_device_id);
+        return;
     }
-    EEPROM.end();
-    return false;
+    File f = LittleFS.open(KNOWN_DEVICES_FILE, "r");
+    if (!f) { doc.to<JsonArray>(); return; }
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) doc.to<JsonArray>();
+}
+
+static void devices_add(const char *device_id)
+{
+    if (!device_id || strlen(device_id) == 0) return;
+    JsonDocument doc;
+    devices_load(doc);
+    JsonArray arr = doc.as<JsonArray>();
+    for (JsonVariant v : arr)
+        if (strcmp(v, device_id) == 0) return;
+    if (arr.size() >= MAX_KNOWN_DEVICES)
+        arr.remove(0);
+    arr.add(device_id);
+    File f = LittleFS.open(KNOWN_DEVICES_FILE, "w");
+    if (!f) return;
+    serializeJson(doc, f);
+    f.close();
+}
+
+static void sync_save(void)
+{
+    StaticJsonDocument<128> doc;
+    doc["enabled"] = s_sync_cfg.enabled;
+    doc["target_device_id"] = s_sync_cfg.target_device_id;
+    File f = LittleFS.open(SYNC_LITTLEFS_FILE, "w");
+    if (!f) return;
+    serializeJson(doc, f);
+    f.close();
+}
+
+static void repeater_send_adapter(const uint8_t *mac, const uint8_t *data, int len, const char *tag)
+{
+    espnow_send_wrapper(mac, data, (size_t)len, tag);
 }
 
 static void save_relay_state(void)
@@ -177,24 +196,6 @@ static void load_relay_state(void)
     EEPROM.end();
     s_relay_state = (val == 1);
 }
-
-#ifdef HABILITA_REPEATER
-static void save_repeater_en(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_REPEATER_EN_ADDR, s_use_repeater ? 1 : 0);
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static void load_repeater_en(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t val = EEPROM.read(EEPROM_REPEATER_EN_ADDR);
-    EEPROM.end();
-    s_use_repeater = (val == 1);
-}
-#endif
 
 static void save_relay_pin(void)
 {
@@ -286,57 +287,6 @@ static void load_startup_mode(void)
         s_startup_mode = 0;
 }
 
-static void save_device_name(const char *name)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_NAME_ADDR, 0xFF);
-    for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_NAME_ADDR + 1 + i, name[i]);
-        if (name[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX, '\0');
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool is_valid_name(const char *s)
-{
-    if (!s || s[0] == '\0')
-        return false;
-    for (int i = 0; s[i]; i++)
-    {
-        char c = s[i];
-        if (c < 32 || c > 126)
-            return false;
-    }
-    return true;
-}
-
-static void load_device_name(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_NAME_ADDR);
-    if (marker == 0xFF)
-    {
-        char buf[EEPROM_NAME_MAX];
-        for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-        {
-            buf[i] = EEPROM.read(EEPROM_NAME_ADDR + 1 + i);
-            if (buf[i] == '\0')
-                break;
-        }
-        buf[EEPROM_NAME_MAX - 1] = '\0';
-        if (is_valid_name(buf))
-        {
-            strncpy(s_device_name, buf, sizeof(s_device_name) - 1);
-            s_device_name[sizeof(s_device_name) - 1] = '\0';
-        }
-    }
-    EEPROM.end();
-}
-
 static void save_wifi_credentials(const char *ssid, const char *pass)
 {
     EEPROM.begin(EEPROM_SIZE);
@@ -399,18 +349,6 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
     return found;
 }
 
-static bool mac_parse(const char *str, uint8_t *mac)
-{
-    int vals[6];
-    if (sscanf(str, "%x:%x:%x:%x:%x:%x",
-               &vals[0], &vals[1], &vals[2],
-               &vals[3], &vals[4], &vals[5]) != 6)
-        return false;
-    for (int i = 0; i < 6; i++)
-        mac[i] = (uint8_t)vals[i];
-    return true;
-}
-
 static void set_relay(bool state);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
@@ -461,14 +399,16 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (len < sizeof(espnow_pair_response_t))
             return;
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
+        if (mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
+            return;
         if (resp->status == PAIR_STATUS_OK)
         {
 #ifdef HABILITA_REPEATER
-            if (!s_use_repeater)
+            if (!repeater_is_enabled())
             {
 #endif
                 mac_copy(s_gateway_mac, mac);
-                save_gateway_mac(mac);
+                espnow_save_gateway_mac(mac, TAG);
 #ifdef HABILITA_REPEATER
             }
 #endif
@@ -489,6 +429,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
+        if (!mac_equal(mac, s_gateway_mac))
+            return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
         {
@@ -500,6 +442,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_RESTART:
     {
         if (len < sizeof(espnow_restart_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_restart_t *rst = (espnow_restart_t *)data;
         if (mac_equal(rst->target_mac, s_my_mac))
         {
@@ -516,6 +459,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_NAK:
     {
         if (len < sizeof(espnow_nak_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_nak_t *nak = (espnow_nak_t *)data;
         if (nak->reason == NAK_REASON_GATEWAY_LOST)
         {
@@ -529,6 +473,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))
+            return;
+        if (!mac_equal(mac, s_gateway_mac))
             return;
         espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
         s_synced_epoch = ts->epoch_seconds;
@@ -558,61 +504,9 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
 #ifdef HABILITA_REPEATER
-    /* Repeater: forward messages between clients and gateway */
-    if (s_paired && s_use_repeater)
-    {
-        if (mac_equal(mac, s_gateway_mac))
-        {
-            /* From gateway → broadcast (other devices check target_mac) */
-            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
-            s_repeater_fwd++;
-        }
-        else
-        {
-            /* From client → forward to gateway.
-               Broadcast obrigatorio: ESP8266->ESP32 (gateway) unicast falha
-               quando conectado no AP (AGENTS.md regra 18). O repeater real
-               (ESP8266) tambem recebe broadcast sem problema. */
-            track_repeater_client(mac);
-            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
-            s_repeater_fwd++;
-        }
-    }
+    repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac,
+                     repeater_send_adapter, TAG);
 #endif
-}
-
-static bool espnow_init_client(void)
-{
-    WiFi.setSleepMode(WIFI_NONE_SLEEP);
-    if (esp_now_init() != 0)
-    {
-        console.printf("[%s] ESP-NOW init failed\n", TAG);
-        return false;
-    }
-    esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
-    esp_now_register_send_cb(espnow_send_cb);
-    esp_now_register_recv_cb(espnow_recv_cb);
-    s_espnow_ready = true;
-    console.printf("[%s] ESP-NOW initialized\n", TAG);
-    return true;
-}
-
-static bool espnow_add_peer(const uint8_t *mac)
-{
-    if (!s_espnow_ready)
-        return false;
-    esp_now_del_peer((uint8_t *)mac);
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13)
-        ch = ESP_NOW_CHANNEL;
-    int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
-    if (ret != 0)
-    {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Failed to add peer %s: %d\n", TAG, mac_str, ret);
-    }
-    return (ret == 0);
 }
 
 #define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t *)0)->payload))
@@ -653,7 +547,7 @@ static bool espnow_send_data(void)
 
     static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t *dst = bcast;
-    if (!espnow_add_peer(dst))
+    if (!espnow_client_add_peer(dst, TAG))
     {
         console.printf("[%s] Failed to add peer\n", TAG);
         return false;
@@ -689,7 +583,7 @@ static bool espnow_send_heartbeat(void)
 
     static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t *dst = bcast;
-    if (!espnow_add_peer(dst))
+    if (!espnow_client_add_peer(dst, TAG))
         return false;
 
     s_ack_received = false;
@@ -717,7 +611,7 @@ static bool espnow_send_pair_request(void)
     strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
     req->device_name[sizeof(req->device_name) - 1] = '\0';
 
-    if (!espnow_add_peer(s_broadcast_mac))
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG))
         return false;
 
     s_ack_received = false;
@@ -731,6 +625,8 @@ static void set_relay(bool state)
     save_relay_state();
     if (state)
         s_on_count++;
+    else
+        cyclic_reset();
     s_last_espnow_send = 0;
 }
 
@@ -774,7 +670,7 @@ static void init_hardware(void)
         load_relay_state();
     }
 #ifdef HABILITA_REPEATER
-    load_repeater_en();
+    repeater_init(EEPROM_REPEATER_EN_ADDR);
 #endif
     digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
     pinMode(s_button_pin, INPUT_PULLUP);
@@ -941,11 +837,11 @@ static void handle_api_wifi(void)
             if (doc.containsKey("device_name"))
             {
                 const char *new_name = doc["device_name"];
-                if (is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
+                if (espnow_is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
                 {
                     strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                     s_device_name[sizeof(s_device_name) - 1] = '\0';
-                    save_device_name(s_device_name);
+                    espnow_save_device_name(s_device_name);
                 }
             }
 
@@ -955,9 +851,10 @@ static void handle_api_wifi(void)
                 const char *mac_str = doc["repeater_mac"];
                 if (strlen(mac_str) > 0 && mac_parse(mac_str, s_gateway_mac))
                 {
-                    s_use_repeater = true;
+                    repeater_set_enabled(true);
+                    repeater_save_enable();
                     s_paired = true;
-                    save_gateway_mac(s_gateway_mac);
+                    espnow_save_gateway_mac(s_gateway_mac, TAG);
                 }
             }
 #endif
@@ -977,26 +874,6 @@ static void handle_api_wifi(void)
     }
 }
 
-static void serve_pgm_page(const char *page)
-{
-    size_t total = strlen_P(page);
-    WiFiClient cl = s_server.client();
-    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-    cl.print(total);
-    cl.print(F("\r\nConnection: close\r\n\r\n"));
-    PGM_P src = page;
-    char buf[256];
-    while (total > 0)
-    {
-        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-        memcpy_P(buf, src, chunk);
-        cl.write((const uint8_t *)buf, chunk);
-        src += chunk;
-        total -= chunk;
-        yield();
-    }
-}
-
 static void handle_root(void)
 {
     if (s_config_portal_active)
@@ -1009,15 +886,15 @@ static void handle_root(void)
     page = FPSTR(PAGE_DASHBOARD);
     page += FPSTR(PAGE_PINS_NAV);
     page += FPSTR(PAGE_DASHBOARD_CONT1);
-    page += FPSTR(PAGE_PINS_SEC);
 #ifdef HABILITA_REPEATER
     page += FPSTR(PAGE_DASHBOARD_REPEATER_CFG);
 #endif
     page += FPSTR(PAGE_DASHBOARD_CONT3);
+    page += FPSTR(PAGE_PINS_SEC);
     page += FPSTR(PAGE_DASHBOARD_CONT2);
     page += FPSTR(PAGE_SCRIPT_PINS);
     page += FPSTR(PAGE_DASHBOARD_END);
-    serve_pgm_page(page.c_str());
+    serve_pgm_page(s_server, page.c_str());
 }
 
 static void handle_api_state(void)
@@ -1054,19 +931,21 @@ static void handle_api_state(void)
         doc["free_heap"] = ESP.getFreeHeap();
 #ifdef HABILITA_REPEATER
         doc["repeater_supported"] = true;
-        doc["repeater_active"] = (s_repeater_fwd > 0) || s_use_repeater;
-        doc["repeater_enabled"] = s_use_repeater;
-        if (s_use_repeater)
+        doc["repeater_active"] = (repeater_get_fwd_count() > 0) || repeater_is_enabled();
+        doc["repeater_enabled"] = repeater_is_enabled();
+        if (repeater_is_enabled())
         {
-            doc["repeater_fwd"] = s_repeater_fwd;
+            doc["repeater_fwd"] = repeater_get_fwd_count();
             JsonArray rep_clients = doc["repeater_clients"].to<JsonArray>();
-            for (int i = 0; i < s_rep_client_num; i++)
+            const repeater_client_t *clients = repeater_get_clients();
+            int client_count = repeater_get_client_count();
+            for (int i = 0; i < client_count; i++)
             {
                 JsonObject obj = rep_clients.add<JsonObject>();
                 char mac_str[18];
-                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
+                mac_to_str(clients[i].mac, mac_str, sizeof(mac_str));
                 obj["mac"] = mac_str;
-                obj["packets"] = s_rep_clients[i].pkt_count;
+                obj["packets"] = clients[i].pkt_count;
             }
         }
 #endif
@@ -1124,8 +1003,8 @@ static void handle_api_repeater(void)
     {
         String json;
         JsonDocument doc;
-        doc["enabled"] = s_use_repeater;
-        doc["forwarded"] = s_repeater_fwd;
+        doc["enabled"] = repeater_is_enabled();
+        doc["forwarded"] = repeater_get_fwd_count();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1142,12 +1021,12 @@ static void handle_api_repeater(void)
         if (doc.containsKey("enabled"))
         {
             bool en = doc["enabled"];
-            s_use_repeater = en;
-            save_repeater_en();
+            repeater_set_enabled(en);
+            repeater_save_enable();
             console.printf("[%s] Repeater %s via API\n", TAG, en ? "ATIVADO" : "desativado");
             String json;
             JsonDocument resp;
-            resp["enabled"] = s_use_repeater;
+            resp["enabled"] = repeater_is_enabled();
             resp["status"] = "ok";
             serializeJson(resp, json);
             s_server.send(200, "application/json", json);
@@ -1159,54 +1038,6 @@ static void handle_api_repeater(void)
     }
 }
 #endif
-
-static void handle_api_pin(void)
-{
-    if (s_server.method() == HTTP_GET)
-    {
-        int pin = s_server.arg("gpio").toInt();
-        pinMode(pin, INPUT_PULLUP);
-        int state = digitalRead(pin);
-        String json;
-        JsonDocument doc;
-        doc["gpio"] = pin;
-        doc["state"] = state;
-        serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
-    }
-    else if (s_server.method() == HTTP_POST)
-    {
-        String body = s_server.arg("plain");
-        JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, body);
-        if (err)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
-            return;
-        }
-        int pin = doc["gpio"] | -1;
-        if (pin < 0 || pin > 16)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid gpio\"}");
-            return;
-        }
-        int state = doc["state"] | -1;
-        if (state != 0 && state != 1)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"state must be 0 or 1\"}");
-            return;
-        }
-        pinMode(pin, OUTPUT);
-        digitalWrite(pin, state);
-        String json;
-        JsonDocument resp;
-        resp["gpio"] = pin;
-        resp["state"] = state;
-        resp["status"] = "ok";
-        serializeJson(resp, json);
-        s_server.send(200, "application/json", json);
-    }
-}
 
 #ifdef HABILITA_PINOS
 static uint32_t GPIOMUX[17] = {
@@ -1382,22 +1213,27 @@ static void handle_console(char c)
 #ifdef HABILITA_REPEATER
     case 'e':
     case 'E':
-        s_use_repeater = !s_use_repeater;
-        save_repeater_en();
-        console.printf("[%s] Repeater %s\n", TAG, s_use_repeater ? "ATIVADO" : "DESATIVADO");
+    {
+        bool en = !repeater_is_enabled();
+        repeater_set_enabled(en);
+        repeater_save_enable();
+        console.printf("[%s] Repeater %s\n", TAG, en ? "ATIVADO" : "DESATIVADO");
         break;
+    }
     case 'x':
     case 'X':
-        if (s_use_repeater)
+        if (repeater_is_enabled())
         {
             console.printf("\n--- Repeater Stats ---\n");
-            console.printf("  Forwarded: %lu\n", s_repeater_fwd);
-            console.printf("  Clients:   %d\n", s_rep_client_num);
-            for (int i = 0; i < s_rep_client_num; i++)
+            console.printf("  Forwarded: %lu\n", repeater_get_fwd_count());
+            int cnt = repeater_get_client_count();
+            console.printf("  Clients:   %d\n", cnt);
+            const repeater_client_t *clients = repeater_get_clients();
+            for (int i = 0; i < cnt; i++)
             {
                 char mac_str[18];
-                mac_to_str(s_rep_clients[i].mac, mac_str, sizeof(mac_str));
-                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, s_rep_clients[i].pkt_count);
+                mac_to_str(clients[i].mac, mac_str, sizeof(mac_str));
+                console.printf("  %d: %s (%lu pkts)\n", i, mac_str, clients[i].pkt_count);
             }
             console.printf("----------------------\n\n");
         }
@@ -1413,9 +1249,7 @@ static void handle_console(char c)
         s_espnow_rx_count = 0;
         s_on_count = 0;
 #ifdef HABILITA_REPEATER
-        s_repeater_fwd = 0;
-        for (int i = 0; i < s_rep_client_num; i++)
-            s_rep_clients[i].pkt_count = 0;
+        repeater_reset_stats();
 #endif
         console.printf("[%s] Contadores zerados\n", TAG);
         break;
@@ -1449,7 +1283,7 @@ static void handle_console(char c)
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
         #endif
 #ifdef HABILITA_REPEATER
-        if (s_use_repeater)
+        if (repeater_is_enabled())
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1506,11 +1340,11 @@ static void handle_api_settings(void)
         if (doc.containsKey("device_name"))
         {
             const char *new_name = doc["device_name"];
-            if (is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
+            if (espnow_is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
             {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
-                save_device_name(s_device_name);
+                espnow_save_device_name(s_device_name);
 #ifdef HABILITA_ALEXA
                 if (s_alexa_dev)
                     s_alexa_dev->setName(s_device_name);
@@ -1610,6 +1444,15 @@ static unsigned long get_epoch(void)
     return 0;
 }
 
+static void handle_api_devices(void)
+{
+    String json;
+    JsonDocument doc;
+    devices_load(doc);
+    serializeJson(doc, json);
+    s_server.send(200, "application/json", json);
+}
+
 static void handle_api_timers(void)
 {
     if (s_server.method() == HTTP_GET)
@@ -1617,6 +1460,15 @@ static void handle_api_timers(void)
         String json;
         JsonDocument doc;
         timer_to_json(doc);
+        JsonObject cyc = doc["cyclic"].to<JsonObject>();
+        cyc["enabled"] = cyclic_get_enabled();
+        cyc["duration_min"] = cyclic_get_duration();
+        JsonObject pulse = doc["pulse"].to<JsonObject>();
+        pulse["enabled"] = timer_pulse_get_enabled();
+        pulse["duration_min"] = timer_pulse_get_duration();
+        JsonObject sync = doc["sync"].to<JsonObject>();
+        sync["enabled"] = s_sync_cfg.enabled;
+        sync["target_device_id"] = s_sync_cfg.target_device_id;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1630,6 +1482,37 @@ static void handle_api_timers(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
+        if (doc.containsKey("cyclic"))
+        {
+            JsonObject c = doc["cyclic"];
+            if (c.containsKey("enabled"))
+                cyclic_set_enabled(c["enabled"].as<bool>());
+            if (c.containsKey("duration_min"))
+                cyclic_set_duration(c["duration_min"].as<uint16_t>());
+        }
+        if (doc.containsKey("pulse"))
+        {
+            JsonObject p = doc["pulse"];
+            if (p.containsKey("enabled"))
+                timer_pulse_set_enabled(p["enabled"].as<bool>());
+            if (p.containsKey("duration_min"))
+                timer_pulse_set_duration(p["duration_min"].as<uint16_t>());
+        }
+        if (doc.containsKey("sync"))
+        {
+            JsonObject s = doc["sync"];
+            if (s.containsKey("enabled"))
+                s_sync_cfg.enabled = s["enabled"].as<bool>();
+            if (s.containsKey("target_device_id"))
+            {
+                const char *tid = s["target_device_id"] | "";
+                strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
+                s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+            }
+            sync_save();
+            if (strlen(s_sync_cfg.target_device_id) > 0)
+                devices_add(s_sync_cfg.target_device_id);
+        }
         if (doc.containsKey("index"))
         {
             int idx = doc["index"];
@@ -1642,9 +1525,6 @@ static void handle_api_timers(void)
                 cfg.days_mask = doc["days_mask"] | 0;
                 cfg.enabled = doc["enabled"] | true;
                 timer_set(idx, &cfg);
-                timer_save();
-                console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
-                               cfg.action ? "ON" : "OFF");
             }
         }
         else if (doc.containsKey("hour"))
@@ -1668,15 +1548,14 @@ static void handle_api_timers(void)
             cfg.days_mask = doc["days_mask"] | 0;
             cfg.enabled = doc["enabled"] | true;
             timer_set(idx, &cfg);
-            timer_save();
             console.printf("[%s] Timer %d set to %02d:%02d %s\n", TAG, idx, cfg.hour, cfg.minute,
                            cfg.action ? "ON" : "OFF");
         }
-        else
+        else if (doc.containsKey("timers"))
         {
             timer_from_json(doc);
-            timer_save();
         }
+        timer_save_littlefs();
         String json;
         JsonDocument resp;
         resp["status"] = "ok";
@@ -1709,6 +1588,19 @@ static void handle_api_restart(void)
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     delay(500);
     ESP.restart();
+}
+
+static void handle_api_pair(void)
+{
+    s_paired = false;
+    s_gateway_connected = false;
+    s_pair_attempts = 0;
+    s_pair_wait_until = 0;
+    bool sent = espnow_send_pair_request();
+    if (sent)
+        s_server.send(200, "application/json", "{\"status\":\"pairing\"}");
+    else
+        s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
 }
 
 static void handle_ota(void)
@@ -1761,11 +1653,22 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
+    LittleFS.begin();
+
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
-    load_device_name();
+    espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
+    if (timer_load_littlefs()) {
+        EEPROM.begin(EEPROM_SIZE);
+        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
+            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
+        EEPROM.commit();
+        EEPROM.end();
+        console.printf("[%s] EEPROM timer region cleared\n", TAG);
+    }
+    sync_load();
 
     console.printf("\n");
     console.printf("============================================\n");
@@ -1780,7 +1683,11 @@ void setup(void)
 
     hwifi_begin();
 
-    espnow_init_client();
+    s_espnow_ready = espnow_client_init(TAG);
+    if (s_espnow_ready) {
+        esp_now_register_send_cb(espnow_send_cb);
+        esp_now_register_recv_cb(espnow_recv_cb);
+    }
     WiFi.macAddress(s_my_mac);
 
 #ifdef HABILITA_ALEXA
@@ -1792,21 +1699,23 @@ void setup(void)
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
-                { serve_pgm_page((const char *)FPSTR(PAGE_DOCS)); });
+                { serve_pgm_page(s_server, (const char *)FPSTR(PAGE_DOCS)); });
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
 #ifdef HABILITA_REPEATER
     s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
 #endif
-    s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
+    s_server.on("/api/pin", HTTP_ANY, []() { handle_api_pin(s_server); });
 #ifdef HABILITA_PINOS
     s_server.on("/api/pins", HTTP_GET, handle_api_pins);
 #endif
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
+    s_server.on("/api/devices", HTTP_GET, handle_api_devices);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
+    s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
 #ifdef HABILITA_ALEXA
     /* s_server.begin() is called by Espalexa internally */
@@ -1822,7 +1731,8 @@ void setup(void)
 #ifdef HABILITA_REPEATER
     if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
     {
-        s_use_repeater = true;
+        repeater_set_enabled(true);
+        repeater_save_enable();
         s_paired = true;
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1830,9 +1740,8 @@ void setup(void)
     }
     else
 #endif
-        if (load_gateway_mac())
+        if (espnow_load_gateway_mac(s_gateway_mac, TAG))
     {
-        console.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;
     }
     else
@@ -1840,7 +1749,6 @@ void setup(void)
         console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
     }
 
-    timer_load();
     console.printf("  Timers:  %d configurados\n", MAX_TIMERS);
 
     console.printf("============================================\n");
@@ -1892,23 +1800,11 @@ void loop(void)
 
     unsigned long now = millis();
 
+    /* Manual pairing only — no auto-pair in loop */
     if (!s_paired)
     {
         if (s_pair_wait_until > 0 && now < s_pair_wait_until)
             return;
-        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
-        {
-            s_last_espnow_pair = now;
-            s_pair_attempts++;
-            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
-            espnow_send_pair_request();
-            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
-            {
-                s_pair_attempts = 0;
-                s_pair_wait_until = now + 5000;
-                console.printf("[%s] Max pair attempts, waiting 60s\n", TAG);
-            }
-        }
         return;
     }
 
@@ -1973,6 +1869,27 @@ void loop(void)
                     apply_timer(action);
                     s_last_espnow_send = 0;
                 }
+            }
+        }
+    }
+
+    {
+        static unsigned long last_cyclic_check = 0;
+        if (now - last_cyclic_check > CYCLIC_CHECK_INTERVAL_MS)
+        {
+            last_cyclic_check = now;
+            int8_t cyc_action = cyclic_check(now, s_relay_state);
+            if (cyc_action == 1)
+            {
+                set_relay(true);
+                console.printf("[%s] Cyclic ON\n", TAG);
+                s_last_espnow_send = 0;
+            }
+            else if (cyc_action == -1)
+            {
+                set_relay(false);
+                console.printf("[%s] Cyclic OFF\n", TAG);
+                s_last_espnow_send = 0;
             }
         }
     }

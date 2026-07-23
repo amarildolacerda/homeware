@@ -57,6 +57,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 .btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
 .btn-danger{border-color:var(--danger);color:var(--danger)}
 .btn-sm{padding:4px 10px;font-size:.75rem}
+.help{font-size:.72rem;color:var(--muted-subtle);line-height:1.4;margin-bottom:10px;padding:8px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)}
 .footer{text-align:center;margin-top:12px;font-size:.72rem;color:var(--muted-subtle)}
 .loading{opacity:.5;pointer-events:none}
 .timer-add{display:flex;gap:4px;align-items:center;margin-top:8px;flex-wrap:wrap}
@@ -76,6 +77,9 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="nav-item" data-section="ciclo" onclick="toggleCiclo()"><span>🔄</span><span>Ciclo</span><span class="expand-icon" id="cicloIcon" style="margin-left:auto;font-size:.65rem">&#9654;</span></div>
 <div id="cicloSub" class="nav-sub" style="display:none">
 <div class="nav-item" data-section="timer" onclick="showSection('timer')"><span>⏰</span><span>Timer</span></div>
+<div class="nav-item" data-section="cyclic" onclick="showSection('cyclic')"><span>🔁</span><span>Ciclico</span></div>
+<div class="nav-item" data-section="pulse" onclick="showSection('pulse')"><span>⏳</span><span>Pulso</span></div>
+<div class="nav-item" data-section="sync" onclick="showSection('sync')"><span>🔗</span><span>Sincronização</span></div>
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 )=====";
@@ -111,7 +115,8 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 </div>
 <div class="section" id="secTimer">
 <h1>Timer</h1>
-<div class="row"><span class="label">Próximo</span><span class="value" id="nextTimer">-</span></div>
+<div class="help">Agenda liga/desliga em horarios fixos. Adicione horarios com acao ON (liga) ou OFF (desliga) e selecione os dias da semana.</div>
+<div class="row"><span class="label">Proximo</span><span class="value" id="nextTimer">-</span></div>
 <div id="timerList"></div>
 <div class="timer-add">
 <select id="timerHour" style="width:56px"></select><span style="color:var(--muted-subtle)">:</span><select id="timerMin" style="width:56px"></select>
@@ -119,6 +124,35 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <select id="timerDays" style="width:74px"><option value="0">Todos</option><option value="127">Semana</option><option value="64">Fim de sem</option></select>
 <button class="btn btn-primary btn-sm" onclick="addTimer()">+</button>
 </div>
+</div>
+<div class="section" id="secCyclic">
+<h1>Ciclico</h1>
+<div class="help">Alterna ON/OFF automaticamente em intervalo fixo. Ex: a cada 30min o rele inverte de estado (liga se desligado, desliga se ligado).</div>
+<div class="row"><span class="label">Ativado</span><input type="checkbox" id="cyclicEnabled"></div>
+<div class="row"><span class="label">Duracao (min)</span><input type="number" id="cyclicDuration" min="1" max="3600" style="width:100px"></div>
+<div style="margin-top:2px;font-size:.68rem;color:var(--muted-subtle)">1-3600 min (1min a 60h)</div>
+<div style="text-align:center;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveCyclic()">Salvar</button></div>
+</div>
+<div class="section" id="secPulse">
+<h1>Pulso</h1>
+<div class="help">Desliga automaticamente apos N minutos apos ligar. Ex: configurar 15min = ao ligar o rele, ele desliga sozinho depois de 15 minutos.</div>
+<div class="row"><span class="label">Ativado</span><input type="checkbox" id="pulseEnabled"></div>
+<div class="row"><span class="label">Duracao (min)</span><input type="number" id="pulseDuration" min="1" max="3600" style="width:100px"></div>
+<div style="margin-top:2px;font-size:.68rem;color:var(--muted-subtle)">1-3600 min (1min a 60h)</div>
+<div style="text-align:center;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="savePulse()">Salvar</button></div>
+</div>
+<div class="section" id="secSync">
+<h1>Sincronização</h1>
+<div class="help">Espelha o estado deste rele em outro dispositivo. Quando este rele liga/desliga, envia comando para o dispositivo alvo via rede ESP-NOW.</div>
+<div class="row"><span class="label">Ativado</span><input type="checkbox" id="syncEnabled"></div>
+<div class="row"><span class="label">Dispositivo</span>
+<select id="syncDeviceSelect" onchange="syncOnDeviceChange()" style="flex:1;max-width:160px">
+<option value="">Selecionar...</option>
+<option value="__manual__">Manual</option>
+</select>
+</div>
+<div class="row" id="syncManualRow" style="display:none"><span class="label">Target ID</span><input type="text" id="syncTargetId" maxlength="32" style="width:160px"></div>
+<div style="text-align:center;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveSync()">Salvar</button></div>
 </div>
 <div class="section" id="secConfig">
 <h1>Configuração</h1>
@@ -131,12 +165,13 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 )=====";
 #ifdef HABILITA_REPEATER
 static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
-<div class="row"><span class="label">Modo repetidor</span><button class="btn btn-sm" id="repBtn" onclick="toggleRepeater()">-</button></div>
+<div class="row"><span class="label">Modo repetidor</span><button class="btn" id="repBtn" onclick="toggleRepeater()">-</button></div>
 )=====";
 #endif
 static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
+<button class="btn btn-primary" onclick="pairDevice()">Parear</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
 </div>
 <div class="row" style="margin-top:14px;flex-direction:column;align-items:stretch;gap:6px">
@@ -205,11 +240,12 @@ const fbTime=document.getElementById('fbTime');
 const fbUptime=document.getElementById('fbUptime');
 let loading=false,cicloOpen=false,currentSection='home';
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
-document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins()}
+document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers()}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
+async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();footerEl.textContent=d.status==='pairing'?'Pareando...':'Falha ao parear'}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
 try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
@@ -220,7 +256,7 @@ async function fetchState(){try{let r=await fetch('/api/state');let d=await r.js
   memVal.textContent=d.free_heap||0;
   onVal.textContent=d.on_count||0;
   let fwdStat=document.getElementById('fwdStat');let fwdVal=document.getElementById('fwdVal');
-  if(fwdStat&&fwdVal){if(d.repeater_active){fwdStat.style.display='flex';fwdVal.textContent=d.repeater_fwd||0;}else{fwdStat.style.display='none'}}
+  if(fwdStat&&fwdVal){if(d.repeater_active){fwdStat.style.display='';fwdVal.textContent=d.repeater_fwd||0;}else{fwdStat.style.display='none'}}
   let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
   let uptimeStr=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 alexaEl.textContent=d.alexa_connected?'Conectado':'-';alexaEl.className='value'+(d.alexa_connected?' green':'');
@@ -256,17 +292,25 @@ let div=document.createElement('div');div.className='row';
 let lbl=document.createElement('span');lbl.className='label';lbl.textContent=('0'+t.hour).slice(-2)+':'+('0'+t.minute).slice(-2)+' '+(t.action?'ON':'OFF');
 let cb=document.createElement('input');cb.type='checkbox';cb.checked=t.enabled;cb.onchange=function(){t.enabled=cb.checked;fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,...t})})};
 div.appendChild(lbl);div.appendChild(cb);timerList.appendChild(div)})}else{timerList.innerHTML='<div class="row"><span class="label">Nenhum timer</span></div>'}
+if(d.cyclic){document.getElementById('cyclicEnabled').checked=!!d.cyclic.enabled;document.getElementById('cyclicDuration').value=d.cyclic.duration_min||30}
+if(d.pulse){document.getElementById('pulseEnabled').checked=!!d.pulse.enabled;document.getElementById('pulseDuration').value=d.pulse.duration_min||15}
+if(d.sync){document.getElementById('syncEnabled').checked=!!d.sync.enabled;let sel=document.getElementById('syncDeviceSelect');let tid=d.sync.target_id||'';let opt=sel.querySelector('option[value="'+tid+'"]');if(opt){sel.value=tid;document.getElementById('syncManualRow').style.display='none'}else{document.getElementById('syncTargetId').value=tid;sel.value='__manual__';document.getElementById('syncManualRow').style.display=''}}
 let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
+async function saveCyclic(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:document.getElementById('cyclicEnabled').checked,duration_min:parseInt(document.getElementById('cyclicDuration').value)||30}})});footerEl.textContent='Ciclico salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function savePulse(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulse:{enabled:document.getElementById('pulseEnabled').checked,duration_min:parseInt(document.getElementById('pulseDuration').value)||15}})});footerEl.textContent='Pulso salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function saveSync(){let sel=document.getElementById('syncDeviceSelect');let tid=sel.value==='__manual__'?document.getElementById('syncTargetId').value.trim():sel.value;try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sync:{enabled:document.getElementById('syncEnabled').checked,target_id:tid}})});footerEl.textContent='Sync salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
+function syncOnDeviceChange(){let sel=document.getElementById('syncDeviceSelect');let manualRow=document.getElementById('syncManualRow');if(sel.value==='__manual__'){manualRow.style.display=''}else{manualRow.style.display='none'}}
 async function fetchRepeater(d){try{if(!d){let r=await fetch('/api/state');d=await r.json();}
 let nav=document.getElementById('navRepeater');
 if(d.repeater_supported&&d.repeater_enabled){nav.style.display='flex';document.getElementById('repState').textContent='ATIVADO';document.getElementById('repFwd').textContent=d.repeater_fwd||0;
 let list=document.getElementById('repClientList');list.innerHTML='';
 if(d.repeater_clients&&d.repeater_clients.length){d.repeater_clients.forEach(function(c){
 let div=document.createElement('div');div.className='row';div.innerHTML='<span class="label">'+c.mac+'</span><span class="value">'+c.packets+' pkts</span>';list.appendChild(div)})}else{list.innerHTML='<div class="row"><span class="label">Nenhum cliente visto</span></div>'}}else{nav.style.display='none';let rs=document.getElementById('repState');if(rs)rs.textContent='DESATIVADO'}}catch(e){}}
-async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn btn-sm '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){if(rb)rb.textContent='ERRO'}}
+async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){if(rb)rb.textContent='ERRO'}}
+async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await r.json();let sel=document.getElementById('syncDeviceSelect');let curVal=sel.value;while(sel.options.length>2)sel.remove(2);arr.forEach(function(id){let o=document.createElement('option');o.value=id;o.text=id;sel.appendChild(o)});if(curVal!='__manual__'){let match=sel.querySelector('option[value="'+curVal+'"]');if(match)sel.value=curVal}}catch(e){}}
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 )=====";
 #ifdef HABILITA_PINOS
@@ -276,13 +320,13 @@ list.innerHTML='';d.pins.forEach(function(p){
 let div=document.createElement('div');div.className='row';
 div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
 list.appendChild(div)})}catch(e){}}
-setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers();if(currentSection==='pins')fetchPins()},3000);
-fetchState();fetchSettings();fetchTimers();if(currentSection==='pins')fetchPins();
+setInterval(function(){fetchState();if(currentSection==='pins')fetchPins()},3000);
+fetchState();fetchSettings();fetchTimers();loadDevices();if(currentSection==='pins')fetchPins();
 )=====";
 #else
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
-setInterval(function(){fetchState();if(currentSection==='timer')fetchTimers()},3000);
-fetchState();fetchSettings();fetchTimers();
+setInterval(function(){fetchState()},3000);
+fetchState();fetchSettings();fetchTimers();loadDevices();
 )=====";
 #endif
 static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(

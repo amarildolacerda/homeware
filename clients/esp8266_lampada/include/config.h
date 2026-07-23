@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.0.29"
+#define FW_VERSION "v0.0.30"
 #endif
 
 #ifndef DEVICE_NAME
@@ -93,6 +93,10 @@
 
 #ifndef TIMER_CHECK_INTERVAL_MS
 #define TIMER_CHECK_INTERVAL_MS 10000
+#endif
+
+#ifndef CYCLIC_CHECK_INTERVAL_MS
+#define CYCLIC_CHECK_INTERVAL_MS 1000
 #endif
 
 #ifndef EEPROM_TIMEZONE_ADDR

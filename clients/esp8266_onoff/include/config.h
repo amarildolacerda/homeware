@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "v0.0.29"
+#define FW_VERSION "v0.0.30"
 #endif
 
 #ifndef DEVICE_NAME
@@ -98,6 +98,12 @@
 #ifndef REPEATER_MAC
 #define REPEATER_MAC ""
 #endif
+
+/* EEPROM address for repeater enable flag (byte 8, free area between gateway MAC and name) */
+#define EEPROM_REPEATER_EN_ADDR 8
+
+/* Cyclic timer check interval (ms) */
+#define CYCLIC_CHECK_INTERVAL_MS 1000
 
 /* Pinos GPIO disponiveis para configuracao do relé */
 static const int AVAILABLE_GPIOS[] = {0, 2, 4, 5, 12, 13, 14, 15, 16};

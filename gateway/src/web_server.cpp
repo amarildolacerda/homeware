@@ -129,9 +129,12 @@ static void apply_wifi_static_ip() {
 static bool pairing_config_load() {
     EEPROM.begin(EEPROM_SIZE);
     uint8_t val = EEPROM.read(EEPROM_PAIRING_EN_OFFSET);
+    if (val == 1) { EEPROM.end(); return true; }
+    if (val == 0) { EEPROM.end(); return false; }
+    EEPROM.write(EEPROM_PAIRING_EN_OFFSET, 0);
+    EEPROM.commit();
     EEPROM.end();
-    if (val == 0 || val == 1) return (bool)val;
-    return PAIRING_ENABLED_DEFAULT;
+    return false;
 }
 
 static void pairing_config_save(bool enabled) {
@@ -527,12 +530,20 @@ void web_server_init() {
     
     s_server.on("/update", HTTP_POST, []() {
         if (Update.hasError()) {
+#ifdef ESP32
             console.printf("[OTA] Error: %s\n", Update.errorString());
+#else
+            console.printf("[OTA] Error: %s\n", Update.getErrorString().c_str());
+#endif
             s_server.send(500, "application/json", "{\"status\":\"error\"}");
             return;
         }
         if (!Update.end()) {
+#ifdef ESP32
             console.printf("[OTA] End failed: %s\n", Update.errorString());
+#else
+            console.printf("[OTA] End failed: %s\n", Update.getErrorString().c_str());
+#endif
             s_server.send(500, "application/json", "{\"status\":\"error\"}");
             return;
         }
@@ -543,7 +554,7 @@ void web_server_init() {
         HTTPUpload &upload = s_server.upload();
         if (upload.status == UPLOAD_FILE_START) {
             console.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-            if (!Update.begin()) {
+            if (!Update.begin(upload.totalSize)) {
                 Update.printError(console);
                 console.printf("[OTA] Begin failed (no OTA partition space?)\n");
             }

@@ -128,6 +128,14 @@ input[type=text]:focus{border-color:var(--primary)}
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
 </div>
 </div>
+<div class="card" style="margin-top:12px">
+<div class="row" style="flex-direction:column;gap:6px">
+<span class="label">Atualizar Firmware (OTA)</span>
+<input type="file" id="otaFile" accept=".bin">
+<button class="btn btn-primary" style="margin-top:6px" onclick="doUpdate()">Enviar e Atualizar</button>
+<span class="value" id="otaStatus" style="font-size:.72rem;color:var(--muted-subtle)"></span>
+</div>
+</div>
 </div>
 </div>
 <div class="footer-bar">
@@ -158,6 +166,7 @@ function showSection(s){document.querySelectorAll('.section').forEach(function(e
 function toggleDetails(){var c=document.getElementById('detBody');var a=document.getElementById('detArrow');c.classList.toggle('open');a.parentElement.classList.toggle('open')}
 async function saveName(){let nm=document.getElementById('deviceNameInput').value.trim();if(!nm)return;try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_name:nm})});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
+function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
 let active=d.motion_state;
 motionValue.innerHTML=active?'\u{1F6A8}':'\u{1F6AB}';
@@ -229,6 +238,7 @@ h1{color:var(--primary);font-size:1.2rem;margin-bottom:16px}
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div><div class="desc">Configurações</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div><div class="desc">Atualizar {"device_name":"..."}</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div><div class="desc">Upload firmware</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div><div class="desc">Reiniciar dispositivo</div></div>
 <p style="margin-top:16px"><a href="/" style="color:var(--primary)">&larr; Dashboard</a></p>
 </body>
 </html>

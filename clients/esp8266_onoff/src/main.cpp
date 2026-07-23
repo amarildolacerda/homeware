@@ -11,8 +11,12 @@
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
-#include "console.h"
+#include "common_console.h"
+#include "common_espnow.h"
+#include "common_web.h"
+#include "common_repeater.h"
 #include "timer.h"
+#include <LittleFS.h>
 
 static const char *TAG = "esp8266-onoff";
 
@@ -30,6 +34,10 @@ static unsigned long s_pair_wait_until = 0;
 static bool s_gateway_connected = false;
 static bool s_paired = false;
 static uint8_t s_gateway_mac[6];
+
+static bool mac_is_nonzero(const uint8_t *mac) {
+    return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
+}
 static uint16_t s_sequence = 0;
 static uint16_t s_assigned_slot = 0;
 static int s_pair_attempts = 0;
@@ -54,7 +62,6 @@ static char s_device_name[32] = DEVICE_NAME;
 
 static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
-static bool s_use_repeater = false;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
@@ -67,6 +74,7 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static unsigned long s_last_timer_check = 0;
+static unsigned long s_last_cyclic_check = 0;
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
 
@@ -98,8 +106,6 @@ static unsigned long get_synced_epoch(void) {
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
 #define EEPROM_MAGIC 0xAA
-#define EEPROM_PULSE_ENABLED_ADDR 224
-#define EEPROM_PULSE_DURATION_ADDR 225
 
 static bool s_pulse_enabled = false;
 static uint16_t s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
@@ -117,34 +123,6 @@ static void on_timer_fire(uint8_t action)
         s_last_espnow_send = 0;
         espnow_send_data();
     }
-}
-
-static void save_gateway_mac(const uint8_t *mac)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, EEPROM_MAGIC);
-    for (int i = 0; i < 6; i++)
-        EEPROM.write(EEPROM_GATEWAY_MAC_ADDR + 1 + i, mac[i]);
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool load_gateway_mac(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR);
-    if (marker == EEPROM_MAGIC)
-    {
-        for (int i = 0; i < 6; i++)
-            s_gateway_mac[i] = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR + 1 + i);
-        EEPROM.end();
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Loaded gateway MAC: %s\n", TAG, mac_str);
-        return true;
-    }
-    EEPROM.end();
-    return false;
 }
 
 static void save_relay_state(void)
@@ -253,81 +231,6 @@ static void load_startup_mode(void)
         s_startup_mode = 0;
 }
 
-static void save_pulse_config(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_PULSE_ENABLED_ADDR, s_pulse_enabled ? 1 : 0);
-    EEPROM.write(EEPROM_PULSE_DURATION_ADDR, s_pulse_duration_min & 0xFF);
-    EEPROM.write(EEPROM_PULSE_DURATION_ADDR + 1, (s_pulse_duration_min >> 8) & 0xFF);
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static void load_pulse_config(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    s_pulse_enabled = EEPROM.read(EEPROM_PULSE_ENABLED_ADDR) ? true : false;
-    uint8_t lo = EEPROM.read(EEPROM_PULSE_DURATION_ADDR);
-    uint8_t hi = EEPROM.read(EEPROM_PULSE_DURATION_ADDR + 1);
-    EEPROM.end();
-    uint16_t val = (uint16_t)lo | ((uint16_t)hi << 8);
-    if (val >= PULSE_MIN_MINUTES && val <= PULSE_MAX_MINUTES)
-        s_pulse_duration_min = val;
-    else
-        s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
-}
-
-static void save_device_name(const char *name)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_NAME_ADDR, 0xFF);
-    for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_NAME_ADDR + 1 + i, name[i]);
-        if (name[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX, '\0');
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool is_valid_name(const char *s)
-{
-    if (!s || s[0] == '\0')
-        return false;
-    for (int i = 0; s[i]; i++)
-    {
-        char c = s[i];
-        if (c < 32 || c > 126)
-            return false;
-    }
-    return true;
-}
-
-static void load_device_name(void)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_NAME_ADDR);
-    if (marker == 0xFF)
-    {
-        char buf[EEPROM_NAME_MAX];
-        for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-        {
-            buf[i] = EEPROM.read(EEPROM_NAME_ADDR + 1 + i);
-            if (buf[i] == '\0')
-                break;
-        }
-        buf[EEPROM_NAME_MAX - 1] = '\0';
-        if (is_valid_name(buf))
-        {
-            strncpy(s_device_name, buf, sizeof(s_device_name) - 1);
-            s_device_name[sizeof(s_device_name) - 1] = '\0';
-        }
-    }
-    EEPROM.end();
-}
-
 static void save_wifi_credentials(const char *ssid, const char *pass)
 {
     EEPROM.begin(EEPROM_SIZE);
@@ -390,18 +293,6 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
     return found;
 }
 
-static bool mac_parse(const char *str, uint8_t *mac)
-{
-    int vals[6];
-    if (sscanf(str, "%x:%x:%x:%x:%x:%x",
-               &vals[0], &vals[1], &vals[2],
-               &vals[3], &vals[4], &vals[5]) != 6)
-        return false;
-    for (int i = 0; i < 6; i++)
-        mac[i] = (uint8_t)vals[i];
-    return true;
-}
-
 static void set_relay(bool state);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
@@ -437,6 +328,11 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 
 static bool espnow_send_heartbeat(void);
 
+static void espnow_send_fn(const uint8_t *mac, const uint8_t *data, int len, const char *tag)
+{
+    espnow_send_wrapper(mac, data, (size_t)len, tag);
+}
+
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 {
     s_espnow_rx_count++;
@@ -450,12 +346,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         if (len < sizeof(espnow_pair_response_t))
             return;
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
+        if (mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
+            return;
         if (resp->status == PAIR_STATUS_OK)
         {
-            if (!s_use_repeater)
+            if (!repeater_is_enabled())
             {
                 mac_copy(s_gateway_mac, mac);
-                save_gateway_mac(mac);
+                espnow_save_gateway_mac(mac, TAG);
             }
             s_assigned_slot = resp->assigned_slot;
             s_paired = true;
@@ -474,6 +372,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
+        if (!mac_equal(mac, s_gateway_mac))
+            return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
         {
@@ -485,6 +385,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_RESTART:
     {
         if (len < sizeof(espnow_restart_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_restart_t *rst = (espnow_restart_t *)data;
         if (mac_equal(rst->target_mac, s_my_mac))
         {
@@ -501,6 +402,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_NAK:
     {
         if (len < sizeof(espnow_nak_t)) return;
+        if (!mac_equal(mac, s_gateway_mac)) return;
         espnow_nak_t *nak = (espnow_nak_t *)data;
         if (nak->reason == NAK_REASON_GATEWAY_LOST)
         {
@@ -514,6 +416,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     case ESPNOW_MSG_TIME_SYNC:
     {
         if (len < sizeof(espnow_time_sync_t))
+            return;
+        if (!mac_equal(mac, s_gateway_mac))
             return;
         espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
         s_synced_epoch = ts->epoch_seconds;
@@ -544,50 +448,10 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
     /* Repeater: forward messages between clients and gateway */
-    if (s_paired && s_use_repeater)
+    if (s_paired && repeater_is_enabled())
     {
-        if (mac_equal(mac, s_gateway_mac))
-        {
-            /* From gateway → broadcast (other devices check target_mac) */
-            espnow_send_wrapper(s_broadcast_mac, data, len, TAG);
-        }
-        else
-        {
-            /* From client → forward to gateway */
-            espnow_send_wrapper(s_gateway_mac, data, len, TAG);
-        }
+        repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac, espnow_send_fn, TAG);
     }
-}
-
-static bool espnow_init_client(void)
-{
-    if (esp_now_init() != 0)
-    {
-        console.printf("[%s] ESP-NOW init failed\n", TAG);
-        return false;
-    }
-    esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
-    esp_now_register_send_cb(espnow_send_cb);
-    esp_now_register_recv_cb(espnow_recv_cb);
-    s_espnow_ready = true;
-    console.printf("[%s] ESP-NOW initialized\n", TAG);
-    return true;
-}
-
-static bool espnow_add_peer(const uint8_t *mac)
-{
-    if (!s_espnow_ready)
-        return false;
-    esp_now_del_peer((uint8_t *)mac);
-    int ch = ESP_NOW_CHANNEL;
-    int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
-    if (ret != 0)
-    {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Failed to add peer %s: %d\n", TAG, mac_str, ret);
-    }
-    return (ret == 0);
 }
 
 #define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t *)0)->payload))
@@ -626,7 +490,7 @@ static bool espnow_send_data(void)
 
     hdr->payload_len = sizeof(payload_onoff_t) + 4 + 2;
 
-    if (!espnow_add_peer(s_gateway_mac))
+    if (!espnow_client_add_peer(s_gateway_mac, TAG))
     {
         console.printf("[%s] Failed to add gateway peer\n", TAG);
         return false;
@@ -660,7 +524,7 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_add_peer(s_gateway_mac))
+    if (!espnow_client_add_peer(s_gateway_mac, TAG))
         return false;
 
     s_ack_received = false;
@@ -688,7 +552,7 @@ static bool espnow_send_pair_request(void)
     strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
     req->device_name[sizeof(req->device_name) - 1] = '\0';
 
-    if (!espnow_add_peer(s_broadcast_mac))
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG))
         return false;
 
     s_ack_received = false;
@@ -704,6 +568,8 @@ static void set_relay(bool state)
     save_relay_state();
     if (state && s_pulse_enabled)
         s_pulse_on_time = millis();
+    if (!state)
+        cyclic_reset();
     s_last_espnow_send = 0;
 }
 
@@ -896,11 +762,11 @@ static void handle_api_wifi(void)
             if (doc.containsKey("device_name"))
             {
                 const char *new_name = doc["device_name"];
-                if (is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
+                if (espnow_is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
                 {
                     strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                     s_device_name[sizeof(s_device_name) - 1] = '\0';
-                    save_device_name(s_device_name);
+                    espnow_save_device_name(s_device_name);
                 }
             }
 
@@ -909,9 +775,10 @@ static void handle_api_wifi(void)
                 const char *mac_str = doc["repeater_mac"];
                 if (strlen(mac_str) > 0 && mac_parse(mac_str, s_gateway_mac))
                 {
-                    s_use_repeater = true;
+                    repeater_set_enabled(true);
+                    repeater_save_enable();
                     s_paired = true;
-                    save_gateway_mac(s_gateway_mac);
+                    espnow_save_gateway_mac(s_gateway_mac, TAG);
                 }
             }
 
@@ -930,32 +797,12 @@ static void handle_api_wifi(void)
     }
 }
 
-static void serve_pgm_page(const char *page)
-{
-    size_t total = strlen_P(page);
-    WiFiClient cl = s_server.client();
-    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-    cl.print(total);
-    cl.print(F("\r\nConnection: close\r\n\r\n"));
-    PGM_P src = page;
-    char buf[256];
-    while (total > 0)
-    {
-        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-        memcpy_P(buf, src, chunk);
-        cl.write((const uint8_t *)buf, chunk);
-        src += chunk;
-        total -= chunk;
-        yield();
-    }
-}
-
 static void handle_root(void)
 {
     if (s_config_portal_active)
         s_server.send(200, "text/html", FPSTR(PAGE_WIFI_CONFIG));
     else
-        serve_pgm_page(PAGE_DASHBOARD);
+        serve_pgm_page(s_server, PAGE_DASHBOARD);
 }
 
 static void handle_api_state(void)
@@ -1033,54 +880,6 @@ static void handle_api_relay(void)
         {
             s_server.send(400, "application/json", "{\"error\":\"missing state\"}");
         }
-    }
-}
-
-static void handle_api_pin(void)
-{
-    if (s_server.method() == HTTP_GET)
-    {
-        int pin = s_server.arg("gpio").toInt();
-        pinMode(pin, INPUT_PULLUP);
-        int state = digitalRead(pin);
-        String json;
-        JsonDocument doc;
-        doc["gpio"] = pin;
-        doc["state"] = state;
-        serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
-    }
-    else if (s_server.method() == HTTP_POST)
-    {
-        String body = s_server.arg("plain");
-        JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, body);
-        if (err)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
-            return;
-        }
-        int pin = doc["gpio"] | -1;
-        if (pin < 0 || pin > 16)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid gpio\"}");
-            return;
-        }
-        int state = doc["state"] | -1;
-        if (state != 0 && state != 1)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"state must be 0 or 1\"}");
-            return;
-        }
-        pinMode(pin, OUTPUT);
-        digitalWrite(pin, state);
-        String json;
-        JsonDocument resp;
-        resp["gpio"] = pin;
-        resp["state"] = state;
-        resp["status"] = "ok";
-        serializeJson(resp, json);
-        s_server.send(200, "application/json", json);
     }
 }
 
@@ -1220,7 +1019,8 @@ static void handle_console(char c)
         s_pulse_enabled = !s_pulse_enabled;
         if (s_pulse_enabled && s_relay_state)
             s_pulse_on_time = millis();
-        save_pulse_config();
+        timer_pulse_set_enabled(s_pulse_enabled);
+        timer_save_littlefs();
         console.printf("[%s] Pulse %s (%d min)\n", TAG, s_pulse_enabled ? "ativado" : "desativado", s_pulse_duration_min);
         break;
     case 's':
@@ -1250,7 +1050,7 @@ static void handle_console(char c)
         }
         console.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
-        if (s_use_repeater)
+        if (repeater_is_enabled())
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1310,11 +1110,11 @@ static void handle_api_settings(void)
         if (doc.containsKey("device_name"))
         {
             const char *new_name = doc["device_name"];
-            if (is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
+            if (espnow_is_valid_name(new_name) && strcmp(s_device_name, new_name) != 0)
             {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
-                save_device_name(s_device_name);
+                espnow_save_device_name(s_device_name);
                 if (s_alexa_dev)
                     s_alexa_dev->setName(s_device_name);
                 console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
@@ -1406,6 +1206,12 @@ static void handle_api_timers(void)
         String json;
         JsonDocument doc;
         timer_to_json(doc);
+        JsonObject c = doc["cyclic"].to<JsonObject>();
+        c["enabled"] = cyclic_get_enabled();
+        c["duration_min"] = cyclic_get_duration();
+        JsonObject p = doc["pulse"].to<JsonObject>();
+        p["enabled"] = s_pulse_enabled;
+        p["duration_min"] = s_pulse_duration_min;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1419,9 +1225,31 @@ static void handle_api_timers(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
+        bool ok = true;
+        if (doc.containsKey("cyclic")) {
+            JsonObject c = doc["cyclic"];
+            if (c.containsKey("enabled")) cyclic_set_enabled(c["enabled"]);
+            if (c.containsKey("duration_min")) cyclic_set_duration(c["duration_min"]);
+        }
+        if (doc.containsKey("pulse")) {
+            JsonObject p = doc["pulse"];
+            if (p.containsKey("enabled")) {
+                s_pulse_enabled = p["enabled"];
+                timer_pulse_set_enabled(s_pulse_enabled);
+                if (s_pulse_enabled && s_relay_state) s_pulse_on_time = millis();
+            }
+            if (p.containsKey("duration_min")) {
+                int val = p["duration_min"];
+                if (val < PULSE_MIN_MINUTES) val = PULSE_MIN_MINUTES;
+                if (val > PULSE_MAX_MINUTES) val = PULSE_MAX_MINUTES;
+                s_pulse_duration_min = (uint16_t)val;
+                timer_pulse_set_duration(s_pulse_duration_min);
+            }
+        }
         int timer_index = doc["index"] | -1;
-        bool ok;
-        if (timer_index >= 0) {
+        if (doc.containsKey("cyclic") || doc.containsKey("pulse")) {
+            /* cyclic/pulse-only update, no timer set needed */
+        } else if (timer_index >= 0) {
             timer_config_t cfg;
             cfg.hour = doc["hour"] | 0;
             cfg.minute = doc["minute"] | 0;
@@ -1432,7 +1260,6 @@ static void handle_api_timers(void)
         } else if (doc.containsKey("timers")) {
             ok = timer_from_json(doc);
         } else {
-            // single timer without index — find first empty slot or append
             timer_config_t cfg;
             cfg.hour = doc["hour"] | 0;
             cfg.minute = doc["minute"] | 0;
@@ -1448,7 +1275,7 @@ static void handle_api_timers(void)
         }
         if (ok)
         {
-            timer_save();
+            timer_save_littlefs();
             String json;
             JsonDocument resp;
             resp["status"] = "ok";
@@ -1519,7 +1346,9 @@ static void handle_api_pulse(void)
         }
         if (s_pulse_enabled && s_relay_state)
             s_pulse_on_time = millis();
-        save_pulse_config();
+        timer_pulse_set_enabled(s_pulse_enabled);
+        timer_pulse_set_duration(s_pulse_duration_min);
+        timer_save_littlefs();
         String json;
         JsonDocument resp;
         resp["status"] = "ok";
@@ -1584,7 +1413,7 @@ void setup(void)
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
-    load_device_name();
+    espnow_load_device_name(s_device_name, sizeof(s_device_name));
 
     console.printf("\n");
     console.printf("============================================\n");
@@ -1599,7 +1428,11 @@ void setup(void)
 
     hwifi_begin();
 
-    espnow_init_client();
+    s_espnow_ready = espnow_client_init(TAG);
+    if (s_espnow_ready) {
+        esp_now_register_send_cb(espnow_send_cb);
+        esp_now_register_recv_cb(espnow_recv_cb);
+    }
     WiFi.macAddress(s_my_mac);
 
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
@@ -1609,11 +1442,11 @@ void setup(void)
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
-                { serve_pgm_page(PAGE_DOCS); });
+                { serve_pgm_page(s_server, PAGE_DOCS); });
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
-    s_server.on("/api/pin", HTTP_ANY, handle_api_pin);
+    s_server.on("/api/pin", HTTP_ANY, []() { handle_api_pin(s_server); });
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
@@ -1636,18 +1469,22 @@ void setup(void)
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
+    LittleFS.begin();
+
+    repeater_init(EEPROM_REPEATER_EN_ADDR);
+
     /* Check for REPEATER_MAC from config.h */
     if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
     {
-        s_use_repeater = true;
+        repeater_set_enabled(true);
+        repeater_save_enable();
         s_paired = true;
         char mac_str[18];
         mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
         console.printf("[%s] Using repeater MAC: %s\n", TAG, mac_str);
     }
-    else if (load_gateway_mac())
+    else if (espnow_load_gateway_mac(s_gateway_mac, TAG))
     {
-        console.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;
     }
     else
@@ -1656,8 +1493,22 @@ void setup(void)
     }
 
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
-    console.printf("[%s] Timer module initialized\n", TAG);
-    load_pulse_config();
+    if (!timer_load_littlefs()) {
+        timer_load();  /* EEPROM migration */
+        timer_save_littlefs();
+    }
+    if (timer_load_littlefs()) {
+        EEPROM.begin(EEPROM_SIZE);
+        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
+            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
+        EEPROM.commit();
+        EEPROM.end();
+        console.printf("[%s] EEPROM timer region cleared\n", TAG);
+    }
+    console.printf("[%s] Timer module initialized (LittleFS)\n", TAG);
+
+    s_pulse_enabled = timer_pulse_get_enabled();
+    s_pulse_duration_min = timer_pulse_get_duration();
     console.printf("[%s] Pulse: %s (%d min)\n", TAG, s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);
 
     console.printf("============================================\n");
@@ -1770,6 +1621,14 @@ void loop(void)
         {
             on_timer_fire((uint8_t)timer_action);
         }
+    }
+
+    if (now - s_last_cyclic_check > CYCLIC_CHECK_INTERVAL_MS)
+    {
+        s_last_cyclic_check = now;
+        int8_t ca = cyclic_check(now, s_relay_state);
+        if (ca == 1) { console.printf("[%s] Cyclic ON\n", TAG); set_relay(true); }
+        else if (ca == -1) { console.printf("[%s] Cyclic OFF\n", TAG); set_relay(false); }
     }
 
     if (s_pulse_enabled && s_relay_state && (now - s_pulse_on_time > (unsigned long)s_pulse_duration_min * 60000))

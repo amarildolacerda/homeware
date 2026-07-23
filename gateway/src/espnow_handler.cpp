@@ -242,6 +242,52 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             break;
         }
 
+        case ESPNOW_MSG_COMMAND: {
+            console.println("ESPNOW_MSG_COMMAND");
+            /* Minimum size = old struct (10 bytes). target_device_id only
+               present if len >= sizeof(espnow_command_t) — backward compat. */
+            if (len < 10) { s_crc_errors++; return; }
+            espnow_command_t *cmd = (espnow_command_t *)data;
+
+            uint8_t target[6];
+            mac_copy(target, cmd->target_mac);
+
+            /* If target_mac is zero, resolve from target_device_id via name */
+            bool mac_is_zero = (target[0] == 0 && target[1] == 0 && target[2] == 0 &&
+                                target[3] == 0 && target[4] == 0 && target[5] == 0);
+            if (mac_is_zero && len >= (int)sizeof(espnow_command_t) && cmd->target_device_id[0] != '\0') {
+                int slot = sensor_registry_find_by_name(cmd->target_device_id);
+                if (slot < 0) {
+                    console.printf("[ESP-NOW] COMMAND: device '%s' not found in registry\n",
+                                   cmd->target_device_id);
+                    return;
+                }
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (!s || !s->paired) return;
+                mac_copy(target, s->mac);
+                char mac_str[18];
+                mac_to_str(target, mac_str, sizeof(mac_str));
+                console.printf("[ESP-NOW] COMMAND: resolved '%s' -> %s slot=%d\n",
+                               cmd->target_device_id, mac_str, slot);
+            }
+
+            if (mac_is_zero) {
+                console.println("[ESP-NOW] COMMAND: no target_mac and no device_id, ignored");
+                return;
+            }
+
+            /* Forward command to target client via broadcast */
+            espnow_command_t fwd;
+            memset(&fwd, 0, sizeof(fwd));
+            fwd.msg_type = ESPNOW_MSG_COMMAND;
+            fwd.sequence = cmd->sequence;
+            mac_copy(fwd.target_mac, target);
+            fwd.command = cmd->command;
+
+            espnow_send_wrapper((uint8_t *)s_bcast_addr, (uint8_t *)&fwd, sizeof(fwd), "ESP-NOW");
+            break;
+        }
+
         default:
             s_crc_errors++;
             break;

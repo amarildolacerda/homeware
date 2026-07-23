@@ -11,6 +11,8 @@
 #include "pages.h"
 #include "espnow_protocol.h"
 #include "console.h"
+#include "common_espnow.h"
+#include "common_web.h"
 
 static const char *TAG = "esp8266-pir";
 
@@ -62,81 +64,6 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_NAME_MAX 48
 #define EEPROM_MAGIC 0xAA
 
-static void save_gateway_mac(const uint8_t *mac)
-{
-    EEPROM.begin(128);
-    EEPROM.write(EEPROM_GATEWAY_MAC_ADDR, EEPROM_MAGIC);
-    for (int i = 0; i < 6; i++)
-        EEPROM.write(EEPROM_GATEWAY_MAC_ADDR + 1 + i, mac[i]);
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool load_gateway_mac(void)
-{
-    EEPROM.begin(128);
-    uint8_t marker = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR);
-    if (marker == EEPROM_MAGIC)
-    {
-        for (int i = 0; i < 6; i++)
-            s_gateway_mac[i] = EEPROM.read(EEPROM_GATEWAY_MAC_ADDR + 1 + i);
-        EEPROM.end();
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Loaded gateway MAC: %s\n", TAG, mac_str);
-        return true;
-    }
-    EEPROM.end();
-    return false;
-}
-
-static void save_device_name(const char *name)
-{
-    EEPROM.begin(128);
-    EEPROM.write(EEPROM_NAME_ADDR, 0xFF);
-    for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_NAME_ADDR + 1 + i, name[i]);
-        if (name[i] == '\0') break;
-    }
-    EEPROM.write(EEPROM_NAME_ADDR + EEPROM_NAME_MAX, '\0');
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool is_valid_name(const char *s)
-{
-    if (!s || s[0] == '\0') return false;
-    for (int i = 0; s[i]; i++)
-    {
-        char c = s[i];
-        if (c < 32 || c > 126) return false;
-    }
-    return true;
-}
-
-static void load_device_name(void)
-{
-    EEPROM.begin(128);
-    uint8_t marker = EEPROM.read(EEPROM_NAME_ADDR);
-    if (marker == 0xFF)
-    {
-        char buf[EEPROM_NAME_MAX];
-        for (int i = 0; i < EEPROM_NAME_MAX - 1; i++)
-        {
-            buf[i] = EEPROM.read(EEPROM_NAME_ADDR + 1 + i);
-            if (buf[i] == '\0') break;
-        }
-        buf[EEPROM_NAME_MAX - 1] = '\0';
-        if (is_valid_name(buf))
-        {
-            strncpy(s_device_name, buf, sizeof(s_device_name) - 1);
-            s_device_name[sizeof(s_device_name) - 1] = '\0';
-        }
-    }
-    EEPROM.end();
-}
-
 static bool espnow_send_heartbeat(void);
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
@@ -161,7 +88,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             {
                 mac_copy(s_gateway_mac, mac);
                 s_assigned_slot = resp->assigned_slot;
-                save_gateway_mac(mac);
+                espnow_save_gateway_mac(mac, TAG);
                 s_paired = true;
                 s_gateway_connected = true;
                 char mac_str[18];
@@ -224,37 +151,6 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 }
 
 
-static bool espnow_init_client(void)
-{
-    if (esp_now_init() != 0)
-    {
-        console.printf("[%s] ESP-NOW init failed\n", TAG);
-        return false;
-    }
-    esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
-    esp_now_register_send_cb(espnow_send_cb);
-    esp_now_register_recv_cb(espnow_recv_cb);
-    s_espnow_ready = true;
-    console.printf("[%s] ESP-NOW initialized\n", TAG);
-    return true;
-}
-
-static bool espnow_add_peer(const uint8_t *mac)
-{
-    if (!s_espnow_ready) return false;
-    esp_now_del_peer((uint8_t *)mac);
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    int ret = esp_now_add_peer((uint8_t *)mac, ESP_NOW_ROLE_COMBO, ch, NULL, 0);
-    if (ret != 0)
-    {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Failed to add peer %s: %d\n", TAG, mac_str, ret);
-    }
-    return (ret == 0);
-}
-
 static bool espnow_send_data(void)
 {
     if (!s_paired || !s_espnow_ready) return false;
@@ -283,15 +179,15 @@ static bool espnow_send_data(void)
     ip_ptr[3] = ip[3];
     hdr->payload_len = sizeof(payload_motion_t) + 4;
 
-    if (!espnow_add_peer(s_gateway_mac))
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG))
     {
-        console.printf("[%s] Failed to add gateway peer\n", TAG);
+        console.printf("[%s] Failed to add broadcast peer\n", TAG);
         return false;
     }
 
     s_ack_received = false;
     s_send_pending = true;
-    if (!espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG))
+    if (!espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG))
     {
         s_send_pending = false;
         return false;
@@ -316,10 +212,10 @@ static bool espnow_send_heartbeat(void)
     hdr->rssi = (int16_t)WiFi.RSSI();
     hdr->payload_len = 0;
 
-    if (!espnow_add_peer(s_gateway_mac)) return false;
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG)) return false;
 
     s_ack_received = false;
-    return espnow_send_wrapper(s_gateway_mac, buf, sizeof(buf), TAG);
+    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
 static bool espnow_send_pair_request(void)
@@ -342,7 +238,7 @@ static bool espnow_send_pair_request(void)
     strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
     req->device_name[sizeof(req->device_name) - 1] = '\0';
 
-    if (!espnow_add_peer(s_broadcast_mac)) return false;
+    if (!espnow_client_add_peer(s_broadcast_mac, TAG)) return false;
 
     s_ack_received = false;
     return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
@@ -412,7 +308,7 @@ static bool wifi_setup(bool force_config_portal = false)
         {
             strncpy(s_device_name, custom_dev_name.getValue(), sizeof(s_device_name) - 1);
             s_device_name[sizeof(s_device_name) - 1] = '\0';
-            save_device_name(s_device_name);
+            espnow_save_device_name(s_device_name);
         }
         s_wifi_configuration_mode = false;
         return true;
@@ -472,7 +368,7 @@ static void handle_api_settings(void)
             String name = doc["device_name"].as<String>();
             if (name.length() > 0)
             {
-                save_device_name(name.c_str());
+                espnow_save_device_name(name.c_str());
                 strncpy(s_device_name, name.c_str(), sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 s_server.send(200, "application/json", "{\"ok\":true}");
@@ -483,29 +379,9 @@ static void handle_api_settings(void)
     }
 }
 
-static void serve_pgm_page(const char *page)
-{
-    size_t total = strlen_P(page);
-    WiFiClient cl = s_server.client();
-    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-    cl.print(total);
-    cl.print(F("\r\nConnection: close\r\n\r\n"));
-    PGM_P src = page;
-    char buf[256];
-    while (total > 0)
-    {
-        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-        memcpy_P(buf, src, chunk);
-        cl.write((const uint8_t *)buf, chunk);
-        src += chunk;
-        total -= chunk;
-        yield();
-    }
-}
-
 static void handle_root(void)
 {
-    serve_pgm_page(PAGE_DASHBOARD);
+    serve_pgm_page(s_server, PAGE_DASHBOARD);
 }
 
 static void handle_api_state(void)
@@ -531,54 +407,6 @@ static void handle_api_state(void)
         serializeJson(doc, json);
     }
     s_server.send(200, "application/json", json);
-}
-
-static void handle_api_pin(void)
-{
-    if (s_server.method() == HTTP_GET)
-    {
-        int pin = s_server.arg("gpio").toInt();
-        pinMode(pin, INPUT_PULLUP);
-        int state = digitalRead(pin);
-        String json;
-        JsonDocument doc;
-        doc["gpio"] = pin;
-        doc["state"] = state;
-        serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
-    }
-    else if (s_server.method() == HTTP_POST)
-    {
-        String body = s_server.arg("plain");
-        JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, body);
-        if (err)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
-            return;
-        }
-        int pin = doc["gpio"] | -1;
-        if (pin < 0 || pin > 16)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"invalid gpio\"}");
-            return;
-        }
-        int state = doc["state"] | -1;
-        if (state != 0 && state != 1)
-        {
-            s_server.send(400, "application/json", "{\"error\":\"state must be 0 or 1\"}");
-            return;
-        }
-        pinMode(pin, OUTPUT);
-        digitalWrite(pin, state);
-        String json;
-        JsonDocument resp;
-        resp["gpio"] = pin;
-        resp["state"] = state;
-        resp["status"] = "ok";
-        serializeJson(resp, json);
-        s_server.send(200, "application/json", json);
-    }
 }
 
 static void handle_serial(char c)
@@ -644,6 +472,7 @@ static void handle_serial(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
+
         console.printf("  u    - info OTA\n");
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
@@ -734,7 +563,7 @@ void setup(void)
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
 
-    load_device_name();
+    espnow_load_device_name(s_device_name, sizeof(s_device_name));
 
     console.printf("\n");
     console.printf("============================================\n");
@@ -754,15 +583,24 @@ void setup(void)
         ESP.restart();
     }
 
-    espnow_init_client();
+    s_espnow_ready = espnow_client_init(TAG);
+    if (s_espnow_ready) {
+        esp_now_register_send_cb(espnow_send_cb);
+        esp_now_register_recv_cb(espnow_recv_cb);
+    }
     WiFi.macAddress(s_my_mac);
 
     s_server.on("/", handle_root);
-    s_server.on("/docs", []() { serve_pgm_page(PAGE_DOCS); });
+    s_server.on("/docs", []() { serve_pgm_page(s_server, PAGE_DOCS); });
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
-    s_server.on("/api/pin", handle_api_pin);
+    s_server.on("/api/pin", HTTP_ANY, []() { handle_api_pin(s_server); });
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
+    s_server.on("/api/restart", HTTP_POST, []() {
+        s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
+        delay(200);
+        ESP.restart();
+    });
     s_server.begin();
 
     ArduinoOTA.setHostname(s_device_id);
@@ -780,9 +618,8 @@ void setup(void)
     console.printf("\n  => Browser: http://%s\n", WiFi.localIP().toString().c_str());
     console.printf("  => Terminal: 'h' comando de ajuda\n");
 
-    if (load_gateway_mac())
+    if (espnow_load_gateway_mac(s_gateway_mac, TAG))
     {
-        console.printf("[%s] Gateway MAC loaded from EEPROM\n", TAG);
         s_paired = true;
     }
     else
