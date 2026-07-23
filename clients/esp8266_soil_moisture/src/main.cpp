@@ -16,6 +16,7 @@ enum State {
     STATE_INIT,
     STATE_WAIT_PAIR,
     STATE_SEND_DATA,
+    STATE_WAIT_ACK,
     STATE_SLEEP
 };
 
@@ -32,6 +33,7 @@ static bool s_has_gateway = false;
 static uint16_t s_assigned_slot = 0;
 
 static uint8_t s_my_mac[6];
+static uint8_t s_espnow_mac[6];
 static uint16_t s_soil_raw = 0;
 static uint8_t s_soil_pct = 0;
 static int s_battery = 100;
@@ -41,6 +43,7 @@ static bool s_config_mode = false;
 
 static bool s_ack_received = false;
 static int s_pair_attempts = 0;
+static int s_data_retries = 0;
 static bool s_suspend = false;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -55,6 +58,8 @@ static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
 #define WAIT_PAIR_TIMEOUT_MS 5000
 #define PAIR_RETRY_INTERVAL_MS 3000
+#define ACK_TIMEOUT_MS 2000
+#define MAX_DATA_RETRIES 3
 
 static void read_sensor(void)
 {
@@ -101,7 +106,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_ack_t)) return;
         espnow_ack_t *ack = (espnow_ack_t *)data;
-        if (mac_equal(ack->sensor_mac, s_my_mac))
+        if (mac_equal(ack->sensor_mac, s_espnow_mac))
             s_ack_received = ack->status == PAIR_STATUS_OK;
         break;
     }
@@ -281,6 +286,11 @@ void setup(void)
         esp_now_register_recv_cb(espnow_recv_cb);
     }
     WiFi.macAddress(s_my_mac);
+    memcpy(s_espnow_mac, s_my_mac, 6);
+    s_espnow_mac[0] ^= 0x02;
+    char mac_str[18];
+    mac_to_str(s_espnow_mac, mac_str, sizeof(mac_str));
+    console.printf("[%s] My MAC: %s, ESP-NOW: %s\n", TAG, WiFi.macAddress().c_str(), mac_str);
 }
 
 void loop(void)
@@ -422,10 +432,38 @@ void loop(void)
         delay(100);
         read_sensor();
         digitalWrite(LED_PIN, LOW);
+        s_ack_received = false;
         espnow_send_data();
         delay(LED_BLINK_SEND_MS);
         digitalWrite(LED_PIN, HIGH);
-        s_state = STATE_SLEEP;
+        s_data_retries = 0;
+        s_state_start = now;
+        s_state = STATE_WAIT_ACK;
+        break;
+
+    case STATE_WAIT_ACK:
+        if (s_ack_received)
+        {
+            console.printf("[%s] ACK recebido\n", TAG);
+            s_state = STATE_SLEEP;
+        }
+        else if (now - s_state_start > ACK_TIMEOUT_MS)
+        {
+            s_data_retries++;
+            if (s_data_retries >= MAX_DATA_RETRIES)
+            {
+                console.printf("[%s] Sem ACK apos %d tentativas\n", TAG, s_data_retries);
+                s_state = STATE_SLEEP;
+            }
+            else
+            {
+                console.printf("[%s] Reenviando dados (tentativa %d/%d)\n", TAG, s_data_retries, MAX_DATA_RETRIES);
+                read_sensor();
+                s_ack_received = false;
+                espnow_send_data();
+                s_state_start = now;
+            }
+        }
         break;
 
     case STATE_SLEEP:
