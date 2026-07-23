@@ -16,7 +16,6 @@ enum State {
     STATE_INIT,
     STATE_WAIT_PAIR,
     STATE_SEND_DATA,
-    STATE_WAIT_ACK,
     STATE_SLEEP
 };
 
@@ -30,9 +29,9 @@ static uint16_t s_sequence = 0;
 
 static uint8_t s_gateway_mac[6];
 static bool s_has_gateway = false;
-static bool s_paired = false;
 static uint16_t s_assigned_slot = 0;
 
+static uint8_t s_my_mac[6];
 static uint16_t s_soil_raw = 0;
 static uint8_t s_soil_pct = 0;
 static int s_battery = 100;
@@ -54,7 +53,7 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
 #define WAIT_PAIR_TIMEOUT_MS 5000
-#define WAIT_ACK_TIMEOUT_MS 3000
+#define PAIR_RETRY_INTERVAL_MS 3000
 
 static void read_sensor(void)
 {
@@ -89,7 +88,6 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             s_assigned_slot = resp->assigned_slot;
             espnow_save_gateway_mac(mac, TAG);
             s_has_gateway = true;
-            s_paired = true;
             char mac_str[18];
             mac_to_str(mac, mac_str, sizeof(mac_str));
             console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
@@ -100,10 +98,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_ack_t)) return;
         espnow_ack_t *ack = (espnow_ack_t *)data;
-        s_ack_received = ack->status == PAIR_STATUS_OK;
-        char mac_str[18];
-        mac_to_str(ack->sensor_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] ACK seq=%d status=%d slot=%d\n", TAG, ack->sequence, ack->status, ack->assigned_slot);
+        if (mac_equal(ack->sensor_mac, s_my_mac))
+            s_ack_received = ack->status == PAIR_STATUS_OK;
         break;
     }
     }
@@ -280,6 +276,7 @@ void setup(void)
         esp_now_register_send_cb(espnow_send_cb);
         esp_now_register_recv_cb(espnow_recv_cb);
     }
+    WiFi.macAddress(s_my_mac);
 }
 
 void loop(void)
@@ -293,61 +290,45 @@ void loop(void)
         console.printf("[%s] Sending pair request\n", TAG);
         espnow_send_pair_request();
         s_pair_attempts = 1;
-        s_state = STATE_WAIT_PAIR;
         s_state_start = now;
+        if (s_has_gateway)
+            s_state = STATE_SEND_DATA;
+        else
+            s_state = STATE_WAIT_PAIR;
         break;
 
     case STATE_WAIT_PAIR:
-        if (s_paired)
+        if (s_has_gateway)
         {
-            console.printf("[%s] Paired\n", TAG);
-            s_pair_attempts = 0;
             s_state = STATE_SEND_DATA;
         }
-        else if (now - s_state_start > WAIT_PAIR_TIMEOUT_MS)
+        else if (now - s_state_start > PAIR_RETRY_INTERVAL_MS)
         {
-            if (s_pair_attempts < ESPNOW_MAX_PAIR_ATTEMPTS)
+            s_pair_attempts++;
+            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
             {
-                s_pair_attempts++;
-                console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
-                espnow_send_pair_request();
-                s_state_start = now;
-            }
-            else if (s_has_gateway)
-            {
-                console.printf("[%s] Pair timeout, using saved gateway\n", TAG);
-                s_state = STATE_SEND_DATA;
+                console.printf("[%s] Pair failed after %d attempts\n", TAG, s_pair_attempts);
+                s_state = STATE_SLEEP;
             }
             else
             {
-                console.printf("[%s] Pair failed\n", TAG);
-                s_state = STATE_SLEEP;
+                console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
+                espnow_send_pair_request();
+                s_state_start = now;
             }
         }
         break;
 
     case STATE_SEND_DATA:
+        delay(200);
+        espnow_send_pair_request();
+        delay(100);
         read_sensor();
-        s_ack_received = false;
         digitalWrite(LED_PIN, LOW);
         espnow_send_data();
-        s_state = STATE_WAIT_ACK;
-        s_state_start = now;
-        break;
-
-    case STATE_WAIT_ACK:
-        if (s_ack_received)
-        {
-            console.printf("[%s] ACK received\n", TAG);
-            digitalWrite(LED_PIN, HIGH);
-            s_state = STATE_SLEEP;
-        }
-        else if (now - s_state_start > WAIT_ACK_TIMEOUT_MS)
-        {
-            console.printf("[%s] ACK timeout\n", TAG);
-            digitalWrite(LED_PIN, HIGH);
-            s_state = STATE_SLEEP;
-        }
+        delay(LED_BLINK_SEND_MS);
+        digitalWrite(LED_PIN, HIGH);
+        s_state = STATE_SLEEP;
         break;
 
     case STATE_SLEEP:
