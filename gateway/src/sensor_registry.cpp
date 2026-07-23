@@ -198,6 +198,14 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
+        case SENSOR_TYPE_SOIL_MOISTURE:
+        {
+            if (payload_len < sizeof(payload_soil_moisture_t)) return false;
+            payload_soil_moisture_t *pl = (payload_soil_moisture_t *)payload;
+            s->state.soil_moisture.raw_adc = pl->raw_adc;
+            s->state.soil_moisture.moisture_pct = pl->moisture_pct;
+            break;
+        }
     }
 
     size_t expected = 0;
@@ -212,6 +220,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_ONOFF:
         case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
         case SENSOR_TYPE_REPEATER: expected = sizeof(payload_repeater_status_t); break;
+        case SENSOR_TYPE_SOIL_MOISTURE: expected = sizeof(payload_soil_moisture_t); break;
     }
     if (expected && payload_len >= expected + 6) {
         memcpy(s->ip, payload + payload_len - 6, 4);
@@ -266,7 +275,7 @@ void sensor_registry_load() {
             // Skip corrupt entries: an invalid sensor type or an out-of-range
             // slot indicates garbage in EEPROM (e.g. from a different firmware
             // layout). Loading it would produce junk cards / invalid data.
-            if (type < SENSOR_TYPE_TEMP_HUM || type > SENSOR_TYPE_REPEATER ||
+            if (type < SENSOR_TYPE_TEMP_HUM || type > SENSOR_TYPE_SOIL_MOISTURE ||
                 slot >= MAX_VIRTUAL_SENSORS) {
                 console.printf("[EEPROM] Skipping corrupt entry at index %d (type=%d slot=%d)\n",
                                i, type, slot);
@@ -337,6 +346,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
         case SENSOR_TYPE_LIGHT: return "Lâmpada";
         case SENSOR_TYPE_TANK: return "Tanque";
         case SENSOR_TYPE_REPEATER: return "Repeater";
+        case SENSOR_TYPE_SOIL_MOISTURE: return "Solo";
         default: return "Sensor";
     }
 }
@@ -353,6 +363,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_LIGHT: return "light";
         case SENSOR_TYPE_TANK: return "tanque";
         case SENSOR_TYPE_REPEATER: return "repeater";
+        case SENSOR_TYPE_SOIL_MOISTURE: return "soil_moisture";
         default: return "unknown";
     }
 }

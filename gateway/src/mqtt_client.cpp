@@ -365,6 +365,13 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
                                  sensor->state.rain.rain_digital ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_SOIL_MOISTURE: {
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "soil");
+            publish_entity_config("sensor", entity, name, "Humidade Solo", "humidity", "%", false, id, model);
+            publish_entity_state("sensor", entity,
+                                 String(sensor->state.soil_moisture.moisture_pct).c_str());
+            break;
+        }
         case SENSOR_TYPE_TANK: {
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
             publish_entity_config("sensor", entity, name, "Nível", "water", "%", false, id, model);
@@ -463,6 +470,13 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "raind");
             publish_entity_state("binary_sensor", entity,
                                  sensor->state.rain.rain_digital ? "ON" : "OFF");
+            break;
+        }
+        case SENSOR_TYPE_SOIL_MOISTURE: {
+            char val[16];
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "soil");
+            snprintf(val, sizeof(val), "%u", sensor->state.soil_moisture.moisture_pct);
+            publish_entity_state("sensor", entity, val);
             break;
         }
         case SENSOR_TYPE_TANK: {
