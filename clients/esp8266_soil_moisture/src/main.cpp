@@ -41,6 +41,7 @@ static bool s_config_mode = false;
 
 static bool s_ack_received = false;
 static int s_pair_attempts = 0;
+static bool s_suspend = false;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -65,6 +66,8 @@ static void read_sensor(void)
         counter = 0;
         s_battery = max(0, s_battery - 1);
     }
+                    console.printf("Sensor: raw=%d pct=%d%% bat=%d%%\n", s_soil_raw, s_soil_pct, s_battery);
+
 }
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
@@ -154,6 +157,7 @@ static void do_deep_sleep(void)
 {
     console.printf("[%s] Deep sleep %ds\n", TAG, s_interval_s);
     Serial.flush();
+    delay(200);
     ESP.deepSleep((uint64_t)s_interval_s * 1000000ULL, WAKE_RF_DEFAULT);
 }
 
@@ -184,9 +188,9 @@ static bool wifi_setup(bool force_config_portal)
     s_config_mode = true;
     wifiManager.setConfigPortalTimeout(WIFI_CONFIG_PORTAL_TIMEOUT_S);
     char interval_str[8];
-    snprintf(interval_str, sizeof(interval_str), "%d", s_interval_s / 60);
+    snprintf(interval_str, sizeof(interval_str), "%d", s_interval_s);
     WiFiManagerParameter custom_dev_name("dev_name", "Device Name", s_device_name, 32);
-    WiFiManagerParameter custom_interval("interval", "Interval (min)", interval_str, 4);
+    WiFiManagerParameter custom_interval("interval", "Interval (s)", interval_str, 5);
     wifiManager.addParameter(&custom_dev_name);
     wifiManager.addParameter(&custom_interval);
     if (wifiManager.startConfigPortal(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS))
@@ -197,7 +201,7 @@ static bool wifi_setup(bool force_config_portal)
             s_device_name[sizeof(s_device_name) - 1] = '\0';
             espnow_save_device_name(s_device_name);
         }
-        int new_interval = atoi(custom_interval.getValue()) * 60;
+        int new_interval = atoi(custom_interval.getValue());
         if (new_interval >= DEEP_SLEEP_INTERVAL_MIN && new_interval <= DEEP_SLEEP_INTERVAL_MAX)
         {
             s_interval_s = new_interval;
@@ -260,7 +264,7 @@ void setup(void)
     unsigned long wifi_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
     while (WiFi.status() != WL_CONNECTED && millis() < wifi_deadline)
     {
-        delay(10);
+        delay(50);
     }
     if (WiFi.status() != WL_CONNECTED)
     {
@@ -282,6 +286,99 @@ void setup(void)
 void loop(void)
 {
     console.loop();
+    static bool s_first_loop = true;
+    if (s_first_loop)
+    {
+        console.printf("[%s] Aguardando tecla: %s\n", TAG, "h for help");
+        s_first_loop = false;
+    } else {
+        delay(100);
+    }
+    delay(1000);
+    if (Serial.available() > 0 && !s_suspend)
+    {
+        delay(1);
+        while (Serial.available()) Serial.read();
+        s_suspend = true;
+        console.printf("[%s] Suspenso - tecla pressionada\n", TAG);
+    }
+    if (s_suspend)
+    {
+        static bool menu_printed = false;
+        if (!menu_printed)
+        {
+            console.printf("\nComandos: s=status, i=intervalo, r=restart, h=ajuda\n> ");
+            menu_printed = true;
+        }
+        int c = Serial.read();
+        if (c != -1)
+        {
+            menu_printed = false;
+            console.printf("\n");
+            switch (c)
+            {
+            case 's':
+            {
+                read_sensor();
+                console.printf("WiFi: %s RSSI=%d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+                console.printf("Intervalo: %ds\n", s_interval_s);
+                break;
+            }
+            case 'i':
+            {
+                console.printf("Intervalo atual: %ds\n", s_interval_s);
+                console.printf("Digite novo intervalo (30-3600s): ");
+                unsigned long timeout = millis() + 10000;
+                int idx = 0;
+                char buf[8] = {0};
+                while (millis() < timeout && idx < 7)
+                {
+                    console.loop();
+                    int ch = Serial.read();
+                    if (ch >= '0' && ch <= '9')
+                    {
+                        buf[idx++] = (char)ch;
+                        Serial.write(ch);
+                    }
+                    else if (ch == '\n' || ch == '\r')
+                        break;
+                    delay(10);
+                }
+                if (idx > 0)
+                {
+                    int val = atoi(buf);
+                    if (val >= DEEP_SLEEP_INTERVAL_MIN && val <= DEEP_SLEEP_INTERVAL_MAX)
+                    {
+                        s_interval_s = val;
+                        EEPROM.begin(128);
+                        EEPROM.put(EEPROM_INTERVAL_ADDR, s_interval_s);
+                        EEPROM.commit();
+                        EEPROM.end();
+                        console.printf("\nIntervalo alterado para %ds\n", s_interval_s);
+                    }
+                    else
+                        console.printf("\nInvalido (%d-%d)\n", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
+                }
+                else
+                    console.printf("\nCancelado\n");
+                break;
+            }
+            case 'r':
+                console.printf("Restart...\n");
+                delay(100);
+                ESP.restart();
+                break;
+            case 'h':
+                console.printf("s=status i=intervalo r=restart h=ajuda\n");
+                break;
+            }
+            console.printf("> ");
+            menu_printed = true;
+        }
+        delay(50);
+        console.loop();
+        return;
+    }
     unsigned long now = millis();
 
     switch (s_state)
