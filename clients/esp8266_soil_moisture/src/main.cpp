@@ -214,6 +214,11 @@ void setup(void)
     console.begin();
     s_active_start = millis();
 
+    WiFi.disconnect();
+    delay(10);
+    WiFi.persistent(false);
+    WiFi.mode(WIFI_STA);
+
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
@@ -273,7 +278,6 @@ void setup(void)
         return;
     }
 
-    WiFi.mode(WIFI_STA);
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
     WiFi.begin();
     unsigned long wifi_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
