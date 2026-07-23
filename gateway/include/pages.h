@@ -355,6 +355,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .device-icon{font-size:1.5rem;width:36px;text-align:center}
 .device-name{font-weight:600;font-size:0.9rem}
 .device-type{font-size:0.7rem;color:var(--muted-subtle)}
+.last-info{font-size:0.7rem;color:var(--muted-subtle);margin:4px 12px 0}
 .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600}
 .badge.online{background:#dcfce7;color:#16a34a}
 .badge.offline{background:#fef2f2;color:#dc2626}
@@ -585,6 +586,7 @@ function buildSensorCard(s) {
       batteryBar(s.battery_pct)+
       rssiBar(s.last_rssi)+
     '</div>'+
+    '<div class="last-info">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '&nbsp;')+'</div>'+
     '<div class="state-group">'+
       (isType8 ? '' : renderState(s))+
     '</div>'+
