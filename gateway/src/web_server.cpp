@@ -312,6 +312,10 @@ void web_server_init() {
                     case SENSOR_TYPE_LIGHT:
                         state["state"] = s->state.onoff.state;
                         break;
+                    case SENSOR_TYPE_SOIL_MOISTURE:
+                        state["moisture_pct"] = s->state.soil_moisture.moisture_pct;
+                        state["raw_adc"] = s->state.soil_moisture.raw_adc;
+                        break;
                     case SENSOR_TYPE_REPEATER:
                         state["received"] = s->state.repeater.received;
                         state["forwarded"] = s->state.repeater.forwarded;
