@@ -545,8 +545,6 @@ function renderState(s) {
       for (var i = 0; i < 10; i++)
         bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
       html += '<div class="moisture-bars">'+bars+'</div>';
-      html += '<span class="state-item state-moisture">'+pct+'%</span>';
-      html += '<span class="state-item state-moisture">ADC:'+(st.raw_adc||0)+'</span>';
     } else {
       html += '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
     }
