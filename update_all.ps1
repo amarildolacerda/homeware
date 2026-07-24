@@ -1,9 +1,18 @@
 <#
 .SYNOPSIS
     Atualiza dispositivos via OTA — usa scan.py para descobrir, checa versão, atualiza se necessário
+.PARAMETER Force
+    Ignora a versão atual do dispositivo e força OTA em todos
 .EXAMPLE
     .\update_all.ps1
+.EXAMPLE
+    .\update_all.ps1 -f
 #>
+
+param(
+    [Alias('f')]
+    [switch]$Force
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -87,15 +96,17 @@ function Discover-Devices {
 # ---- deploy ----
 
 function Update-DeviceType {
-    param([string]$ProjectDir, [string]$EnvName, [array]$Devices, [string]$Label)
+    param([string]$ProjectDir, [string]$EnvName, [array]$Devices, [string]$Label, [switch]$Force)
     $localVer = Get-FwVersion -ProjectDir $ProjectDir
     if (-not $localVer) { Write-Host "  [aviso] FW_VERSION nao encontrado em $ProjectDir"; return }
 
-    Write-Host "`n=== $Label (local: $localVer) ===" -ForegroundColor Cyan
-    $pendentes = $Devices | Where-Object {
-        $need = Compare-Version -LocalVer $localVer -DeviceVer $_.fw_version
-        if (-not $need) { Write-Host "  [SKIP] $($_.ip): ja atualizado ($($_.fw_version))" -ForegroundColor Green }
-        $need
+    Write-Host "`n=== $Label (local: $localVer)$(if ($Force) {' [FORCE]'}) ===" -ForegroundColor Cyan
+    $pendentes = if ($Force) { $Devices } else {
+        $Devices | Where-Object {
+            $need = Compare-Version -LocalVer $localVer -DeviceVer $_.fw_version
+            if (-not $need) { Write-Host "  [SKIP] $($_.ip): ja atualizado ($($_.fw_version))" -ForegroundColor Green }
+            $need
+        }
     }
     if ($pendentes.Count -eq 0) { Write-Host "  Todos atualizados."; return }
 
@@ -122,30 +133,61 @@ $devices = Discover-Devices
 if ($devices.Count -eq 0) { Write-Host "Nenhum dispositivo encontrado."; exit 0 }
 
 Write-Host "`nDispositivos encontrados:" -ForegroundColor Cyan
-$devices | ForEach-Object { Write-Host "  [$($_.type)] $($_.ip)  FW=$($_.fw_version)" }
+$devices | ForEach-Object { Write-Host "  [$($_.type)] $($_.ip)  FW=$($_.fw_version)  platform=$($_.platform)" }
 
 $root = $PSScriptRoot
 $clients = Join-Path $root "clients"
 
-# Mapeamento tipo → (project dir, env name)
-# ESP32: gateway    ESP8266: lampada, dht_gas, pir, repeater, onoff
-$map = @{
-    gateway = @{ Dir = Join-Path $root "gateway"; Env = "esp32_gateway_ota" }
-    lampada = @{ Dir = Join-Path $clients "esp8266_lampada"; Env = "esp8266_ota" }
-    dht_gas = @{ Dir = Join-Path $clients "esp8266_dht_gas"; Env = "esp8266_ota" }
-    pir     = @{ Dir = Join-Path $clients "esp8266_pir"; Env = "esp8266_ota" }
-    repeater= @{ Dir = Join-Path $clients "esp8266_repeater"; Env = "esp8266_ota" }
-    onoff   = @{ Dir = Join-Path $clients "esp8266_onoff";  Env = "esp8266_ota" }
+# Gateway: split by platform (ESP32 vs ESP8266)
+$gwEsp32   = $devices | Where-Object { $_.type -eq "gateway" -and $_.platform -ne "esp8266" }
+$gwEsp8266 = $devices | Where-Object { $_.type -eq "gateway" -and $_.platform -eq "esp8266" }
+if ($gwEsp32) {
+    Update-DeviceType -ProjectDir (Join-Path $root "gateway") -EnvName "esp32_gateway_ota" -Devices $gwEsp32 -Label "gateway (esp32)" -Force:$Force
+}
+if ($gwEsp8266) {
+    Update-DeviceType -ProjectDir (Join-Path $root "gateway") -EnvName "esp8266_gateway_ota" -Devices $gwEsp8266 -Label "gateway (esp8266)" -Force:$Force
 }
 
-foreach ($type in $map.Keys) {
-    $match = $devices | Where-Object { $_.type -eq $type }
-    if ($match) {
-        $cfg = $map[$type]
-        Update-DeviceType -ProjectDir $cfg.Dir -EnvName $cfg.Env -Devices $match -Label $type
+# Clients: dir base por tipo (sem gateway, já tratado acima)
+$clientDir = @{
+    lampada  = "esp8266_lampada"
+    dht_gas  = "esp8266_dht_gas"
+    pir      = "esp8266_pir"
+    repeater = "esp8266_repeater"
+    onoff    = "esp8266_onoff"
+}
+
+# Mapa composto "tipo_plataforma" → env
+# Adicionar entries "_esp32" quando existirem clients ESP32
+$clientEnv = @{}
+foreach ($t in $clientDir.Keys) {
+    $clientEnv["${t}_esp8266"] = "esp8266_ota"
+}
+
+# Agrupa devices por tipo conhecido
+# Groups clients by type + platform
+$groups = @{}
+foreach ($t in $clientDir.Keys) {
+    $match = $devices | Where-Object { $_.type -eq $t }
+    if (-not $match) { continue }
+    $byPfx = $match | Group-Object { if ($_.platform) { $_.platform } else { "esp8266" } }
+    foreach ($g in $byPfx) {
+        $key = "${t}_$($g.Name)"
+        $groups[$key] = $g.Group
     }
 }
-$unknown = $devices | Where-Object { $_.type -eq "unknown" -or -not $map.ContainsKey($_.type) }
+
+foreach ($key in $groups.Keys) {
+    $type = $key -replace '_[^_]+$', ''
+    $dir  = Join-Path $clients $clientDir[$type]
+    $env  = $clientEnv[$key]
+    Update-DeviceType -ProjectDir $dir -EnvName $env -Devices $groups[$key] -Label $key -Force:$Force
+}
+
+$unknown = $devices | Where-Object {
+    $_.type -eq "unknown" -or
+    ($_.type -ne "gateway" -and -not ($clientDir.Keys -contains $_.type))
+}
 if ($unknown) {
     Write-Host "`n  [ignored] tipo desconhecido:" -ForegroundColor DarkGray
     $unknown | ForEach-Object { Write-Host "           $($_.ip) ($($_.type))" -ForegroundColor DarkGray }

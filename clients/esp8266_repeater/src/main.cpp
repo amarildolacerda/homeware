@@ -678,6 +678,7 @@ static void handle_api_status(void)
     doc["ip"] = WiFi.localIP().toString();
     doc["mac"] = WiFi.macAddress();
     doc["fw_version"] = FW_VERSION;
+    doc["platform"] = "esp8266";
     doc["type"] = "repeater";
     doc["device_id"] = String("esp8266_") + String(ESP.getChipId(), HEX);
     doc["device_name"] = s_device_name;

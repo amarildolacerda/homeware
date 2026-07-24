@@ -215,6 +215,11 @@ void web_server_init() {
         doc["gateway_mac"] = mac_buf;
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
+#if defined(ARDUINO_ARCH_ESP32)
+        doc["platform"] = "esp32";
+#else
+        doc["platform"] = "esp8266";
+#endif
         doc["free_heap"] = ESP.getFreeHeap();
         doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
         doc["ntp_synced"] = gateway_ntp_synced();

@@ -81,15 +81,16 @@ def identify(ip, port):
             data = json.loads(resp.read())
             gw_id = data.get("gateway_id", "")
             fw = data.get("fw_version", "")
+            platform = data.get("platform", "")
             paired = data.get("paired_count", "?")
             online = data.get("online_count", "?")
             mac = data.get("gateway_mac") or data.get("mac") or data.get("sta_mac")
             is_gateway = "gateway" in gw_id or "gateway" in str(mac) or mac is not None
             label = "GATEWAY" if is_gateway else "bridge"
-            info = f"  [{label}] {ip}:{port}  type=gateway  FW={fw}  paired={paired} online={online}  id={gw_id}"
+            info = f"  [{label}] {ip}:{port}  type=gateway  FW={fw}  platform={platform}  paired={paired} online={online}  id={gw_id}"
             if mac: info += f"  MAC={mac}"
             if title: info += f"  title=\"{title}\""
-            return (info, mac, "gateway", fw, ip)
+            return (info, mac, "gateway", fw, ip, platform)
         except:
             if attempt == 0:
                 time.sleep(1)
@@ -104,14 +105,15 @@ def identify(ip, port):
             dev_id = data.get("device_id", "")
             dev_name = data.get("device_name", "")
             fw = data.get("fw_version", "")
+            platform = data.get("platform", "")
             relay = data.get("state", None)
             gw_con = data.get("gateway_connected", False)
             dtype = detect_device_type(data)
-            info = f"  [DEVICE] {ip}:{port}  name=\"{dev_name}\"  id={dev_id}  FW={fw}  type={dtype}"
+            info = f"  [DEVICE] {ip}:{port}  name=\"{dev_name}\"  id={dev_id}  FW={fw}  platform={platform}  type={dtype}"
             if relay is not None: info += f"  relay={'ON' if relay else 'OFF'}"
             info += f"  gw={gw_con}"
             if title and title != dev_name: info += f"  title=\"{title}\""
-            return (info, None, dtype, fw, ip)
+            return (info, None, dtype, fw, ip, platform)
         except:
             if attempt == 0:
                 time.sleep(1)
@@ -122,7 +124,7 @@ def identify(ip, port):
     if title:
         info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
         if mac: info += f"  MAC={mac}"
-        return (info, mac, "unknown", None, ip)
+        return (info, mac, "unknown", None, ip, "")
     return None
 
 def main():
@@ -173,11 +175,11 @@ def main():
         for future in as_completed(futures):
             result = future.result()
             if result:
-                info, mac, dtype, fw, ip = result
+                info, mac, dtype, fw, ip, platform = result
                 if not args.json:
                     print(info)
                 else:
-                    devices.append({"ip": ip, "port": args.port, "type": dtype, "fw_version": fw})
+                    devices.append({"ip": ip, "port": args.port, "type": dtype, "fw_version": fw, "platform": platform})
                 if mac and not found_gateway_mac:
                     found_gateway_mac = mac
 
