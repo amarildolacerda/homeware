@@ -270,6 +270,30 @@ function fmtBytes(b) {
   return (b/1048576).toFixed(1)+' MB';
 }
 
+function getFavs(){try{return JSON.parse(localStorage.getItem('fav_slots')||'[]')}catch(e){return[]}}
+function setFavs(a){localStorage.setItem('fav_slots',JSON.stringify(a))}
+function toggleFav(slot){
+  var a=getFavs(),i=a.indexOf(slot);
+  if(i>=0)a.splice(i,1);else a.push(slot);
+  setFavs(a);
+  var card=document.querySelector('.device[data-slot="'+slot+'"]');
+  if(card){
+    var star=card.querySelector('.star');
+    if(star)star.classList.toggle('on');
+    star.innerHTML=isFav(slot)?'&#x2605;':'&#x2606;';
+  }
+  var grid=document.getElementById('sensors-grid');
+  if(!grid)return;
+  var cards=Array.from(grid.children);
+  cards.sort(function(a,b){
+    var af=isFav(parseInt(a.dataset.slot))?1:0,bf=isFav(parseInt(b.dataset.slot))?1:0;
+    if(af!=bf)return bf-af;
+    return (a.classList.contains('offline')?1:0)-(b.classList.contains('offline')?1:0);
+  });
+  cards.forEach(function(c){grid.appendChild(c);});
+}
+function isFav(slot){return getFavs().indexOf(slot)>=0}
+
 function fmtUptime(ms) {
   var s = Math.floor(ms/1000);
   if (s < 60) return s+'s';
@@ -360,6 +384,8 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .badge.online{background:#dcfce7;color:#16a34a}
 .badge.offline{background:#fef2f2;color:#dc2626}
 .badge.warn{background:#fef3c7;color:#d97706}
+.star{cursor:pointer;font-size:1.1rem;line-height:1;color:var(--muted-subtle);transition:color .15s;padding:2px;user-select:none}
+.star.on{color:var(--warning)}
 .badge.danger{background:#fef2f2;color:#dc2626}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .metric-bar{display:flex;align-items:center;gap:6px;font-size:0.78rem}
@@ -560,6 +586,11 @@ function renderSensors(sensors) {
     s_prevSensorMap = {};
     return;
   }
+  nonRepeater.sort(function(a,b){
+    var af=isFav(a.slot)?1:0,bf=isFav(b.slot)?1:0;
+    if(af!=bf)return bf-af;
+    return (a.online?0:1)-(b.online?0:1);
+  });
   grid.innerHTML = nonRepeater.map(function(s) { return buildSensorCard(s); }).join('');
   s_prevSensorMap = {};
   nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
@@ -581,6 +612,7 @@ function buildSensorCard(s) {
         '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:4px">'+
+        '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
         '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
         '<div class="device-actions">'+
           '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
@@ -643,10 +675,11 @@ function updateFilters(sensors) {
   var types = {};
   sensors.forEach(function(s) { types[s.type] = true; });
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater',12:'Solo'};
-  var html = '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
+  var html = '<button class="filter-btn" data-type="fav" onclick="filterSensors(\'fav\')">&#x2605; Favoritos</button>';
   Object.keys(types).sort().forEach(function(t) {
     html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
   });
+  html += '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
   bar.innerHTML = html;
 }
 
@@ -669,7 +702,11 @@ function filterStatus(st) {
 function applyFilters() {
   document.querySelectorAll('.device').forEach(function(d) {
     var show = true;
-    if (s_activeFilter !== 'all' && d.dataset.type !== s_activeFilter) show = false;
+    if (s_activeFilter === 'fav') {
+      if (!isFav(parseInt(d.dataset.slot))) show = false;
+    } else if (s_activeFilter !== 'all' && d.dataset.type !== s_activeFilter) {
+      show = false;
+    }
     if (s_statusFilter === 'online' && d.classList.contains('offline')) show = false;
     if (s_statusFilter === 'offline' && !d.classList.contains('offline')) show = false;
     d.style.display = show ? '' : 'none';
