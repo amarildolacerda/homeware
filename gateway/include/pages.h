@@ -631,7 +631,7 @@ function updateFilters(sensors) {
   if (!bar) return;
   var types = {};
   sensors.forEach(function(s) { types[s.type] = true; });
-  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater'};
+  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater',12:'Solo'};
   var html = '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
   Object.keys(types).sort().forEach(function(t) {
     html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
