@@ -341,7 +341,7 @@ void loop(void)
             case 'i':
             {
                 console.printf("Intervalo atual: %ds\n", s_interval_s);
-                console.printf("Digite novo intervalo (30-3600s): ");
+                console.printf("Digite novo intervalo (%d-%d s): ", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
                 unsigned long timeout = millis() + 10000;
                 int idx = 0;
                 char buf[8] = {0};
@@ -492,6 +492,12 @@ void loop(void)
             {
                 console.printf("[%s] Reenviando dados (tentativa %d/%d)\n", TAG, s_data_retries, MAX_DATA_RETRIES);
                 read_sensor();
+                if (!s_read_valid)
+                {
+                    console.printf("[%s] Leitura invalida no reenvio\n", TAG);
+                    s_state = STATE_SLEEP;
+                    break;
+                }
                 s_ack_received = false;
                 espnow_send_data();
                 s_state_start = now;

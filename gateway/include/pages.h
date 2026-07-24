@@ -535,8 +535,12 @@ function renderState(s) {
     var on = st.state ? true : false;
     html += '<button class="btn-onoff '+(on?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(on?0:1)+')">'+(on?'DESLIGAR':'LIGAR')+'</button>';
   } else if (s.type === 12) {
-    html += '<span class="state-item state-moisture">'+(st.moisture_pct||0)+'%</span>';
-    html += '<span class="state-item state-moisture">ADC:'+(st.raw_adc||0)+'</span>';
+    if (s.sequence > 0) {
+      html += '<span class="state-item state-moisture">'+(st.moisture_pct||0)+'%</span>';
+      html += '<span class="state-item state-moisture">ADC:'+(st.raw_adc||0)+'</span>';
+    } else {
+      html += '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
+    }
   }
   return html || '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
 }
