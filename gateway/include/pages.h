@@ -633,7 +633,7 @@ function buildSensorCard(s) {
     '</div>'+
     (isType8||s.type===12 ? '' : '<div class="state-group">'+renderState(s)+'</div>')+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'+
-      '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '')+'</span>'+
+      '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'há '+fmtUptime(s.last_seen) : '')+'</span>'+
       '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
         '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
         '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
