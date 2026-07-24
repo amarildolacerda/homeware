@@ -529,13 +529,6 @@ function batteryBar(pct) {
   return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">BAT</span><div class="bar"><div class="fill '+color+'" style="width:'+Math.min(100,pct)+'%"></div></div><span style="min-width:32px;text-align:right;font-size:0.7rem">'+pct+'%'+badge+'</span></div>';
 }
 
-function rssiBar(rssi) {
-  if (rssi === undefined || rssi === null) return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">RSSI</span><div class="bar"><div class="fill" style="width:0%"></div></div><span style="min-width:42px;text-align:right;font-size:0.7rem">--</span></div>';
-  var pct = Math.min(100, Math.max(0, (rssi + 100) * 2));
-  var color = rssi > -70 ? 'green' : rssi > -85 ? 'yellow' : 'red';
-  return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">RSSI</span><div class="bar"><div class="fill '+color+'" style="width:'+pct+'%"></div></div><span style="min-width:42px;text-align:right;font-size:0.7rem">'+rssi+' dBm</span></div>';
-}
-
 function renderState(s) {
   var st = s.state || {};
   var html = '';
@@ -594,12 +587,6 @@ function battInline(pct) {
   var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
   return '<span class="metric-line">bat '+inlineBar(Math.min(100,pct),c)+' '+pct+'%</span>';
 }
-function rssiInline(rssi) {
-  if (rssi===undefined||rssi===null) return '<span class="metric-line">rssi:--</span>';
-  var pct = Math.min(100, Math.max(0, (rssi + 100) * 2));
-  var c = rssi > -70 ? '#4CAF50' : rssi > -85 ? '#FFC107' : '#F44336';
-  return '<span class="metric-line">rssi '+inlineBar(pct,c)+' '+rssi+' dBm</span>';
-}
 
 function moistureBars(st, seq) {
   if (!seq) return '<span style="color:var(--muted-subtle);font-size:0.7rem;margin-left:6px;vertical-align:middle">--</span>';
@@ -629,7 +616,7 @@ function buildSensorCard(s) {
         '</div>'+
         '<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+
           '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
-          '<div style="margin-left:auto;display:inline-flex;align-items:center;gap:4px">'+battInline(s.battery_pct)+rssiInline(s.last_rssi)+'</div>'+
+          '<div style="margin-left:auto;display:inline-flex;align-items:center;gap:4px">'+battInline(s.battery_pct)+'</div>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:4px">'+
