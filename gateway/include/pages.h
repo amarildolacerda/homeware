@@ -505,7 +505,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 var s_overviewLoading = false;
 var s_renameSlot = null;
 var s_sensors = [];
-var s_activeFilter = 'all';
+var s_activeFilter = 'fav';
 var s_statusFilter = 'all';
 var s_prevSensorMap = {};
 var s_sensorCount = 0;
@@ -675,18 +675,19 @@ function updateFilters(sensors) {
   var types = {};
   sensors.forEach(function(s) { types[s.type] = true; });
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater',12:'Solo'};
-  var html = '<button class="filter-btn" data-type="fav" onclick="filterSensors(\'fav\')">&#x2605; Favoritos</button>';
+  var html = '<button class="filter-btn active" data-type="fav" onclick="filterSensors(\'fav\')">&#x2605; Favoritos</button>';
   Object.keys(types).sort().forEach(function(t) {
     html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
   });
-  html += '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
+  html += '<button class="filter-btn" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
   bar.innerHTML = html;
 }
 
 function filterSensors(type) {
-  s_activeFilter = !type ? 'all' : type;
+  s_activeFilter = !type ? (getFavs().length ? 'fav' : 'all') : type;
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-  var btn = s_activeFilter==='all' ? document.querySelector('.filter-btn[data-type="all"]') : document.querySelector('.filter-btn[data-type="'+s_activeFilter+'"]');
+  var btn = document.querySelector('.filter-btn[data-type="'+s_activeFilter+'"]');
+  if (!btn) btn = document.querySelector('.filter-btn[data-type="all"]');
   if (btn) btn.classList.add('active');
   applyFilters();
 }
