@@ -634,7 +634,6 @@ function buildSensorCard(s) {
       '</div>'+
       '<div style="display:flex;align-items:center;gap:4px">'+
         '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
-        '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
         '<div class="device-actions">'+
           '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
           '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
@@ -646,9 +645,14 @@ function buildSensorCard(s) {
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="last-info">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '&nbsp;')+'</div>'+
-    '<div class="state-group">'+
-      (isType8||s.type===12 ? '' : renderState(s))+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">'+
+      '<div class="state-group" style="flex:1;min-width:0">'+
+        (isType8||s.type===12 ? '' : renderState(s))+
+      '</div>'+
+      '<div style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">'+
+        '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
+        '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '')+'</span>'+
+      '</div>'+
     '</div>'+
   '</div>';
 }
