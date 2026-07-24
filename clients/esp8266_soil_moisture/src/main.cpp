@@ -162,12 +162,12 @@ static bool espnow_send_data(void)
     return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
 
-static void do_deep_sleep(void)
+static void do_deep_sleep(int sleep_s)
 {
-    console.printf("[%s] Deep sleep %ds\n", TAG, s_interval_s);
+    console.printf("[%s] Deep sleep %ds\n", TAG, sleep_s);
     Serial.flush();
     delay(200);
-    ESP.deepSleep((uint64_t)s_interval_s * 1000000ULL, WAKE_RF_DEFAULT);
+    ESP.deepSleep((uint64_t)sleep_s * 1000000ULL, WAKE_RF_DEFAULT);
 }
 
 static void init_hardware(void)
@@ -263,7 +263,7 @@ void setup(void)
         if (!wifi_setup(true))
         {
             console.printf("[%s] Config portal closed, sleeping\n", TAG);
-            do_deep_sleep();
+            do_deep_sleep(s_interval_s);
             return;
         }
     }
@@ -278,7 +278,7 @@ void setup(void)
     if (WiFi.status() != WL_CONNECTED)
     {
         console.printf("[%s] WiFi timeout, sleeping\n", TAG);
-        do_deep_sleep();
+        do_deep_sleep(s_interval_s);
         return;
     }
     console.printf("[%s] WiFi OK, IP: %s\n", TAG, WiFi.localIP().toString().c_str());
@@ -422,6 +422,7 @@ void loop(void)
             if (s_read_attempts >= MAX_READ_RETRIES)
             {
                 console.printf("[%s] Leitura invalida apos %d tentativas\n", TAG, s_read_attempts);
+                s_data_retries = 0;
                 s_state = STATE_SLEEP;
             }
             else
@@ -462,6 +463,7 @@ void loop(void)
         if (!s_read_valid)
         {
             console.printf("[%s] Leitura invalida, pulando envio\n", TAG);
+            s_data_retries = 0;
             s_state = STATE_SLEEP;
             break;
         }
@@ -479,6 +481,7 @@ void loop(void)
         if (s_ack_received)
         {
             console.printf("[%s] ACK recebido\n", TAG);
+            s_data_retries = 0;
             s_state = STATE_SLEEP;
         }
         else if (now - s_state_start > ACK_TIMEOUT_MS)
@@ -507,7 +510,10 @@ void loop(void)
         break;
 
     case STATE_SLEEP:
-        do_deep_sleep();
+        if (s_data_retries >= MAX_DATA_RETRIES)
+            do_deep_sleep(DEEP_SLEEP_RETRY_INTERVAL);
+        else
+            do_deep_sleep(s_interval_s);
         break;
     }
 }
