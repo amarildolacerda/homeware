@@ -557,6 +557,18 @@ function renderState(s) {
   } else if (s.type === 8 || s.type === 9) {
     var on = st.state ? true : false;
     html += '<button class="btn-onoff '+(on?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(on?0:1)+')">'+(on?'DESLIGAR':'LIGAR')+'</button>';
+  } else if (s.type === 12) {
+    if (s.sequence > 0) {
+      var pct = Math.min(Math.max(st.moisture_pct||0, 0), 100);
+      var full = Math.round(pct / 10);
+      var bars = '';
+      for (var i = 0; i < 10; i++)
+        bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
+      html += '<div class="moisture-bars" style="justify-content:center">'+bars+'</div>';
+      html += '<div style="font-size:0.75rem;color:var(--muted-subtle);margin-top:4px">'+pct+'%</div>';
+    } else {
+      html += '<span style="color:var(--muted-subtle);font-size:0.7rem">Aguardando dados...</span>';
+    }
   }
   return html || '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
 }
@@ -588,38 +600,20 @@ function battInline(pct) {
   return '<span class="metric-line">bat '+inlineBar(Math.min(100,pct),c)+' '+pct+'%</span>';
 }
 
-function moistureBars(st, seq) {
-  if (!seq) return '<span style="color:var(--muted-subtle);font-size:0.7rem;margin-left:6px;vertical-align:middle">--</span>';
-  var pct = Math.min(Math.max((st&&st.moisture_pct)||0, 0), 100);
-  var full = Math.round(pct / 10);
-  var bars = '';
-  for (var i = 0; i < 10; i++)
-    bars += '<span style="display:inline-block;width:10px;height:12px;border-radius:2px;background:'+(i<full?'#4CAF50':'var(--border)')+';margin:0 1px;vertical-align:middle"></span>';
-  return '<span style="display:inline-flex;align-items:center;margin-left:6px;height:12px">'+bars+'</span>';
-}
-
 function buildSensorCard(s) {
   var off = !s.online;
   var offClass = off ? ' offline' : '';
   var isType9 = s.type === 9;
   var isType8 = s.type === 8 || isType9;
-  var onState = s.state && s.state.state;
   return '<div class="device'+offClass+'" data-slot="'+s.slot+'" data-type="'+s.type+'">'+
-    '<div class="device-head">'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
+      '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="display:flex;align-items:center;gap:6px">'+
-          '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
-          '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
-            (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
-          '</div>'+
-          (s.type===12 ? '<div style="margin-left:auto">'+moistureBars(s.state, s.sequence)+'</div>' : '')+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+
-          '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
-          '<div style="margin-left:auto;display:inline-flex;align-items:center;gap:4px">'+battInline(s.battery_pct)+'</div>'+
-        '</div>'+
+        '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span></div>'+
+        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
       '</div>'+
-      '<div style="display:flex;align-items:center;gap:4px">'+
+      '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
+        battInline(s.battery_pct)+
         '<div class="device-actions">'+
           '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
           '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
@@ -631,7 +625,9 @@ function buildSensorCard(s) {
         '</div>'+
       '</div>'+
     '</div>'+
-    (isType8||s.type===12 ? '' : '<div class="state-group">'+renderState(s)+'</div>')+
+    '<div class="state-group" style="justify-content:center;margin:6px 0">'+
+      renderState(s)+
+    '</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'+
       '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'há '+fmtUptime(s.last_seen) : '')+'</span>'+
       '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
