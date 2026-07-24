@@ -59,9 +59,9 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
-#define WAIT_PAIR_TIMEOUT_MS 5000
-#define PAIR_RETRY_INTERVAL_MS 3000
-#define ACK_TIMEOUT_MS 5000
+#define WAIT_PAIR_TIMEOUT_MS 10000
+#define PAIR_RETRY_INTERVAL_MS 10000
+#define ACK_TIMEOUT_MS 10000
 #define MAX_DATA_RETRIES 2
 #define MAX_READ_RETRIES 3
 
@@ -110,8 +110,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_ack_t)) return;
         espnow_ack_t *ack = (espnow_ack_t *)data;
-        if (mac_equal(ack->sensor_mac, s_espnow_mac))
-            s_ack_received = ack->status == PAIR_STATUS_OK;
+        if (ack->status == PAIR_STATUS_OK)
+            s_ack_received = true;
         break;
     }
     }
