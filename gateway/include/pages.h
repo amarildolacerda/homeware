@@ -389,6 +389,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .badge.danger{background:#fef2f2;color:#dc2626}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .metric-bar{display:flex;align-items:center;gap:6px;font-size:0.78rem}
+.metric-line{display:inline-flex;align-items:center;gap:3px;font-size:0.67rem;color:var(--muted-subtle);vertical-align:middle}
 .metric-bar .bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .metric-bar .bar .fill{height:100%;border-radius:3px;transition:width .3s}
 .metric-bar .bar .fill.green{background:var(--success)}
@@ -596,6 +597,21 @@ function renderSensors(sensors) {
   nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
 }
 
+function inlineBar(pct, color) {
+  return '<span style="display:inline-block;vertical-align:middle;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></span></span>';
+}
+function battInline(pct) {
+  if (pct===undefined||pct===null) return '<span class="metric-line">bat:--</span>';
+  var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
+  return '<span class="metric-line">bat '+inlineBar(Math.min(100,pct),c)+' '+pct+'%</span>';
+}
+function rssiInline(rssi) {
+  if (rssi===undefined||rssi===null) return '<span class="metric-line">rssi:--</span>';
+  var pct = Math.min(100, Math.max(0, (rssi + 100) * 2));
+  var c = rssi > -70 ? '#4CAF50' : rssi > -85 ? '#FFC107' : '#F44336';
+  return '<span class="metric-line">rssi '+inlineBar(pct,c)+' '+rssi+' dBm</span>';
+}
+
 function buildSensorCard(s) {
   var off = !s.online;
   var offClass = off ? ' offline' : '';
@@ -609,7 +625,7 @@ function buildSensorCard(s) {
         '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
           (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
         '</div>'+
-        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+' &bull; '+battInline(s.battery_pct)+' &bull; '+rssiInline(s.last_rssi)+'</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:4px">'+
         '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
@@ -624,10 +640,6 @@ function buildSensorCard(s) {
           '</div>'+
         '</div>'+
       '</div>'+
-    '</div>'+
-    '<div class="metrics">'+
-      batteryBar(s.battery_pct)+
-      rssiBar(s.last_rssi)+
     '</div>'+
     '<div class="last-info">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '&nbsp;')+'</div>'+
     '<div class="state-group">'+
