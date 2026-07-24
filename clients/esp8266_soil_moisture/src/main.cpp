@@ -61,8 +61,8 @@ static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
 #define WAIT_PAIR_TIMEOUT_MS 5000
 #define PAIR_RETRY_INTERVAL_MS 3000
-#define ACK_TIMEOUT_MS 2000
-#define MAX_DATA_RETRIES 3
+#define ACK_TIMEOUT_MS 5000
+#define MAX_DATA_RETRIES 2
 #define MAX_READ_RETRIES 3
 
 static void read_sensor(void)
@@ -305,10 +305,11 @@ void loop(void)
     {
         console.printf("[%s] Aguardando tecla: %s\n", TAG, "h for help");
         s_first_loop = false;
-    } else {
-        delay(100);
     }
-    delay(1000);
+    if (s_state != STATE_WAIT_ACK)
+    {
+        delay(1000);
+    }
     if (Serial.available() > 0 && !s_suspend)
     {
         delay(1);
