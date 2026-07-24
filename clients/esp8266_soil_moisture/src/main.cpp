@@ -15,6 +15,7 @@ static const char *TAG = "esp8266-soil";
 enum State {
     STATE_INIT,
     STATE_WAIT_PAIR,
+    STATE_READ_SENSOR,
     STATE_SEND_DATA,
     STATE_WAIT_ACK,
     STATE_SLEEP
@@ -37,6 +38,8 @@ static uint8_t s_espnow_mac[6];
 static uint16_t s_soil_raw = 0;
 static uint8_t s_soil_pct = 0;
 static int s_battery = 100;
+static int s_read_attempts = 0;
+static bool s_read_valid = false;
 
 static unsigned long s_active_start = 0;
 static bool s_config_mode = false;
@@ -60,6 +63,7 @@ static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 #define PAIR_RETRY_INTERVAL_MS 3000
 #define ACK_TIMEOUT_MS 2000
 #define MAX_DATA_RETRIES 3
+#define MAX_READ_RETRIES 3
 
 static void read_sensor(void)
 {
@@ -71,8 +75,8 @@ static void read_sensor(void)
         counter = 0;
         s_battery = max(0, s_battery - 1);
     }
-                    console.printf("Sensor: raw=%d pct=%d%% bat=%d%%\n", s_soil_raw, s_soil_pct, s_battery);
-
+    console.printf("Sensor: raw=%d pct=%d%% bat=%d%%\n", s_soil_raw, s_soil_pct, s_battery);
+    s_read_valid = s_soil_raw > 0;
 }
 
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
@@ -398,16 +402,40 @@ void loop(void)
         espnow_send_pair_request();
         s_pair_attempts = 1;
         s_state_start = now;
+        s_read_attempts = 0;
         if (s_has_gateway)
-            s_state = STATE_SEND_DATA;
+            s_state = STATE_READ_SENSOR;
         else
             s_state = STATE_WAIT_PAIR;
+        break;
+
+    case STATE_READ_SENSOR:
+        read_sensor();
+        if (s_read_valid)
+        {
+            s_state = STATE_SEND_DATA;
+        }
+        else
+        {
+            s_read_attempts++;
+            if (s_read_attempts >= MAX_READ_RETRIES)
+            {
+                console.printf("[%s] Leitura invalida apos %d tentativas\n", TAG, s_read_attempts);
+                s_state = STATE_SLEEP;
+            }
+            else
+            {
+                console.printf("[%s] Retentando leitura (%d/%d)...\n", TAG, s_read_attempts, MAX_READ_RETRIES);
+                s_state_start = now;
+                s_state = STATE_READ_SENSOR;
+            }
+        }
         break;
 
     case STATE_WAIT_PAIR:
         if (s_has_gateway)
         {
-            s_state = STATE_SEND_DATA;
+            s_state = STATE_READ_SENSOR;
         }
         else if (now - s_state_start > PAIR_RETRY_INTERVAL_MS)
         {
@@ -430,7 +458,12 @@ void loop(void)
         delay(200);
         espnow_send_pair_request();
         delay(100);
-        read_sensor();
+        if (!s_read_valid)
+        {
+            console.printf("[%s] Leitura invalida, pulando envio\n", TAG);
+            s_state = STATE_SLEEP;
+            break;
+        }
         digitalWrite(LED_PIN, LOW);
         s_ack_received = false;
         espnow_send_data();
