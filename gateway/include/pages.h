@@ -384,6 +384,9 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .state-temp{color:var(--danger)}
 .state-hum{color:var(--info)}
 .state-moisture{color:var(--success)}
+.moisture-bars{display:flex;gap:3px;margin:4px 12px 0}
+.moisture-bars .bar{width:14px;height:18px;border-radius:3px;background:var(--surface-2);border:1px solid var(--border)}
+.moisture-bars .bar.on{background:var(--success);border-color:var(--success)}
 .state-contact{color:#7c3aed}
 .state-motion{color:var(--warn)}
 .state-gas{color:var(--danger)}
@@ -536,7 +539,13 @@ function renderState(s) {
     html += '<button class="btn-onoff '+(on?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(on?0:1)+')">'+(on?'DESLIGAR':'LIGAR')+'</button>';
   } else if (s.type === 12) {
     if (s.sequence > 0) {
-      html += '<span class="state-item state-moisture">'+(st.moisture_pct||0)+'%</span>';
+      var pct = Math.min(Math.max(st.moisture_pct||0, 0), 100);
+      var full = Math.round(pct / 10);
+      var bars = '';
+      for (var i = 0; i < 10; i++)
+        bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
+      html += '<div class="moisture-bars">'+bars+'</div>';
+      html += '<span class="state-item state-moisture">'+pct+'%</span>';
       html += '<span class="state-item state-moisture">ADC:'+(st.raw_adc||0)+'</span>';
     } else {
       html += '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
@@ -750,7 +759,13 @@ function showPropsModal(slot) {
   else if (s.type === 6) stateHtml = '<div class="row"><span class="label">Nível</span><span class="value">'+(st.level_pct||0)+'%</span></div><div class="row"><span class="label">Distância</span><span class="value">'+(st.distance_cm||0)+' cm</span></div>';
   else if (s.type === 7) stateHtml = '<div class="row"><span class="label">Temperatura</span><span class="value">'+(st.temperature||0).toFixed(1)+'&deg;C</span></div><div class="row"><span class="label">Umidade</span><span class="value">'+(st.humidity||0).toFixed(0)+'%</span></div><div class="row"><span class="label">Gás</span><span class="value">'+(st.gas_level||0)+'%</span></div>'+(st.alarm?'<div class="row"><span class="label">Alarme</span><span class="value" style="color:var(--danger)">ATIVO</span></div>':'');
   else if (s.type === 8 || s.type === 9) stateHtml = '<div class="row"><span class="label">Estado</span><span class="value">'+(st.state?'Ligado':'Desligado')+'</span></div>';
-  else if (s.type === 12) stateHtml = '<div class="row"><span class="label">Umidade</span><span class="value">'+(st.moisture_pct||0)+'%</span></div><div class="row"><span class="label">ADC</span><span class="value">'+(st.raw_adc||0)+'</span></div>';
+  else if (s.type === 12) {
+    var pct = Math.min(Math.max(st.moisture_pct||0, 0), 100);
+    var full = Math.round(pct / 10);
+    var bars = '';
+    for (var i = 0; i < 10; i++) bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
+    stateHtml = '<div class="moisture-bars" style="justify-content:center;margin-bottom:8px">'+bars+'</div><div class="row"><span class="label">Umidade</span><span class="value">'+pct+'%</span></div><div class="row"><span class="label">ADC</span><span class="value">'+(st.raw_adc||0)+'</span></div>';
+  }
   body.innerHTML =
     '<div class="props-section"><div class="props-section-title">Estado</div>'+
     (stateHtml || '<div class="row"><span class="label">Dados</span><span class="value" style="color:var(--muted-subtle)">Aguardando...</span></div>')+
