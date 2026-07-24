@@ -65,14 +65,7 @@
 - **Código compartilhado**: `shared/` é um **submodule** (`homeware_shared.git`) e é a fonte única de código cross-platform (regra 17 estendida). Estrutura de lib PlatformIO: `library.json` na raiz + **todo o código (`.h` e `.cpp`) em `src/`**. Contém: `espnow_protocol.h`, `myWiFiManager.h/.cpp`, `shared_config.h`, `platform.h` (wrappers `MyWebServer`/`chip_id()`/`espnow_add_peer_wrapper`), `common_console.*` (telnet), `common_ota.*` (ArduinoOTA), `common_util.*` (`uptime_to_str`), `common_wifi.*` (delegators p/ myWiFiManager), `timer.*` (agendamento parametrizado). Gateway e clients DEVEM consumir via `lib_extra_dirs` (gateway: `../shared`; clients: `../../shared`) e NÃO manter cópias divergentes nem usar `-I` manual ou scripts de cópia. Qualquer mudança de struct/protocolo/WiFiManager/common vale para todos os devices e deve ser feita uma única vez no submodule `shared/` (commitar e pushar o submodule, depois bump no homeware). **Ao commitar/pushar o submodule `shared/`, usar SEMPRE o branch `dev` (nunca `main`) — o shared também segue a política de dev→main do homeware.**
 
 ### Novos Clients
-1. sempre ter um README.md para orientar as conexões de hardwares/pinos e demais informações relevantes ao cliente
-2. ter um dashboard pertinente
-3. Se usa WiFi, usar myWiFiManager
-4. ter atalhos de teclado no terminal
-5. seguir API do gateway
-6. ter um SPEC.md para especificação de funcionamento esperado
-7. **perguntar ao usuário** se o cliente deve incluir funções de **repeater** ESP-NOW e quais regras usar (ex: repetir broadcast do gateway, encaminhar dados de outros clients). Se for repeater, deve ser **bidirecional** (gateway ↔ clientes em ambas as direções).
-8. Incluir OTA
+Ver `clients/SPEC.md` — checklist completo com template, estrutura, implementação e regras.
 
 ## Regras importantes
 1. Device ID é dinâmico (`esp8266_<chip_id>`), não configurável
