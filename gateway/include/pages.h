@@ -591,13 +591,10 @@ function renderSensors(sensors) {
   nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
 }
 
-function inlineBar(pct, color) {
-  return '<span style="display:inline-block;vertical-align:middle;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></span></span>';
-}
 function battInline(pct) {
-  if (pct===undefined||pct===null) return '<span class="metric-line">bat:--</span>';
+  if (pct===undefined||pct===null) return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:0%;background:var(--border);border-radius:3px"></span></span>';
   var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
-  return '<span class="metric-line">bat '+inlineBar(Math.min(100,pct),c)+' '+pct+'%</span>';
+  return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+c+';border-radius:3px"></span></span>';
 }
 
 function buildSensorCard(s) {
