@@ -510,7 +510,7 @@ void loop(void)
         break;
 
     case STATE_SLEEP:
-        if (s_data_retries >= MAX_DATA_RETRIES)
+        if (s_read_attempts >= MAX_READ_RETRIES || s_data_retries >= MAX_DATA_RETRIES)
             do_deep_sleep(DEEP_SLEEP_RETRY_INTERVAL);
         else
             do_deep_sleep(s_interval_s);

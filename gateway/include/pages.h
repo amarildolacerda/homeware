@@ -270,6 +270,30 @@ function fmtBytes(b) {
   return (b/1048576).toFixed(1)+' MB';
 }
 
+function getFavs(){try{return JSON.parse(localStorage.getItem('fav_slots')||'[]')}catch(e){return[]}}
+function setFavs(a){localStorage.setItem('fav_slots',JSON.stringify(a))}
+function toggleFav(slot){
+  var a=getFavs(),i=a.indexOf(slot);
+  if(i>=0)a.splice(i,1);else a.push(slot);
+  setFavs(a);
+  var card=document.querySelector('.device[data-slot="'+slot+'"]');
+  if(card){
+    var star=card.querySelector('.star');
+    if(star)star.classList.toggle('on');
+    star.innerHTML=isFav(slot)?'&#x2605;':'&#x2606;';
+  }
+  var grid=document.getElementById('sensors-grid');
+  if(!grid)return;
+  var cards=Array.from(grid.children);
+  cards.sort(function(a,b){
+    var af=isFav(parseInt(a.dataset.slot))?1:0,bf=isFav(parseInt(b.dataset.slot))?1:0;
+    if(af!=bf)return bf-af;
+    return (a.classList.contains('offline')?1:0)-(b.classList.contains('offline')?1:0);
+  });
+  cards.forEach(function(c){grid.appendChild(c);});
+}
+function isFav(slot){return getFavs().indexOf(slot)>=0}
+
 function fmtUptime(ms) {
   var s = Math.floor(ms/1000);
   if (s < 60) return s+'s';
@@ -360,9 +384,12 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 .badge.online{background:#dcfce7;color:#16a34a}
 .badge.offline{background:#fef2f2;color:#dc2626}
 .badge.warn{background:#fef3c7;color:#d97706}
+.star{cursor:pointer;font-size:1.1rem;line-height:1;color:var(--muted-subtle);transition:color .15s;padding:2px;user-select:none}
+.star.on{color:var(--warning)}
 .badge.danger{background:#fef2f2;color:#dc2626}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .metric-bar{display:flex;align-items:center;gap:6px;font-size:0.78rem}
+.metric-line{display:inline-flex;align-items:center;gap:3px;font-size:0.67rem;color:var(--muted-subtle);vertical-align:middle}
 .metric-bar .bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .metric-bar .bar .fill{height:100%;border-radius:3px;transition:width .3s}
 .metric-bar .bar .fill.green{background:var(--success)}
@@ -479,7 +506,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 var s_overviewLoading = false;
 var s_renameSlot = null;
 var s_sensors = [];
-var s_activeFilter = 'all';
+var s_activeFilter = 'fav';
 var s_statusFilter = 'all';
 var s_prevSensorMap = {};
 var s_sensorCount = 0;
@@ -500,13 +527,6 @@ function batteryBar(pct) {
   var color = pct > 50 ? 'green' : pct > 20 ? 'yellow' : 'red';
   var badge = pct < 20 ? ' <span class="badge danger" style="font-size:0.65rem">baixa</span>' : '';
   return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">BAT</span><div class="bar"><div class="fill '+color+'" style="width:'+Math.min(100,pct)+'%"></div></div><span style="min-width:32px;text-align:right;font-size:0.7rem">'+pct+'%'+badge+'</span></div>';
-}
-
-function rssiBar(rssi) {
-  if (rssi === undefined || rssi === null) return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">RSSI</span><div class="bar"><div class="fill" style="width:0%"></div></div><span style="min-width:42px;text-align:right;font-size:0.7rem">--</span></div>';
-  var pct = Math.min(100, Math.max(0, (rssi + 100) * 2));
-  var color = rssi > -70 ? 'green' : rssi > -85 ? 'yellow' : 'red';
-  return '<div class="metric-bar"><span style="min-width:32px;font-size:0.7rem;color:var(--muted-subtle)">RSSI</span><div class="bar"><div class="fill '+color+'" style="width:'+pct+'%"></div></div><span style="min-width:42px;text-align:right;font-size:0.7rem">'+rssi+' dBm</span></div>';
 }
 
 function renderState(s) {
@@ -544,9 +564,10 @@ function renderState(s) {
       var bars = '';
       for (var i = 0; i < 10; i++)
         bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
-      html += '<div class="moisture-bars">'+bars+'</div>';
+      html += '<div class="moisture-bars" style="justify-content:center">'+bars+'</div>';
+      html += '<div style="font-size:0.75rem;color:var(--muted-subtle);margin-top:4px">'+pct+'%</div>';
     } else {
-      html += '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
+      html += '<span style="color:var(--muted-subtle);font-size:0.7rem">Aguardando dados...</span>';
     }
   }
   return html || '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
@@ -560,9 +581,20 @@ function renderSensors(sensors) {
     s_prevSensorMap = {};
     return;
   }
+  nonRepeater.sort(function(a,b){
+    var af=isFav(a.slot)?1:0,bf=isFav(b.slot)?1:0;
+    if(af!=bf)return bf-af;
+    return (a.online?0:1)-(b.online?0:1);
+  });
   grid.innerHTML = nonRepeater.map(function(s) { return buildSensorCard(s); }).join('');
   s_prevSensorMap = {};
   nonRepeater.forEach(function(s) { s_prevSensorMap[s.slot] = JSON.stringify(s); });
+}
+
+function battInline(pct) {
+  if (pct===undefined||pct===null) return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:0%;background:var(--border);border-radius:3px"></span></span>';
+  var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
+  return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+c+';border-radius:3px"></span></span>';
 }
 
 function buildSensorCard(s) {
@@ -570,18 +602,15 @@ function buildSensorCard(s) {
   var offClass = off ? ' offline' : '';
   var isType9 = s.type === 9;
   var isType8 = s.type === 8 || isType9;
-  var onState = s.state && s.state.state;
   return '<div class="device'+offClass+'" data-slot="'+s.slot+'" data-type="'+s.type+'">'+
-    '<div class="device-head">'+
-      '<div>'+
-        '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
-        '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
-          (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
-        '</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
+      '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span></div>'+
         '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
       '</div>'+
-      '<div style="display:flex;align-items:center;gap:4px">'+
-        '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
+      '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
+        battInline(s.battery_pct)+
         '<div class="device-actions">'+
           '<button class="menu-trigger" onclick="event.stopPropagation();toggleDeviceMenu('+s.slot+')">&#x22ee;</button>'+
           '<div class="menu-dropdown" id="dmenu-'+s.slot+'">'+
@@ -593,13 +622,15 @@ function buildSensorCard(s) {
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="metrics">'+
-      batteryBar(s.battery_pct)+
-      rssiBar(s.last_rssi)+
+    '<div class="state-group" style="justify-content:center;margin:6px 0">'+
+      renderState(s)+
     '</div>'+
-    '<div class="last-info">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '&nbsp;')+'</div>'+
-    '<div class="state-group">'+
-      (isType8 ? '' : renderState(s))+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'+
+      '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'há '+fmtUptime(s.last_seen) : '')+'</span>'+
+      '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
+        '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
+        '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
+      '</div>'+
     '</div>'+
   '</div>';
 }
@@ -643,17 +674,19 @@ function updateFilters(sensors) {
   var types = {};
   sensors.forEach(function(s) { types[s.type] = true; });
   var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',10:'Repeater',12:'Solo'};
-  var html = '<button class="filter-btn active" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
+  var html = '<button class="filter-btn active" data-type="fav" onclick="filterSensors(\'fav\')">&#x2605; Favoritos</button>';
   Object.keys(types).sort().forEach(function(t) {
     html += '<button class="filter-btn" data-type="'+t+'" onclick="filterSensors(\''+t+'\')">'+(names[t]||'Tipo '+t)+'</button>';
   });
+  html += '<button class="filter-btn" data-type="all" onclick="filterSensors(\'all\')">Todos</button>';
   bar.innerHTML = html;
 }
 
 function filterSensors(type) {
-  s_activeFilter = !type ? 'all' : type;
+  s_activeFilter = !type ? (getFavs().length ? 'fav' : 'all') : type;
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-  var btn = s_activeFilter==='all' ? document.querySelector('.filter-btn[data-type="all"]') : document.querySelector('.filter-btn[data-type="'+s_activeFilter+'"]');
+  var btn = document.querySelector('.filter-btn[data-type="'+s_activeFilter+'"]');
+  if (!btn) btn = document.querySelector('.filter-btn[data-type="all"]');
   if (btn) btn.classList.add('active');
   applyFilters();
 }
@@ -669,7 +702,11 @@ function filterStatus(st) {
 function applyFilters() {
   document.querySelectorAll('.device').forEach(function(d) {
     var show = true;
-    if (s_activeFilter !== 'all' && d.dataset.type !== s_activeFilter) show = false;
+    if (s_activeFilter === 'fav') {
+      if (!isFav(parseInt(d.dataset.slot))) show = false;
+    } else if (s_activeFilter !== 'all' && d.dataset.type !== s_activeFilter) {
+      show = false;
+    }
     if (s_statusFilter === 'online' && d.classList.contains('offline')) show = false;
     if (s_statusFilter === 'offline' && !d.classList.contains('offline')) show = false;
     d.style.display = show ? '' : 'none';
