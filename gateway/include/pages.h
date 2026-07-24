@@ -602,13 +602,13 @@ function rssiInline(rssi) {
 }
 
 function moistureBars(st, seq) {
-  if (!seq) return '<span style="color:var(--muted-subtle);font-size:0.7rem;margin-left:6px">--</span>';
+  if (!seq) return '<span style="color:var(--muted-subtle);font-size:0.7rem;margin-left:6px;vertical-align:middle">--</span>';
   var pct = Math.min(Math.max((st&&st.moisture_pct)||0, 0), 100);
   var full = Math.round(pct / 10);
   var bars = '';
   for (var i = 0; i < 10; i++)
-    bars += '<span class="bar'+(i<full?' on':'')+'" style="width:8px;height:10px"></span>';
-  return '<span class="moisture-bars" style="display:inline-flex;gap:2px;margin-left:6px;vertical-align:middle">'+bars+'</span>';
+    bars += '<span style="display:inline-block;width:10px;height:12px;border-radius:2px;background:'+(i<full?'#4CAF50':'var(--border)')+';margin:0 1px;vertical-align:middle"></span>';
+  return '<span style="display:inline-flex;align-items:center;margin-left:6px;height:12px">'+bars+'</span>';
 }
 
 function buildSensorCard(s) {
