@@ -619,13 +619,18 @@ function buildSensorCard(s) {
   var onState = s.state && s.state.state;
   return '<div class="device'+offClass+'" data-slot="'+s.slot+'" data-type="'+s.type+'">'+
     '<div class="device-head">'+
-      '<div>'+
-        '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
-        '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
-          (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
-          (s.type===12 ? moistureBars(s.state, s.sequence) : '')+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
+          '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
+          '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
+            (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
+          '</div>'+
+          (s.type===12 ? '<div style="margin-left:auto">'+moistureBars(s.state, s.sequence)+'</div>' : '')+
         '</div>'+
-        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+' &bull; '+battInline(s.battery_pct)+' &bull; '+rssiInline(s.last_rssi)+'</div>'+
+        '<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+
+          '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+          '<div style="margin-left:auto;display:inline-flex;align-items:center;gap:4px">'+battInline(s.battery_pct)+rssiInline(s.last_rssi)+'</div>'+
+        '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:4px">'+
         '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
