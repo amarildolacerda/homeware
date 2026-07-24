@@ -217,8 +217,10 @@ function updateFooterClock(epoch) {
   var el = document.getElementById('footer-clock');
   if (!el) return;
   if (!epoch) { el.textContent = 'sem hora NTP'; return; }
-  s_clockBase = epoch;
-  s_clockStart = Date.now();
+  if (!s_clockTimer || Math.abs(epoch - s_clockBase) > 2) {
+    s_clockBase = epoch;
+    s_clockStart = Date.now();
+  }
   function tick() {
     var e = s_clockBase + Math.floor((Date.now() - s_clockStart) / 1000);
     var d = new Date(e * 1000);

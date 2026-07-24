@@ -932,6 +932,7 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["platform"] = "esp8266";
         doc["type"] = "lampada";
         doc["tx_count"] = s_espnow_tx_count;
         doc["rx_count"] = s_espnow_rx_count;
