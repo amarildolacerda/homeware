@@ -564,17 +564,6 @@ function renderState(s) {
   } else if (s.type === 8 || s.type === 9) {
     var on = st.state ? true : false;
     html += '<button class="btn-onoff '+(on?'on':'off')+'" onclick="toggleSensor('+s.slot+','+(on?0:1)+')">'+(on?'DESLIGAR':'LIGAR')+'</button>';
-  } else if (s.type === 12) {
-    if (s.sequence > 0) {
-      var pct = Math.min(Math.max(st.moisture_pct||0, 0), 100);
-      var full = Math.round(pct / 10);
-      var bars = '';
-      for (var i = 0; i < 10; i++)
-        bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
-      html += '<div class="moisture-bars">'+bars+'</div>';
-    } else {
-      html += '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
-    }
   }
   return html || '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
 }
@@ -612,6 +601,16 @@ function rssiInline(rssi) {
   return '<span class="metric-line">rssi '+inlineBar(pct,c)+' '+rssi+' dBm</span>';
 }
 
+function moistureBars(st, seq) {
+  if (!seq) return '<span style="color:var(--muted-subtle);font-size:0.7rem;margin-left:6px">--</span>';
+  var pct = Math.min(Math.max((st&&st.moisture_pct)||0, 0), 100);
+  var full = Math.round(pct / 10);
+  var bars = '';
+  for (var i = 0; i < 10; i++)
+    bars += '<span class="bar'+(i<full?' on':'')+'" style="width:8px;height:10px"></span>';
+  return '<span class="moisture-bars" style="display:inline-flex;gap:2px;margin-left:6px;vertical-align:middle">'+bars+'</span>';
+}
+
 function buildSensorCard(s) {
   var off = !s.online;
   var offClass = off ? ' offline' : '';
@@ -624,6 +623,7 @@ function buildSensorCard(s) {
         '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
         '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span>'+
           (isType8 ? '<button class="device-toggle '+(onState?'on':'off')+'" onclick="event.stopPropagation();toggleSensor('+s.slot+','+(onState?0:1)+')">'+(onState?'ON':'OFF')+'</button>' : '')+
+          (s.type===12 ? moistureBars(s.state, s.sequence) : '')+
         '</div>'+
         '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+' &bull; '+battInline(s.battery_pct)+' &bull; '+rssiInline(s.last_rssi)+'</div>'+
       '</div>'+
@@ -643,7 +643,7 @@ function buildSensorCard(s) {
     '</div>'+
     '<div class="last-info">'+(s.last_seen>=0 ? 'última info há '+fmtUptime(s.last_seen) : '&nbsp;')+'</div>'+
     '<div class="state-group">'+
-      (isType8 ? '' : renderState(s))+
+      (isType8||s.type===12 ? '' : renderState(s))+
     '</div>'+
   '</div>';
 }
