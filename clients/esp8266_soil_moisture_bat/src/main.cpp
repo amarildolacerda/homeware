@@ -48,6 +48,7 @@ static bool s_ack_received = false;
 static int s_pair_attempts = 0;
 static int s_data_retries = 0;
 static bool s_suspend = false;
+static bool s_suspend_from_telnet = false;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -112,6 +113,18 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         espnow_ack_t *ack = (espnow_ack_t *)data;
         if (ack->status == PAIR_STATUS_OK)
             s_ack_received = true;
+        break;
+    }
+    case ESPNOW_MSG_RESTART:
+    {
+        if (len < sizeof(espnow_restart_t)) return;
+        espnow_restart_t *rst = (espnow_restart_t *)data;
+        if (memcmp(rst->target_mac, s_my_mac, 6) == 0)
+        {
+            console.printf("[%s] Restart command from gateway\n", TAG);
+            delay(100);
+            ESP.restart();
+        }
         break;
     }
     }
@@ -310,22 +323,31 @@ void loop(void)
     {
         delay(1000);
     }
-    if (Serial.available() > 0 && !s_suspend)
+    if ((Serial.available() > 0 || console.telnet_available() > 0 || console.telnet_connected()) && !s_suspend)
     {
         delay(1);
         while (Serial.available()) Serial.read();
+        while (console.telnet_available()) console.telnet_read();
         s_suspend = true;
-        console.printf("[%s] Suspenso - tecla pressionada\n", TAG);
+        s_suspend_from_telnet = console.telnet_connected();
+        console.printf("[%s] Suspenso - tecla pressionada%s\n", TAG, s_suspend_from_telnet ? " (telnet)" : "");
     }
     if (s_suspend)
     {
+        if (s_suspend_from_telnet && !console.telnet_connected())
+        {
+            console.printf("[%s] Telnet desconectado, restart\n", TAG);
+            delay(100);
+            ESP.restart();
+        }
         static bool menu_printed = false;
         if (!menu_printed)
         {
-            console.printf("\nComandos: s=status, i=intervalo, r=restart, h=ajuda\n> ");
+            console.printf("\nComandos: s=status, i=intervalo, r=restart, p=parear, h=ajuda\n> ");
             menu_printed = true;
         }
         int c = Serial.read();
+        if (c == -1) c = console.telnet_read();
         if (c != -1)
         {
             menu_printed = false;
@@ -350,6 +372,7 @@ void loop(void)
                 {
                     console.loop();
                     int ch = Serial.read();
+                        if (ch == -1) ch = console.telnet_read();
                     if (ch >= '0' && ch <= '9')
                     {
                         buf[idx++] = (char)ch;
@@ -384,7 +407,15 @@ void loop(void)
                 ESP.restart();
                 break;
             case 'h':
-                console.printf("s=status i=intervalo r=restart h=ajuda\n");
+                console.printf("s=status i=intervalo r=restart p=parear h=ajuda\n");
+                break;
+            case 'p':
+                console.printf("[%s] Re-pairing...\n", TAG);
+                s_has_gateway = false;
+                memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
+                s_assigned_slot = 0;
+                s_suspend = false;
+                s_state = STATE_INIT;
                 break;
             }
             console.printf("> ");
