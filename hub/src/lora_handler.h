@@ -1,20 +1,27 @@
 #ifndef LORA_HANDLER_H
 #define LORA_HANDLER_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
-#define LORA_MSG_SENSOR_DATA   0x01
-#define LORA_MSG_PAIR_REQUEST  0x02
-#define LORA_MSG_PAIR_RESPONSE 0x03
-#define LORA_MSG_HEARTBEAT     0x04
-#define LORA_MSG_NAK           0x05
-#define LORA_MSG_GW_ANNOUNCE   0x06
-#define LORA_MSG_COMMAND       0x07
+#include "radio_interface.h"
+#include <LoRa.h>
 
 #define LORA_RX_BUF_SIZE 256
 
-bool lora_handler_init(void);
-void lora_handler_loop(void);
+class LoraHandler : public RadioInterface {
+public:
+    LoraHandler() : m_ok(false), m_rx_len(0) {}
+    ~LoraHandler() {}
+
+    int init() override;
+    int send(const uint8_t* data, size_t len) override;
+    void loop() override;
+    bool is_ready() const override;
+
+private:
+    bool m_ok;
+    uint8_t m_rx_buf[LORA_RX_BUF_SIZE];
+    int m_rx_len;
+
+    void handle_rx();
+};
 
 #endif
