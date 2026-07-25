@@ -1,6 +1,6 @@
-# ESP8266 ESP-NOW Gateway
+# AgriSense Hub
 
-Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge HA Python via HTTP.
+Hub ESP-NOW para sensores/atuadores que encaminha dados para o Server Python via HTTP.
 
 ## Hardware
 - **D1 Mini** (ESP-12E/F) com USB para alimentação contínua
@@ -10,7 +10,7 @@ Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge 
 ## Funcionalidades
 - Recebe dados via ESP-NOW (canal 1) de até 20 sensores
 - Pareamento via botão físico (3s) ou dashboard web
-- Encaminha para Bridge HA Python via HTTP REST
+- Encaminha para Server Python via HTTP REST
 - Dashboard web em `http://<IP>`
 - OTA via ArduinoOTA (`<device_id>.local`)
 - Serial commands para debug
@@ -24,7 +24,7 @@ Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge 
 | `p` | Iniciar pareamento (60s) |
 | `c` | Limpar TODOS os sensores |
 | `r` | Reiniciar |
-| `b` | Re-registrar todos no Bridge |
+| `b` | Re-registrar todos no Server |
 | `s` | Status completo |
 | `w` | Forçar portal WiFi |
 
@@ -38,7 +38,7 @@ Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge 
 ## Configuração WiFi
 - Primeira vez: conecta AP `ESP_Gateway_Setup` / `password123`
 - Portal em `192.168.4.1`
-- Configure Bridge IP/Port opcional
+- Configure Server IP/Port opcional
 - Salva em EEPROM
 
 ## Bridge Integration
@@ -50,29 +50,29 @@ Gateway ESP-NOW para sensores battery-powered que encaminha dados para o Bridge 
 
 ## Build
 ```bash
-cd gateway
+cd hub
 ./build.sh
 ```
 
 ## Flash
 ```bash
-pio run -e esp8266_gateway -t upload --upload-port /dev/ttyUSB0
+pio run -e hub_8266 -t upload --upload-port /dev/ttyUSB0
 ```
 
 ## Monitor
 ```bash
 ./monitor.sh
 # ou
-pio device monitor -e esp8266_gateway --baud 115200
+pio device monitor -e hub_8266 --baud 115200
 ```
 
 ## Dashboard
-Acesse `http://<IP_DO_GATEWAY>` no navegador:
+Acesse `http://<IP_DO_HUB>` no navegador:
 - Estatísticas gerais
 - Lista de sensores com estado, bateria, RSSI, último visto
 - Botão ON/OFF para atuadores (type 8)
 - Botões: Parear, Re-registrar, Renomear, Remover
-- Configuração Bridge IP/Port
+- Configuração Server IP/Port
 
 ## Protocolo ESP-NOW
 - Canal: 1 (deve coincidir com WiFi)
