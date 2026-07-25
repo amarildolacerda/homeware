@@ -24,7 +24,9 @@ int LoraHandler::send(const uint8_t* data, size_t len) {
     if (!m_ok) return -1;
     LoRa.beginPacket();
     LoRa.write(data, len);
-    return LoRa.endPacket() ? 0 : -1;
+    int ret = LoRa.endPacket() ? 0 : -1;
+    LoRa.receive();
+    return ret;
 }
 
 bool LoraHandler::is_ready() const {
