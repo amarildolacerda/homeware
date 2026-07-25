@@ -54,6 +54,6 @@ fi
 
 echo ""
 echo "Environment ready."
-echo "  Build:    pio run -d gateway"
-echo "  Flash:    pio run -d gateway -t upload"
-echo "  Monitor:  pio device monitor -d gateway"
+echo "  Build:    pio run -d hub"
+echo "  Flash:    pio run -d hub -t upload"
+echo "  Monitor:  pio device monitor -d hub"
