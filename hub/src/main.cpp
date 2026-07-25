@@ -9,6 +9,13 @@
 #include "web_server.h"
 #include "common_ota.h"
 #include "log_buffer.h"
+#ifdef HABILITA_LORA
+#include "lora_handler.h"
+#include "lora_protocol.h"
+#endif
+#ifdef HABILITA_DISPLAY_TTGO
+#include "display_handler.h"
+#endif
 #include "common_console.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
@@ -20,6 +27,14 @@ static unsigned long s_last_ntp_retry = 0;
 static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
+
+#ifdef HABILITA_LORA
+static LoraHandler s_lora;
+#define LORA_PENDING_STATE_MAX 5
+static uint8_t s_lora_pending_state_slots[LORA_PENDING_STATE_MAX];
+static int s_lora_pending_state_head = 0;
+static int s_lora_pending_state_tail = 0;
+#endif
 
 void print_help() {
     console.println("\n=== Comandos ===");
@@ -108,6 +123,75 @@ void handle_console(char c) {
     }
 }
 
+#ifdef HABILITA_LORA
+static void queue_bridge_state(int slot) {
+    int next = (s_lora_pending_state_head + 1) % LORA_PENDING_STATE_MAX;
+    if (next == s_lora_pending_state_tail) return;
+    s_lora_pending_state_slots[s_lora_pending_state_head] = slot;
+    s_lora_pending_state_head = next;
+}
+
+static void lora_process_bridge_queue(void) {
+    while (s_lora_pending_state_tail != s_lora_pending_state_head) {
+        int slot = s_lora_pending_state_slots[s_lora_pending_state_tail];
+        s_lora_pending_state_tail = (s_lora_pending_state_tail + 1) % LORA_PENDING_STATE_MAX;
+        virtual_sensor_t *s = sensor_registry_get(slot);
+        if (s && s->paired && mqtt_client_is_connected()) {
+            mqtt_client_publish_state(s);
+        }
+    }
+}
+
+static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg) {
+    if (len < LORA_HEADER_SIZE) return;
+    const lora_frame_t* frame = (const lora_frame_t*)data;
+
+    int slot = sensor_registry_find_by_mac(frame->sensor_id);
+
+    switch (frame->msg_type) {
+        case LORA_MSG_PAIR_REQUEST: {
+            if (slot < 0) {
+                slot = sensor_registry_find_free_slot();
+                if (slot < 0) return;
+                uint8_t sensor_type = frame->payload_len > 0 ? frame->payload[0] : 0;
+                sensor_registry_add(frame->sensor_id, sensor_type, slot, "", HW_CHIP_UNKNOWN);
+            }
+            lora_pair_response_t resp;
+            memset(&resp, 0, sizeof(resp));
+            resp.msg_type = LORA_MSG_PAIR_RESPONSE;
+            resp.sequence = frame->sequence;
+            memcpy(resp.sensor_id, frame->sensor_id, 6);
+            resp.payload_len = 1;
+            resp.assigned_slot = slot;
+            s_lora.send((const uint8_t*)&resp, sizeof(resp));
+            break;
+        }
+        case LORA_MSG_SENSOR_DATA: {
+            if (slot >= 0) {
+                espnow_header_t hdr;
+                memset(&hdr, 0, sizeof(hdr));
+                hdr.sequence = frame->sequence;
+                hdr.rssi = rssi;
+                hdr.payload_len = frame->payload_len;
+                sensor_registry_update_state(slot, &hdr, frame->payload, frame->payload_len);
+                queue_bridge_state(slot);
+            }
+            break;
+        }
+        case LORA_MSG_HEARTBEAT: {
+            if (slot >= 0) {
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (s) {
+                    s->last_seen = millis();
+                    s->online = true;
+                }
+            }
+            break;
+        }
+    }
+}
+#endif
+
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -141,6 +225,18 @@ void setup() {
         console.set_banner(banner);
     }
     espnow_handler_init();
+#ifdef HABILITA_LORA
+    s_lora.set_rx_callback(lora_rx_cb, nullptr);
+    int lora_state = s_lora.init();
+    if (lora_state != 0) {
+        console.printf("[LoRa] Init failed: %d — LoRa disabled\n", lora_state);
+    } else {
+        console.println("[LoRa] Initialized");
+    }
+#endif
+#ifdef HABILITA_DISPLAY_TTGO
+    display_handler_init();
+#endif
     espnow_announce();
     log_buffer_init();
     
@@ -188,6 +284,13 @@ void loop() {
     web_server_loop();
     web_server_maintain_wifi();
     espnow_handler_loop();
+#ifdef HABILITA_LORA
+    s_lora.loop();
+    lora_process_bridge_queue();
+#endif
+#ifdef HABILITA_DISPLAY_TTGO
+    display_handler_loop();
+#endif
     mqtt_client_loop();
 
     /* LED pisca durante o modo de pareamento */
