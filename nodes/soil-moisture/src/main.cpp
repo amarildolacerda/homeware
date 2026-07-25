@@ -10,7 +10,7 @@
 #include "common_console.h"
 #include "common_espnow.h"
 
-static const char *TAG = "esp8266-soil";
+static const char *TAG = "agri-soil";
 
 enum State {
     STATE_INIT,

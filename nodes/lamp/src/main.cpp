@@ -21,7 +21,7 @@
 #include "common_repeater.h"
 #include "timer.h"
 
-static const char *TAG = "esp8266-lampada";
+static const char *TAG = "agri-lamp";
 
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;

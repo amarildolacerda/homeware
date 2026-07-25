@@ -14,7 +14,7 @@
 #include "common_espnow.h"
 #include "common_web.h"
 
-static const char *TAG = "esp8266-chuva";
+static const char *TAG = "agri-rain";
 
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;

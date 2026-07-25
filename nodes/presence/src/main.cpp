@@ -14,7 +14,7 @@
 #include "common_espnow.h"
 #include "common_web.h"
 
-static const char *TAG = "esp8266-pir";
+static const char *TAG = "agri-presence";
 
 static unsigned long s_last_reconnect_attempt = 0;
 static unsigned long s_last_espnow_send = 0;

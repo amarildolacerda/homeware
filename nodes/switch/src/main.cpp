@@ -18,7 +18,7 @@
 #include "timer.h"
 #include <LittleFS.h>
 
-static const char *TAG = "esp8266-onoff";
+static const char *TAG = "agri-switch";
 
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;

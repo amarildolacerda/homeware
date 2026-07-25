@@ -10,7 +10,7 @@
 #include "common_console.h"
 #include "common_espnow.h"
 
-static const char *TAG = "esp8266-pir-bat";
+static const char *TAG = "agri-presence-bat";
 
 enum State {
     STATE_INIT,
