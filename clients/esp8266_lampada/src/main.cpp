@@ -46,6 +46,7 @@ static uint16_t s_assigned_slot = 0;
 static int s_pair_attempts = 0;
 static bool s_ack_received = false;
 static bool s_send_pending = false;
+static uint16_t s_last_send_sequence = 0;
 static bool s_espnow_ready = false;
 
 static bool s_relay_state = false;
@@ -106,6 +107,7 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
+#define EEPROM_WIFI_MARKER 0x5A
 #define EEPROM_MAGIC 0xAA
 
 #define SYNC_LITTLEFS_FILE "/sync.json"
@@ -115,9 +117,10 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 typedef struct {
     bool enabled;
     char target_device_id[32];
+    char target_device_name[32];
 } sync_config_t;
 
-static sync_config_t s_sync_cfg = {false, ""};
+static sync_config_t s_sync_cfg = {false, "", ""};
 
 static void sync_load(void)
 {
@@ -132,34 +135,74 @@ static void sync_load(void)
     const char *tid = doc["target_device_id"] | "";
     strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
     s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+    const char *tn = doc["target_device_name"] | "";
+    strncpy(s_sync_cfg.target_device_name, tn, sizeof(s_sync_cfg.target_device_name) - 1);
+    s_sync_cfg.target_device_name[sizeof(s_sync_cfg.target_device_name) - 1] = '\0';
 }
 
 static void devices_load(JsonDocument &doc)
 {
     if (!LittleFS.exists(KNOWN_DEVICES_FILE))
     {
-        JsonArray arr = doc.to<JsonArray>();
-        arr.add(s_device_id);
+        doc.to<JsonArray>();
         return;
     }
     File f = LittleFS.open(KNOWN_DEVICES_FILE, "r");
     if (!f) { doc.to<JsonArray>(); return; }
     DeserializationError err = deserializeJson(doc, f);
     f.close();
-    if (err) doc.to<JsonArray>();
+    if (err) { doc.to<JsonArray>(); return; }
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.size() > 0 && arr[0].is<const char *>())
+    {
+        JsonDocument ndoc;
+        JsonArray narr = ndoc.to<JsonArray>();
+        for (JsonVariant v : arr)
+        {
+            JsonObject obj = narr.add<JsonObject>();
+            obj["id"] = v.as<const char *>();
+            obj["name"] = v.as<const char *>();
+        }
+        doc.clear();
+        for (JsonVariant v : narr)
+        {
+            JsonObject obj = doc.add<JsonObject>();
+            obj["id"] = v["id"];
+            obj["name"] = v["name"];
+        }
+    }
 }
 
-static void devices_add(const char *device_id)
+static bool device_exists(JsonArray &arr, const char *device_id)
+{
+    for (JsonVariant v : arr)
+    {
+        if (v.is<JsonObject>())
+        {
+            if (strcmp(v["id"] | "", device_id) == 0)
+                return true;
+        }
+        else if (v.is<const char *>())
+        {
+            if (strcmp(v, device_id) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+static void devices_add(const char *device_id, const char *device_name)
 {
     if (!device_id || strlen(device_id) == 0) return;
     JsonDocument doc;
     devices_load(doc);
     JsonArray arr = doc.as<JsonArray>();
-    for (JsonVariant v : arr)
-        if (strcmp(v, device_id) == 0) return;
+    if (device_exists(arr, device_id)) return;
     if (arr.size() >= MAX_KNOWN_DEVICES)
         arr.remove(0);
-    arr.add(device_id);
+    JsonObject obj = arr.add<JsonObject>();
+    obj["id"] = device_id;
+    obj["name"] = (device_name && strlen(device_name) > 0) ? device_name : device_id;
     File f = LittleFS.open(KNOWN_DEVICES_FILE, "w");
     if (!f) return;
     serializeJson(doc, f);
@@ -171,6 +214,7 @@ static void sync_save(void)
     StaticJsonDocument<128> doc;
     doc["enabled"] = s_sync_cfg.enabled;
     doc["target_device_id"] = s_sync_cfg.target_device_id;
+    doc["target_device_name"] = s_sync_cfg.target_device_name;
     File f = LittleFS.open(SYNC_LITTLEFS_FILE, "w");
     if (!f) return;
     serializeJson(doc, f);
@@ -291,8 +335,8 @@ static void load_startup_mode(void)
 static void save_wifi_credentials(const char *ssid, const char *pass)
 {
     EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_SSID_ADDR, 0xFF);
-    EEPROM.write(EEPROM_PASS_ADDR, 0xFF);
+    EEPROM.write(EEPROM_SSID_ADDR, EEPROM_WIFI_MARKER);
+    EEPROM.write(EEPROM_PASS_ADDR, EEPROM_WIFI_MARKER);
     for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
     {
         EEPROM.write(EEPROM_SSID_ADDR + 1 + i, ssid[i]);
@@ -311,12 +355,25 @@ static void save_wifi_credentials(const char *ssid, const char *pass)
     EEPROM.end();
 }
 
+static bool eeprom_str_valid_at(uint16_t addr, uint8_t max_len)
+{
+    for (int i = 0; i < max_len; i++)
+    {
+        uint8_t c = EEPROM.read(addr + i);
+        if (c == '\0')
+            return true;
+        if (c < 0x20 || c > 0x7E)
+            return false;
+    }
+    return EEPROM.read(addr + max_len) == '\0';
+}
+
 static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size_t pass_size)
 {
     EEPROM.begin(EEPROM_SIZE);
     uint8_t marker = EEPROM.read(EEPROM_SSID_ADDR);
     bool found = false;
-    if (marker == 0xFF)
+    if (marker == EEPROM_WIFI_MARKER && eeprom_str_valid_at(EEPROM_SSID_ADDR + 1, EEPROM_SSID_MAX - 1))
     {
         char buf[64];
         for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
@@ -326,14 +383,12 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
                 break;
         }
         buf[EEPROM_SSID_MAX - 1] = '\0';
-        if (strlen(buf) > 0)
-        {
-            strncpy(ssid, buf, ssid_size - 1);
-            ssid[ssid_size - 1] = '\0';
-            found = true;
-        }
+        strncpy(ssid, buf, ssid_size - 1);
+        ssid[ssid_size - 1] = '\0';
+        found = true;
+
         marker = EEPROM.read(EEPROM_PASS_ADDR);
-        if (marker == 0xFF)
+        if (marker == EEPROM_WIFI_MARKER && eeprom_str_valid_at(EEPROM_PASS_ADDR + 1, EEPROM_PASS_MAX - 1))
         {
             for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
             {
@@ -489,6 +544,8 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             return;
         espnow_ack_t *ack = (espnow_ack_t *)data;
         console.printf("[%s] ACK received: status=%d seq=%d slot=%d\n", TAG, ack->status, ack->sequence, ack->assigned_slot);
+        if (ack->sequence != s_last_send_sequence)
+            return;
         if (ack->status == PAIR_STATUS_DENIED)
         {
             s_paired = false;
@@ -524,6 +581,7 @@ static bool espnow_send_data(void)
     hdr->version = ESPNOW_PROTOCOL_VERSION;
     hdr->msg_type = ESPNOW_MSG_SENSOR_DATA;
     hdr->sequence = s_sequence++;
+    s_last_send_sequence = hdr->sequence;
     WiFi.macAddress(hdr->sensor_mac);
     hdr->sensor_type = SENSOR_TYPE_LIGHT;
     hdr->battery_pct = (uint8_t)s_battery;
@@ -686,13 +744,14 @@ static void start_ap(void)
 {
     char ssid[33];
     name_to_ssid(s_device_name, ssid, sizeof(ssid));
+    WiFi.mode(WIFI_AP);
     WiFi.softAP(ssid, WIFI_CONFIG_PORTAL_PASS);
     console.printf("[%s] AP '%s' started, connect to configure WiFi\n", TAG, ssid);
 }
 
 static void hwifi_begin(void)
 {
-    WiFi.mode(WIFI_AP_STA);
+    WiFi.mode(WIFI_STA);
     WiFi.setOutputPower(20.5);
     s_last_reconnect_attempt = millis();
 
@@ -754,6 +813,7 @@ static void handle_wifi(void)
         if (s_config_portal_active)
         {
             console.printf("[%s] WiFi connected, stopping AP\n", TAG);
+            WiFi.mode(WIFI_STA);
             WiFi.softAPdisconnect(true);
             s_config_portal_active = false;
         }
@@ -921,6 +981,7 @@ static void handle_api_state(void)
         char upbuf[32];
         uptime_to_str(millis() - s_start_time, upbuf, sizeof(upbuf));
         doc["uptime"] = upbuf;
+        doc["uptime_s"] = (millis() - s_start_time) / 1000;
         if (s_last_send_ms)
             doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["slot"] = s_assigned_slot;
@@ -1458,7 +1519,17 @@ static void handle_api_devices(void)
     String json;
     JsonDocument doc;
     devices_load(doc);
-    serializeJson(doc, json);
+    JsonDocument out;
+    JsonArray arr = out.to<JsonArray>();
+    for (JsonVariant v : doc.as<JsonArray>())
+    {
+        const char *id = v["id"] | "";
+        if (strcmp(id, s_device_id) == 0) continue;
+        JsonObject obj = arr.add<JsonObject>();
+        obj["id"] = id;
+        obj["name"] = v["name"] | id;
+    }
+    serializeJson(out, json);
     s_server.send(200, "application/json", json);
 }
 
@@ -1478,6 +1549,7 @@ static void handle_api_timers(void)
         JsonObject sync = doc["sync"].to<JsonObject>();
         sync["enabled"] = s_sync_cfg.enabled;
         sync["target_device_id"] = s_sync_cfg.target_device_id;
+        sync["target_device_name"] = s_sync_cfg.target_device_name;
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1518,9 +1590,18 @@ static void handle_api_timers(void)
                 strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
                 s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
             }
+            else if (s.containsKey("target_id"))
+            {
+                const char *tid = s["target_id"] | "";
+                strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
+                s_sync_cfg.target_device_id[sizeof(s_sync_cfg.target_device_id) - 1] = '\0';
+            }
+            const char *tn = s["target_device_name"] | s["target_name"] | "";
+            strncpy(s_sync_cfg.target_device_name, tn, sizeof(s_sync_cfg.target_device_name) - 1);
+            s_sync_cfg.target_device_name[sizeof(s_sync_cfg.target_device_name) - 1] = '\0';
             sync_save();
             if (strlen(s_sync_cfg.target_device_id) > 0)
-                devices_add(s_sync_cfg.target_device_id);
+                devices_add(s_sync_cfg.target_device_id, s_sync_cfg.target_device_name);
         }
         if (doc.containsKey("index"))
         {
@@ -1565,6 +1646,7 @@ static void handle_api_timers(void)
             timer_from_json(doc);
         }
         timer_save_littlefs();
+        timer_save();
         String json;
         JsonDocument resp;
         resp["status"] = "ok";
@@ -1662,7 +1744,11 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    LittleFS.begin();
+    if (!LittleFS.begin()) {
+        console.printf("[%s] LittleFS mount failed, formatting...\n", TAG);
+        LittleFS.format();
+        LittleFS.begin();
+    }
 
     uint32_t chip_id = ESP.getChipId();
     snprintf(s_device_id, sizeof(s_device_id), "esp8266_%06x", chip_id);
@@ -1670,13 +1756,13 @@ void setup(void)
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
     if (timer_load_littlefs()) {
-        EEPROM.begin(EEPROM_SIZE);
-        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
-            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
-        EEPROM.commit();
-        EEPROM.end();
-        console.printf("[%s] EEPROM timer region cleared\n", TAG);
+        console.printf("[%s] timer_load_littlefs: OK\n", TAG);
+    } else {
+        console.printf("[%s] timer_load_littlefs: FAIL, migrating EEPROM\n", TAG);
+        timer_save();
+        timer_save_littlefs();
     }
+    timer_save();
     sync_load();
 
     console.printf("\n");
@@ -1722,6 +1808,23 @@ void setup(void)
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/devices", HTTP_GET, handle_api_devices);
     s_server.on("/api/timer/next", handle_api_timer_next);
+    s_server.on("/api/debug", HTTP_GET, []() {
+        String json;
+        String fs;
+        if (LittleFS.exists("/timers.json")) {
+            File f = LittleFS.open("/timers.json", "r");
+            if (f) {
+                fs = f.readString();
+                f.close();
+            }
+        }
+        JsonDocument doc;
+        timer_to_json(doc);
+        String ram;
+        serializeJson(doc, ram);
+        String resp = "{\"littlefs\": " + (fs.length() ? fs : "null") + ", \"ram\": " + ram + "}";
+        s_server.send(200, "application/json", resp);
+    });
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
@@ -1774,7 +1877,11 @@ void loop(void)
     handle_wifi();
     ota_handle();
 #ifdef HABILITA_ALEXA
-    s_alexa.loop();
+    if (s_alexa_initialized) {
+        s_alexa.loop();
+    } else {
+        s_server.handleClient();
+    }
 #else
     s_server.handleClient();
 #endif

@@ -295,6 +295,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
 }
 
 void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slot) {
+    if (!mac || mac_equal(mac, s_bcast_addr)) return;
     espnow_ack_t ack = {
         .msg_type = ESPNOW_MSG_ACK,
         .sequence = sequence,
@@ -304,10 +305,12 @@ void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slo
     };
     mac_copy(ack.sensor_mac, mac);
 
-    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ack, sizeof(ack), "ESP-NOW");
+    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
+    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&ack, sizeof(ack), "ESP-NOW");
 }
 
 void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
+    if (!mac || mac_equal(mac, s_bcast_addr)) return;
     espnow_pair_response_t resp = {
         .msg_type = ESPNOW_MSG_PAIR_RESPONSE,
         .sequence = sequence,
@@ -319,7 +322,8 @@ void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
     mac_copy(resp.sensor_mac, mac);
     mac_copy(resp.gateway_mac, s_gateway_mac);
 
-    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&resp, sizeof(resp), "ESP-NOW");
+    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
+    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&resp, sizeof(resp), "ESP-NOW");
 }
 
 static void send_gw_announce(const uint8_t *mac) {
