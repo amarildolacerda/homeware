@@ -1,40 +1,42 @@
 param (
-    [string]$Port = "COM3"
+    [string]$p = "COM3",
+    [string]$e
 )
 
-# Erase ESP8266 flash via serial
-# Usage: .\erase.ps1 [-Port COM4]
+<#
+.SYNOPSIS
+    Erase ESP8266 flash via serial
+.EXAMPLE
+    .\erase.ps1                     # serial, COM3, env esp8266
+    .\erase.ps1 -p COM4             # serial, COM4
+    .\erase.ps1 -p COM4 -e esp8266_ota   # override env
+#>
 
 $ErrorActionPreference = "Stop"
 
-function Test-Command {
-    param($Command)
-    return (Get-Command $Command -ErrorAction SilentlyContinue) -ne $null
+function Get-Pio {
+    $paths = @(
+        "pio",
+        "platformio",
+        "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python3*\Scripts\pio.exe"
+    )
+    foreach ($p in $paths) {
+        $cmd = Get-Command $p -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    }
+    return $null
 }
 
-if (Test-Command pio) {
-    Write-Host "Erasing via PlatformIO on $Port..." -ForegroundColor Cyan
-    pio run -t erase --upload-port "$Port"
-    exit
+$pio = Get-Pio
+if (-not $pio) {
+    Write-Error "PlatformIO CLI not found. Use: python -m pip install platformio"
+    exit 1
 }
 
-if (Test-Command platformio) {
-    Write-Host "Erasing via PlatformIO on $Port..." -ForegroundColor Cyan
-    platformio run -t erase --upload-port "$Port"
-    exit
-}
+$envName = if ($e) { $e } else { "esp8266" }
+Write-Host "Erasing via PlatformIO on $p (env: $envName)..." -ForegroundColor Cyan
+& $pio run -e $envName -t erase --upload-port "$p"
+if ($LASTEXITCODE -ne 0) { Write-Error "Erase failed"; exit 1 }
 
-$esptool = "esptool.py"
-if (-not (Get-Command $esptool -ErrorAction SilentlyContinue)) {
-    $esptool = "$env:USERPROFILE\.platformio\packages\tool-esptoolpy\esptool.py"
-}
-
-if (Test-Path $esptool) {
-    Write-Host "Erasing via esptool.py on $Port..." -ForegroundColor Cyan
-    python "$esptool" --port "$Port" erase_flash
-    exit
-}
-
-Write-Error "PlatformIO CLI or esptool.py not found"
-Write-Host "Install: pip install platformio" -ForegroundColor Yellow
-exit 1
+Write-Host "Done." -ForegroundColor Green
