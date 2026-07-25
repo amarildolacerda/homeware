@@ -1306,6 +1306,7 @@ static void handle_api_timers(void)
         if (ok)
         {
             timer_save_littlefs();
+            timer_save();
             String json;
             JsonDocument resp;
             resp["status"] = "ok";
@@ -1533,7 +1534,11 @@ void setup(void)
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
-    LittleFS.begin();
+    if (!LittleFS.begin()) {
+        console.printf("[%s] LittleFS mount failed, formatting...\n", TAG);
+        LittleFS.format();
+        LittleFS.begin();
+    }
 
     repeater_init(EEPROM_REPEATER_EN_ADDR);
 
@@ -1558,17 +1563,10 @@ void setup(void)
 
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
     if (!timer_load_littlefs()) {
-        timer_load();  /* EEPROM migration */
+        timer_save();
         timer_save_littlefs();
     }
-    if (timer_load_littlefs()) {
-        EEPROM.begin(EEPROM_SIZE);
-        for (uint16_t i = 0; i < MAX_TIMERS * sizeof(timer_config_t); i++)
-            EEPROM.write(EEPROM_TIMER_BASE + i, 0xFF);
-        EEPROM.commit();
-        EEPROM.end();
-        console.printf("[%s] EEPROM timer region cleared\n", TAG);
-    }
+    timer_save();
     console.printf("[%s] Timer module initialized (LittleFS)\n", TAG);
 
     s_pulse_enabled = timer_pulse_get_enabled();
@@ -1594,7 +1592,11 @@ void loop(void)
     }
     handle_wifi();
     ArduinoOTA.handle();
-    s_alexa.loop();
+    if (s_alexa_initialized) {
+        s_alexa.loop();
+    } else {
+        s_server.handleClient();
+    }
 
     {
         bool btn = digitalRead(s_button_pin);
