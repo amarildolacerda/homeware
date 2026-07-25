@@ -1,9 +1,9 @@
-# Template/Checklist para Criação de Novos Clients ESP8266
+# Template/Checklist para Criação de Novos Nodes AgriSense
 
 ## 1. Estrutura de Diretórios
 
 ```
-clients/esp8266_<tipo>/
+nodes/<tipo>/
 ├── .gitignore
 ├── build.sh
 ├── flash.sh
@@ -82,7 +82,7 @@ clients/esp8266_<tipo>/
 
 ### Setup
 - [ ] Serial 115200 + console.begin()
-- [ ] device_id = `esp8266_%06x` (chip_id)
+- [ ] device_id = `agri_%06x` (chip_id)
 - [ ] Carregar device_name da EEPROM
 - [ ] WiFiManager com campo device_name
 - [ ] `randomSeed(analogRead(A0))`
@@ -99,7 +99,7 @@ clients/esp8266_<tipo>/
 - [ ] `board_build.filesystem = littlefs` (se usar SPIFFS/LittleFS)
 - [ ] `build_flags` com `-I../../shared`, `-I../../shared/src`
 - [ ] lib_deps: `ArduinoJson`, `WiFiManager` (mínimo)
-- [ ] env `esp8266_ota` para OTA
+- [ ] env `<node>_ota` para OTA
 
 ### Scripts
 - [ ] `build.sh` — `pio run`
@@ -121,7 +121,7 @@ clients/esp8266_<tipo>/
 
 | Regra | Descrição |
 |-------|-----------|
-| 1 | Device ID dinâmico (`esp8266_<chip_id>`), não configurável |
+| 1 | Device ID dinâmico (`agri_<chip_id>`), não configurável |
 | 2 | Device name via WiFiManager, salvo EEPROM (> 32, < 127) |
 | 3 | `BRIDGE_HOST = "0.0.0.0"` força discovery UDP |
 | 4 | Copiar cJSON `valuestring` para buffer local antes de `cJSON_Delete` |
