@@ -201,7 +201,7 @@ Body parcial — só campos enviados são atualizados:
 ```
 
 ### GET/POST `/api/pulse`
-
+(remover na v1.0.3)
 Mantido para compatibilidade. GET retorna status, POST configura.
 
 ## 9. Dashboard (Seção "Ciclo")
