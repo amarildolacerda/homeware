@@ -2,10 +2,10 @@
 """Cliente HTTP para o gateway ESP-NOW.
 
 Uso:
-    python gateway_client.py [host] comando [args]
+    python hub_client.py [host] comando [args]
 
 Comandos:
-    info                      - status geral do gateway
+    info                      - status geral do hub
     sensors                   - lista sensores pareados
     logs                      - logs do ring buffer
     clear-logs                - limpa os logs
@@ -16,14 +16,14 @@ Comandos:
     sensor <slot> name <nome> - renomeia sensor
     sensor <slot> on|off      - envia comando ON/OFF (ONOFF/LIGHT)
     sensor <slot> remove      - remove sensor
-    restart                   - reinicia o gateway
+    restart                   - reinicia o hub
     mqtt                      - mostra config MQTT
     wifi                      - mostra config WiFi
 
 Exemplos:
-    python gateway_client.py 192.168.1.14 sensors
-    python gateway_client.py 192.168.1.14 sensor 2 on
-    python gateway_client.py info
+    python hub_client.py 192.168.1.14 sensors
+    python hub_client.py 192.168.1.14 sensor 2 on
+    python hub_client.py info
 """
 import sys
 import json

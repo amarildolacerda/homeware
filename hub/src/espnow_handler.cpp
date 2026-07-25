@@ -181,7 +181,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
             if (slot < 0) {
                 slot = sensor_registry_find_free_slot();
                 if (slot >= 0) {
-                    sensor_registry_add(mac, SENSOR_TYPE_REPEATER, slot, "Repeater", HW_CHIP_ESP8266);
+                    sensor_registry_add(mac, SENSOR_TYPE_REPEATER, slot, "Repeater", HW_CHIP_ESP_1);
                     console.printf("[ESP-NOW] Repeater registered on GW_DISCOVER slot=%d\n", slot);
                 }
             } else {
@@ -219,7 +219,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
                     send_ack(mac, hdr->sequence, PAIR_STATUS_FULL, 0xFF);
                     return;
                 }
-                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater", HW_CHIP_ESP8266);
+                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater", HW_CHIP_ESP_1);
             } else {
                 // A device may change role (e.g. was a light, now a repeater).
                 // Re-type the existing slot so its state is parsed as a repeater.
@@ -476,7 +476,7 @@ unsigned long espnow_pairing_remaining_ms() {
 }
 
 const uint8_t* espnow_dest_for_chip(const uint8_t *mac, uint8_t client_chip) {
-    if (client_chip == HW_CHIP_ESP8266) {
+    if (client_chip == HW_CHIP_ESP_1) {
         /* Unicast funciona para ESP8266->ESP8266 e ESP32->ESP8266 */
         espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
         return mac;

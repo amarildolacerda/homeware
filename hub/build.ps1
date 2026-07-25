@@ -22,7 +22,7 @@ if (-not $pio) {
     exit 1
 }
 
-Write-Host "Building ESP8266 Gateway..." -ForegroundColor Cyan
-& $pio run -e esp8266_gateway
+Write-Host "Building Hub (ESP8266)..." -ForegroundColor Cyan
+& $pio run -e hub_8266
 
-Write-Host "Build complete. Firmware in .pio/build/esp8266_gateway/firmware.bin" -ForegroundColor Green
+Write-Host "Build complete. Firmware in .pio/build/hub_8266/firmware.bin" -ForegroundColor Green

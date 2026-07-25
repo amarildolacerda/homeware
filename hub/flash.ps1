@@ -10,9 +10,9 @@ param (
 .EXAMPLE
     .\flash.ps1                     # serial, COM3, env padrao
     .\flash.ps1 -p COM4             # serial, COM4
-    .\flash.ps1 -o 192.168.1.14     # OTA
-    .\flash.ps1 -o 192.168.1.14 -e esp32_gateway_ota   # OTA ESP32
-    .\flash.ps1 -p COM3 -e esp32_gateway                # serial ESP32
+    .\flash.ps1 -o 192.168.1.14                    # OTA
+    .\flash.ps1 -o 192.168.1.14 -e hub_32_ota      # OTA ESP32
+    .\flash.ps1 -p COM3 -e hub_32                  # serial ESP32
 #>
 
 $ErrorActionPreference = "Stop"
@@ -38,12 +38,12 @@ if (-not $pio) {
 }
 
 if ($o) {
-    $envName = if ($e) { $e } else { "esp32_gateway_ota" }
+    $envName = if ($e) { $e } else { "hub_32_ota" }
     Write-Host "Building + OTA upload to $o (env: $envName)..." -ForegroundColor Cyan
     & $pio run -e $envName --target upload --upload-port "$o"
     if ($LASTEXITCODE -ne 0) { Write-Error "OTA upload failed"; exit 1 }
 } else {
-    $envName = if ($e) { $e } else { "esp8266_gateway" }
+    $envName = if ($e) { $e } else { "hub_8266" }
     Write-Host "Building + serial flash on $p (env: $envName)..." -ForegroundColor Cyan
     & $pio run -e $envName --target upload --upload-port "$p"
     if ($LASTEXITCODE -ne 0) { Write-Error "Flash failed"; exit 1 }
