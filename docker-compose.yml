@@ -4,7 +4,7 @@ services:
     container_name: mosquitto
     restart: unless-stopped
     networks:
-      - homeware_bridge
+      - agrisense_net
     ports:
       - "1883:1883"
       - "9001:9001"
@@ -17,24 +17,24 @@ services:
     container_name: homeassistant
     restart: unless-stopped
     networks:
-      - homeware_bridge
+      - agrisense_net
     ports:
       - "8123:8123"
     privileged: true
     volumes:
       - /home/kzuca/homeassistant/config:/config
 
-  bridge:
-    build: ./bridge
-    container_name: bridge
+  server:
+    build: ./server
+    container_name: agrisense-server
     restart: unless-stopped
     networks:
-      - homeware_bridge
+      - agrisense_net
     ports:
       - "80:80"
       - "5000:5000/udp"
     volumes:
-      - bridge_data:/data/bridge
+      - server_data:/data/server
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: "1883"
@@ -47,8 +47,8 @@ services:
 volumes:
   mosquitto_config:
   mosquitto_data:
-  bridge_data:
+  server_data:
 
 networks:
-  homeware_bridge:
+  agrisense_net:
     driver: bridge
