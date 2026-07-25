@@ -103,8 +103,8 @@ Ver `clients/SPEC.md` — checklist completo com template, estrutura, implementa
 4. quando marcar estavel anotar a tag e a data
 
 ### Clientes estáveis (não modificar)
-- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa (Espalexa) + função repeater ESP-NOW — estável em **v0.0.30** (2026-07-22)
-- `gateway` — ESP8266/ESP32 ESP-NOW Gateway — estável em **v0.0.30** (2026-07-22)
+- `clients/esp8266_lampada` — relé ON/OFF com suporte a Alexa (Espalexa) + função repeater ESP-NOW — estável em **v1.0.1** (2026-07-24)
+- `gateway` — ESP8266/ESP32 ESP-NOW Gateway — estável em **v1.0.1** (2026-07-24)
 - `clients/esp8266_dht_gas` — sensor DHT22 + MQ-2 ESP-NOW (dashboard Detalhes/OTA/toggles temp+gás, WIFI_NONE_SLEEP) — estável em **v0.0.30** (2026-07-22)
 - `clients/esp8266_pir` — sensor PIR ESP-NOW (broadcast, OTA, /api/restart) — estável em **v0.0.30** (2026-07-22)
 
