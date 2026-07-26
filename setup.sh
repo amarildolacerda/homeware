@@ -36,6 +36,19 @@ if ! command -v pio >/dev/null 2>&1 || [ "$FRESH_INSTALL" -eq 1 ]; then
         || pip install -U platformio
 fi
 
+echo "==> Adding user to dialout group (serial port access) ..."
+if command -v usermod >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+    if ! groups | grep -qE '\bdialout\b'; then
+        sudo usermod -aG dialout "$USER" \
+            && echo "    Added to dialout group. Log out/in for it to take effect." \
+            || echo "    (skipped — could not add to dialout)"
+    else
+        echo "    Already in dialout group."
+    fi
+elif [ "$(id -u)" -eq 0 ]; then
+    echo "    Running as root — skip usermod."
+fi
+
 echo "==> Ensuring 'pio' is on PATH ..."
 if ! command -v pio >/dev/null 2>&1; then
     PY_USER_BIN="$("$PYTHON" -m site --user-base)/bin"
@@ -54,6 +67,6 @@ fi
 
 echo ""
 echo "Environment ready."
-echo "  Build:    pio run -d gateway"
-echo "  Flash:    pio run -d gateway -t upload"
-echo "  Monitor:  pio device monitor -d gateway"
+echo "  Build:    pio run -d hub"
+echo "  Flash:    pio run -d hub -t upload"
+echo "  Monitor:  pio device monitor -d hub"

@@ -6,7 +6,7 @@ set -e
 cd "$(dirname "$0")"
 
 PORT="/dev/ttyUSB0"
-PROJECT="gateway"
+PROJECT="hub"
 
 while getopts ":p:d:" opt; do
     case $opt in

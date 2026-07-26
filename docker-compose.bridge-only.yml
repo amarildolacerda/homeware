@@ -1,7 +1,7 @@
 services:
-  bridge:
-    build: ./bridge
-    container_name: bridge
+  server:
+    build: ./server
+    container_name: agrisense-server
     restart: unless-stopped
     network_mode: host
     environment:
