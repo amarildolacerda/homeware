@@ -113,7 +113,7 @@ static void find_newest_device(void) {
 static void render_footer(void) {
     fill_rect(0, FOOTER_Y, DISPLAY_WIDTH, FOOTER_H, DISP_WHITE);
     set_text_color(DISP_BLACK, DISP_WHITE);
-    cursor(0, FOOTER_Y + 4);
+    cursor(0, FOOTER_Y + 8);
     int paired = sensor_registry_count_paired();
     int online = sensor_registry_count_online();
     disp_printf("D:%d/%d", online, paired);

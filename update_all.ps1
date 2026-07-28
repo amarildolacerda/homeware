@@ -38,7 +38,8 @@ function Get-FwVersion {
         (Join-Path $ProjectDir "include/config.h"),
         (Join-Path $ProjectDir "src/config.h"),
         (Join-Path $ProjectDir "include/pages.h"),
-        (Join-Path $ProjectDir "../shared/src/shared_config.h")
+        (Join-Path $ProjectDir "../shared/src/shared_config.h"),   # hub/
+        (Join-Path $ProjectDir "../../shared/src/shared_config.h") # nodes/*
     )
     # Tambem busca na raiz do projeto (shared esta em submodulo pode nao estar clonado)
     $paths += (Join-Path $PSScriptRoot "shared/src/shared_config.h")
@@ -110,18 +111,16 @@ function Update-DeviceType {
     }
     if ($pendentes.Count -eq 0) { Write-Host "  Todos atualizados."; return }
 
-    Push-Location $ProjectDir
     Write-Host "  Build..."
-    & $pio run -e $EnvName
-    if ($LASTEXITCODE -ne 0) { Write-Error "  Build falhou"; Pop-Location; return }
+    & $pio run -d $ProjectDir -e $EnvName
+    if ($LASTEXITCODE -ne 0) { Write-Host "  Build falhou" -ForegroundColor Red; return }
 
     foreach ($dev in $pendentes) {
         Write-Host "  Enviando OTA para $($dev.ip)..."
-        & $pio run -e $EnvName --target upload --upload-port $dev.ip
-        if ($LASTEXITCODE -ne 0) { Write-Error "  OTA falhou: $($dev.ip)"; continue }
+        & $pio run -d $ProjectDir -e $EnvName --target upload --upload-port $dev.ip
+        if ($LASTEXITCODE -ne 0) { Write-Host "  OTA falhou: $($dev.ip)" -ForegroundColor Red; continue }
         Write-Host "  [OK] $($dev.ip) -> $localVer" -ForegroundColor Green
     }
-    Pop-Location
 }
 
 # ---- main ----
@@ -136,38 +135,37 @@ Write-Host "`nDispositivos encontrados:" -ForegroundColor Cyan
 $devices | ForEach-Object { Write-Host "  [$($_.type)] $($_.ip)  FW=$($_.fw_version)  platform=$($_.platform)" }
 
 $root = $PSScriptRoot
-$clients = Join-Path $root "clients"
+$nodes = Join-Path $root "nodes"
 
-# Gateway: split by platform (ESP32 vs ESP8266)
+# Hub: split by platform (ESP32 vs ESP8266)
 $gwEsp32   = $devices | Where-Object { $_.type -eq "gateway" -and $_.platform -ne "esp8266" }
 $gwEsp8266 = $devices | Where-Object { $_.type -eq "gateway" -and $_.platform -eq "esp8266" }
 if ($gwEsp32) {
-    Update-DeviceType -ProjectDir (Join-Path $root "gateway") -EnvName "esp32_gateway_ota" -Devices $gwEsp32 -Label "gateway (esp32)" -Force:$Force
+    Update-DeviceType -ProjectDir (Join-Path $root "hub") -EnvName "hub_32_ota" -Devices $gwEsp32 -Label "hub (esp32)" -Force:$Force
 }
 if ($gwEsp8266) {
-    Update-DeviceType -ProjectDir (Join-Path $root "gateway") -EnvName "esp8266_gateway_ota" -Devices $gwEsp8266 -Label "gateway (esp8266)" -Force:$Force
+    Update-DeviceType -ProjectDir (Join-Path $root "hub") -EnvName "hub_8266_ota" -Devices $gwEsp8266 -Label "hub (esp8266)" -Force:$Force
 }
 
-# Clients: dir base por tipo (sem gateway, já tratado acima)
-$clientDir = @{
-    lampada  = "esp8266_lampada"
-    dht_gas  = "esp8266_dht_gas"
-    pir      = "esp8266_pir"
-    repeater = "esp8266_repeater"
-    onoff    = "esp8266_onoff"
+# Nodes: dir base por tipo
+$nodeDir = @{
+    lampada       = "lamp"
+    dht_gas       = "climate-gas"
+    pir           = "presence"
+    repeater      = "extender"
+    onoff         = "switch"
 }
 
 # Mapa composto "tipo_plataforma" → env
-# Adicionar entries "_esp32" quando existirem clients ESP32
-$clientEnv = @{}
-foreach ($t in $clientDir.Keys) {
-    $clientEnv["${t}_esp8266"] = "esp8266_ota"
+# Per-node platformio.ini usa env "esp8266_ota"
+$nodeEnv = @{}
+foreach ($t in $nodeDir.Keys) {
+    $nodeEnv["${t}_esp8266"] = "esp8266_ota"
 }
 
 # Agrupa devices por tipo conhecido
-# Groups clients by type + platform
 $groups = @{}
-foreach ($t in $clientDir.Keys) {
+foreach ($t in $nodeDir.Keys) {
     $match = $devices | Where-Object { $_.type -eq $t }
     if (-not $match) { continue }
     $byPfx = $match | Group-Object { if ($_.platform) { $_.platform } else { "esp8266" } }
@@ -179,14 +177,14 @@ foreach ($t in $clientDir.Keys) {
 
 foreach ($key in $groups.Keys) {
     $type = $key -replace '_[^_]+$', ''
-    $dir  = Join-Path $clients $clientDir[$type]
-    $env  = $clientEnv[$key]
+    $dir  = Join-Path $nodes $nodeDir[$type]
+    $env  = $nodeEnv[$key]
     Update-DeviceType -ProjectDir $dir -EnvName $env -Devices $groups[$key] -Label $key -Force:$Force
 }
 
 $unknown = $devices | Where-Object {
     $_.type -eq "unknown" -or
-    ($_.type -ne "gateway" -and -not ($clientDir.Keys -contains $_.type))
+    ($_.type -ne "gateway" -and -not ($nodeDir.Keys -contains $_.type))
 }
 if ($unknown) {
     Write-Host "`n  [ignored] tipo desconhecido:" -ForegroundColor DarkGray

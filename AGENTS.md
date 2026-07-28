@@ -33,7 +33,7 @@
 
 ## Arquitetura
 - Server (Python): servidor HTTP REST + HA + discovery UDP + MQTT Discovery
-- Hub (ESP8266/ESP32): recebe dados dos nodes via ESP-NOW (canal 1), encaminha ao server via HTTP REST
+- Hub (ESP8266/ESP32): recebe dados dos nodes via ESP-NOW, encaminha ao server via HTTP REST
 - Nodes (ESP8266): sensores/atuadores que se registram no hub via ESP-NOW
 - Discovery UDP: broadcast porta 5000, service name `"esp-bridge"`
 - // D1-MINI é invertido
@@ -94,6 +94,16 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 22. **MQTT Discovery topic sem ponto**: o tópico de discovery do HA (`homeassistant/<component>/<entity_id>/config`) NÃO permite o caractere `.` no `<entity_id>` (warning "illegal discovery topic"). O `entity_id` (montado em `mqtt_client.cpp:build_entity_id`) e o `bridge_device_id` devem usar `_` em vez de `.` como separador (ex: `gw_294F55_lgt_0`). O `.` no `device.identifiers` do payload JSON é aceito (não é tópico), mas manter `_` por consistência. **O slot é o ÚLTIMO segmento do entity_id após `_`** — o `mqtt_callback` (hub) extrai o slot com `entity_id.lastIndexOf('_')`. NUNCA usar `.` para parsing do slot (quebra o comando HA→hub→node). Sempre que alterar o formato do `entity_id`, atualizar o parser do slot no callback na mesma mudança.
 23. **Hub ESP32 pode travar intermitentemente (offline sem reboot)**: observado em 2026-07-19 (v0.0.27) — hub parou de responder ping/HTTP/telnet e só voltou com power-cycle. Como o loopTask WDT (5s) reiniciaria se o `loop()` travase, o congelamento veio de task/ISR do ESP-NOW (recv_cb/send_cb rodam em task própria) ou exceção não recuperada. **Root cause still OPEN**: exigiu backtrace serial do hub no momento do crash (não capturado). Para debugar, conectar o hub via USB e capturar o exception/backtrace; não chutar fix. Suspeita: `console.printf` pesado dentro do recv_cb com telnet conectado + muito tráfego, ou concorrência em `sensor_registry` acessado do recv_cb e do loop. Node DHT_GAS só pareou depois do hub voltar + sleep mode fix (regra 21).
 24. **Nodes bateria (`-bat`)**: nodes com deep sleep usam sufixo `-bat` no nome da pasta (`soil-moisture`, `presence-bat`). Seguem o modelo: deep sleep entre ciclos, telnet suspende sleep (via `console.telnet_connected()`), telnet disconnect faz restart, comando `p` re-pareia, restart via `ESPNOW_MSG_RESTART` do hub, menu serial/telnet com `s/i/r/p/h`, intervalo configurável via WiFiManager.
+25. **Router único por hub**: hub e todos os nodes DEVEM estar no MESMO roteador/AP. ESP-NOW usa o canal do roteador (`WiFi.channel()`). Se um node estiver em roteador diferente ou em modo AP isolado, o canal não bate e ESP-NOW não funciona. Não fixamos canal fixo nos clientes — eles herdam o canal do STA (WiFi). Se o roteador cair, hub e nodes permanecem no último canal conhecido (STA mantém o canal).
+26. **WiFi não-bloqueante**: nunca usar `wm.autoConnect()` (bloqueante). Usar `myWiFiManager` do shared: `mywifi_begin(false)` tenta conectar com credenciais salvas; `mywifi_loop()` + `handle_wifi()` no `loop()` monitora conexão e abre AP customizado após timeout (120s). AP inicia com `WiFi.mode(WIFI_AP_STA)` + `DNSServer` para captive portal. Página de configuração: `PAGE_WIFI_CONFIG` com formulário SSID/password/device_name.
+27. **`LORA_DEVICE` flag**: nós LoRa DEVEM definir `-DLORA_DEVICE` em `platformio.ini`. Isso evita incluir `<esp_now.h>` e compilar funções ESP-NOW. `lora_protocol.h` NÃO inclui `espnow_protocol.h` — tipos como `SENSOR_TYPE_ONOFF` são definidos localmente.
+28. **Dashboard padrão**: seguir o layout dos nodes estáveis (lamp/climate-gas/presence): sidebar fixa 180px com nav (Home/Propriedades/Config), stats-header (RX/TX/Mem/Uptime), content `max-width:480px`, footer-bar com dot gateway + clock + uptime. JS: `setInterval(fetchState, 3000)`, `?from=` back link, `toggleRelay()` com loading guard, `doUpdate()` para OTA via XHR.
+29. **API endpoints obrigatórios**: `/api/state` (estado + metadados), `/api/settings` GET/POST (device_name), `/api/wifi` GET/POST (credenciais WiFi), `/api/restart` POST, `/api/ota` POST (upload firmware via XHR + `Update.h`). Retornar `uptime_s`, `rx_count`, `tx_count`, `free_heap`, `fw_version`, `device_name` no `/api/state`.
+30. **Console/telnet**: incluir `common_console.h`, chamar `console.begin()` + `console.set_banner()` no setup, `console.loop()` no loop, tratar `Serial.available()` e `console.telnet_read()` com `handle_serial()` com menu (h/s/l/p/r).
+31. **EEPROM layout**: usar `EEPROM_SIZE` do shared (512). `EEPROM_RELAY_STATE` deve ficar em offset >=200 para não conflitar com shared (que usa 0-127 para WiFi/name).
+32. **Board pinos**: respeitar defines da placa (`pins_arduino.h`). Ex: TTGO LoRa32 V1 `LORA_RST=14` (não 23). Verificar antes de definir.
+33. **ESP32 WiFiManager**: usar `tzapu/WiFiManager @ ^2.0` (não `^0.16`). A v0.x só suporta ESP8266.
+34. **updates**: uptime é static e não muda no dashboard
 
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias
@@ -110,5 +120,6 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 
 ### Nodes em desenvolvimento
 - `nodes/switch` - relé com suporte a Alexa - atributos exclusivo para on/off
+- `nodes/onoff-lora` — relé LoRa (SX1278 + TTGO LoRa32 V1), dashboard padrão, WiFi não-bloqueante, OTA, console/telnet
 - `nodes/extender` — extensor de alcance ESP-NOW
 - `nodes/rain` — sensor de chuva ESP-NOW

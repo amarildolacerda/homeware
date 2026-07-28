@@ -8,6 +8,7 @@
 #include "common_console.h"
 #include "platform.h"
 #include "captive_portal.h"
+#include "device_router.h"
 #include <uri/UriBraces.h>
 #include <ArduinoJson.h>
 
@@ -225,6 +226,7 @@ void web_server_init() {
         doc["ntp_synced"] = gateway_ntp_synced();
         doc["epoch"] = (uint32_t)gateway_ntp_epoch();
         doc["ip"] = WiFi.localIP().toString();
+        doc["wifi_channel"] = WiFi.channel();
         doc["wifi_ssid"] = WiFi.SSID();
         {
             int wmode = WIFI_MODE_DHCP;
@@ -408,7 +410,7 @@ void web_server_init() {
                 s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }
-            if (espnow_send_command(s->mac, slot, state)) {
+            if (device_send_command(s->mac, slot, state)) {
                 log_add("info", "Comando %s enviado para slot %d", state ? "ON" : "OFF", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else
@@ -419,7 +421,7 @@ void web_server_init() {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
-            if (espnow_send_restart(s->mac, s->slot)) {
+            if (device_send_restart(s->mac, s->slot)) {
                 log_add("info", "Restart enviado para slot %d", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else

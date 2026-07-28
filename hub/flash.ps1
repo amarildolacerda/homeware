@@ -38,7 +38,7 @@ if (-not $pio) {
 }
 
 if ($o) {
-    $envName = if ($e) { $e } else { "hub_32_ota" }
+    $envName = if ($e) { $e } else { "hub_32_lora_heltec" }
     Write-Host "Building + OTA upload to $o (env: $envName)..." -ForegroundColor Cyan
     & $pio run -e $envName --target upload --upload-port "$o"
     if ($LASTEXITCODE -ne 0) { Write-Error "OTA upload failed"; exit 1 }

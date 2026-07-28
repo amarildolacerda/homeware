@@ -55,6 +55,8 @@ static int s_button_pin = BUTTON_PIN;
 static int s_battery = 100;
 static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
+static int s_btn_press_count = 0;
+static unsigned long s_btn_press_start = 0;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
 
@@ -744,7 +746,7 @@ static void start_ap(void)
 {
     char ssid[33];
     name_to_ssid(s_device_name, ssid, sizeof(ssid));
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid, WIFI_CONFIG_PORTAL_PASS);
     console.printf("[%s] AP '%s' started, connect to configure WiFi\n", TAG, ssid);
 }
@@ -1168,6 +1170,8 @@ static void handle_console(char c)
     {
     case 'R':
     case 'r':
+        console.println("r - reiniciando....");
+        delay(100);
         ESP.restart();
         break;
     case 'l':
@@ -1677,6 +1681,7 @@ static void handle_api_timer_next(void)
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    console.println("API - reiniciando...");
     delay(500);
     ESP.restart();
 }
@@ -1775,6 +1780,8 @@ void setup(void)
     randomSeed(analogRead(A0));
     init_hardware();
     console.printf("============================================\n");
+
+    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? s_device_id : s_device_name);
 
     hwifi_begin();
 
@@ -1902,6 +1909,17 @@ void loop(void)
             s_button_last = btn;
             if (btn == LOW)
             {
+                if (now - s_btn_press_start > 3000)
+                    s_btn_press_count = 0;
+                if (s_btn_press_count == 0)
+                    s_btn_press_start = now;
+                s_btn_press_count++;
+                if (s_btn_press_count >= 3)
+                {
+                    console.printf("[%s] 3 presses detected, restarting...\n", TAG);
+                    delay(100);
+                    ESP.restart();
+                }
                 toggle_relay();
                 console.printf("[%s] Button press -> relay %s\n", TAG, s_relay_state ? "ON" : "OFF");
             }
@@ -1910,11 +1928,17 @@ void loop(void)
 
     unsigned long now = millis();
 
-    /* Manual pairing only — no auto-pair in loop */
     if (!s_paired)
     {
-        if (s_pair_wait_until > 0 && now < s_pair_wait_until)
-            return;
+        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
+        {
+            s_last_espnow_pair = now;
+            s_pair_attempts++;
+            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
+            espnow_send_pair_request();
+            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
+                s_pair_attempts = 0;
+        }
         return;
     }
 

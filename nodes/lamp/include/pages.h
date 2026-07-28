@@ -94,7 +94,7 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="nav-item" data-section="config" onclick="showSection('config')"><span>⚙</span><span>Configurações</span></div>
 <div class="nav-item" data-section="repeater" onclick="showSection('repeater')" id="navRepeater" style="display:none"><span>📡</span><span>Repeater</span></div>
 </div>
-<div class="sidebar-bottom"><span id="sbVersion">...</span></div>
+<div class="sidebar-bottom"><span id="sbVersion">...</span><br><span id="sbIp" style="font-size:.9rem;color:var(--muted)">-</span></div>
 </div>
 <div class="main">
 <div class="stats-header">
@@ -267,6 +267,7 @@ document.getElementById('pageTitle').textContent=name;
 document.getElementById('sbName').textContent=name;
 document.getElementById('sbId').textContent=d.device_id||'';
 const ve=document.getElementById('sbVersion');if(ve&&d.fw_version)ve.textContent=d.fw_version;
+const sip=document.getElementById('sbIp');if(sip){sip.textContent=d.ip&&d.ip!=='0.0.0.0'?d.ip:'-'}
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';

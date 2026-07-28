@@ -17,6 +17,7 @@
 #include "display_handler.h"
 #endif
 #include "common_console.h"
+#include "device_router.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
 
@@ -29,7 +30,7 @@ static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
 
 #ifdef HABILITA_LORA
-static LoraHandler s_lora;
+LoraHandler s_lora;
 #define LORA_PENDING_STATE_MAX 5
 static uint8_t s_lora_pending_state_slots[LORA_PENDING_STATE_MAX];
 static int s_lora_pending_state_head = 0;
@@ -154,7 +155,12 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
                 slot = sensor_registry_find_free_slot();
                 if (slot < 0) return;
                 uint8_t sensor_type = frame->payload_len > 0 ? frame->payload[0] : 0;
-                sensor_registry_add(frame->sensor_id, sensor_type, slot, "", HW_CHIP_UNKNOWN);
+                char dev_name[17] = {0};
+                if (len >= (int)sizeof(lora_pair_request_t)) {
+                    const lora_pair_request_t *req = (const lora_pair_request_t*)data;
+                    strncpy(dev_name, req->device_name, sizeof(dev_name) - 1);
+                }
+                sensor_registry_add(frame->sensor_id, sensor_type, slot, dev_name, HW_CHIP_UNKNOWN, RADIO_LORA);
             }
             lora_pair_response_t resp;
             memset(&resp, 0, sizeof(resp));
