@@ -13,7 +13,7 @@
 #include "lora_handler.h"
 #include "lora_protocol.h"
 #endif
-#ifdef HABILITA_DISPLAY_TTGO
+#ifdef HABILITA_DISPLAY
 #include "display_handler.h"
 #endif
 #include "common_console.h"
@@ -107,7 +107,7 @@ void handle_console(char c) {
             console.printf("MQTT: %s:%d (%s)\n", 
                           mqtt_client_get_host(), mqtt_client_get_port(),
                           mqtt_client_is_connected() ? "conectado" : "desconectado");
-            console.printf("WiFi: %s ch=%d (RSSI: %d dBm)\n",
+            console.printf("WiFi: http://%s ch=%d (RSSI: %d dBm)\n",
                           WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
                           WiFi.channel(), WiFi.RSSI());
             console.printf("Pareamento: %s\n", espnow_is_pairing() ? "ATIVO" : "inativo");
@@ -225,6 +225,9 @@ void setup() {
         console.set_banner(banner);
     }
     espnow_handler_init();
+#ifdef HABILITA_DISPLAY
+    display_handler_init();
+#endif
 #ifdef HABILITA_LORA
     s_lora.set_rx_callback(lora_rx_cb, nullptr);
     int lora_state = s_lora.init();
@@ -233,9 +236,6 @@ void setup() {
     } else {
         console.println("[LoRa] Initialized");
     }
-#endif
-#ifdef HABILITA_DISPLAY_TTGO
-    display_handler_init();
 #endif
     espnow_announce();
     log_buffer_init();
@@ -288,7 +288,7 @@ void loop() {
     s_lora.loop();
     lora_process_bridge_queue();
 #endif
-#ifdef HABILITA_DISPLAY_TTGO
+#ifdef HABILITA_DISPLAY
     display_handler_loop();
 #endif
     mqtt_client_loop();
