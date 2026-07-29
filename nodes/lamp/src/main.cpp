@@ -77,6 +77,7 @@ static bool s_config_portal_active = false;
 static bool s_ota_in_progress = false;
 static uint32_t s_ota_bytes = 0;
 static bool s_led_enabled = true;
+static bool s_multihub = false;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
 static unsigned long s_wifi_connect_start = 0;
@@ -106,6 +107,7 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
 #define EEPROM_REPEATER_EN_ADDR (EEPROM_STARTUP_MODE_ADDR + 1)
 #define EEPROM_SSID_ADDR 64
+#define EEPROM_MULTIHUB_ADDR 200
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
@@ -487,7 +489,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
-        if (!mac_equal(mac, s_gateway_mac))
+        if (!s_multihub && !mac_equal(mac, s_gateway_mac))
             return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
@@ -717,6 +719,12 @@ static void init_hardware(void)
     load_button_pin();
     load_led_enabled();
     load_startup_mode();
+    {
+        EEPROM.begin(EEPROM_SIZE);
+        uint8_t val = EEPROM.read(EEPROM_MULTIHUB_ADDR);
+        EEPROM.end();
+        s_multihub = (val == 1);
+    }
     pinMode(s_relay_pin, OUTPUT);
     if (s_startup_mode == 0)
     {
@@ -1394,6 +1402,7 @@ static void handle_api_settings(void)
         doc["button_pin"] = s_button_pin;
         doc["led_enabled"] = s_led_enabled;
         doc["startup_mode"] = s_startup_mode;
+        doc["multihub"] = s_multihub;
         JsonArray pins = doc["available_pins"].to<JsonArray>();
         for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
             pins.add(AVAILABLE_GPIOS[i]);
@@ -1484,6 +1493,20 @@ static void handle_api_settings(void)
                 s_startup_mode = new_mode;
                 save_startup_mode();
                 console.printf("[%s] Startup mode set to %d\n", TAG, s_startup_mode);
+                changed = true;
+            }
+        }
+        if (doc.containsKey("multihub"))
+        {
+            bool new_multihub = doc["multihub"];
+            if (new_multihub != s_multihub)
+            {
+                s_multihub = new_multihub;
+                EEPROM.begin(EEPROM_SIZE);
+                EEPROM.write(EEPROM_MULTIHUB_ADDR, s_multihub ? 1 : 0);
+                EEPROM.commit();
+                EEPROM.end();
+                console.printf("[%s] Multihub mode %s\n", TAG, s_multihub ? "ATIVADO" : "desativado");
                 changed = true;
             }
         }

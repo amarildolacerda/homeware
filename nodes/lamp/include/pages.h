@@ -162,6 +162,7 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
 <div class="row"><span class="label">Estado ao Iniciar</span><select id="startupModeSelect" onchange="savePins()">
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
+<div class="row"><span class="label">Multi-hubs</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="multihubCheck" onchange="savePins()"> aceitar comando de qualquer hub</label></div>
 )=====";
 #ifdef HABILITA_REPEATER
 static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
@@ -247,7 +248,7 @@ for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
 async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();footerEl.textContent=d.status==='pairing'?'Pareando...':'Falha ao parear'}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
-let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
+let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value),multihub:!!document.getElementById('multihubCheck').checked};if(nm)body.device_name=nm;
 try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
   const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';badge.className='badge '+(on?'on':'off');
@@ -279,6 +280,7 @@ async function fetchSettings(){try{let r=await fetch('/api/settings');let d=awai
 document.getElementById('deviceNameInput').value=d.device_name;
 document.getElementById('ledEnabledCheck').checked=d.led_enabled;
 document.getElementById('startupModeSelect').value=d.startup_mode;
+document.getElementById('multihubCheck').checked=d.multihub;
 let rps=document.getElementById('relayPinSelect');let bps=document.getElementById('buttonPinSelect');rps.innerHTML='';bps.innerHTML='';
 d.available_pins.forEach(function(p){
 let ro=document.createElement('option');ro.value=p;ro.text='GPIO '+p;if(p===d.relay_pin)ro.selected=true;rps.appendChild(ro);
