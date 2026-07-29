@@ -1,12 +1,12 @@
 #include "mqtt_client.h"
 #include "config.h"
 #include "sensor_registry.h"
-#include "espnow_handler.h"
 #include "platform.h"
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
 #include "common_console.h"
+#include "device_router.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -78,7 +78,7 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && s->slot == slot) {
-            espnow_send_command(s->mac, s->slot, state);
+            device_send_command(s->mac, s->slot, state);
             console.printf("[MQTT] Command forwarded: slot %d state=%d\n", i, state);
             break;
         }

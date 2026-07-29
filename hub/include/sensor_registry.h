@@ -4,12 +4,18 @@
 #include "espnow_protocol.h"
 #include <Arduino.h>
 
+enum radio_type_t {
+    RADIO_ESPNOW = 0,
+    RADIO_LORA  = 1,
+};
+
 typedef struct {
     uint8_t mac[6];
     uint8_t type;
     uint16_t sequence;
     uint8_t slot;
     uint8_t client_chip;   // chip_type_t: 0=ESP8266, 1=ESP32, 0xFF=desconhecido (§14)
+    uint8_t radio_type;    // radio_type_t: 0=ESP-NOW, 1=LoRa
     char name[32];
     char bridge_device_id[16];
     uint8_t battery_pct;
@@ -51,7 +57,7 @@ int sensor_registry_find_free_slot();
 virtual_sensor_t* sensor_registry_get(int slot);
 int sensor_registry_count_paired();
 int sensor_registry_count_online();
-bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip = HW_CHIP_UNKNOWN);
+bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip = HW_CHIP_UNKNOWN, uint8_t radio_type = RADIO_ESPNOW);
 bool sensor_registry_remove(int slot);
 bool sensor_registry_update_state(int slot, const espnow_header_t *header, const uint8_t *payload, size_t payload_len);
 bool sensor_registry_save();

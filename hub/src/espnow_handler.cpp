@@ -8,364 +8,38 @@
 #include <EEPROM.h>
 #include "common_console.h"
 
-static bool s_pairing_mode = false;
-static unsigned long s_pairing_start = 0;
-static uint8_t s_gateway_mac[6];
-static unsigned long s_last_heartbeat = 0;
-static unsigned long s_rx_count = 0;
-static unsigned long s_ack_count = 0;
-static unsigned long s_crc_errors = 0;
-
-static const uint8_t s_bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+#ifdef HABILITA_ESPNOW
 
 /* ESP-NOW delivery uses BROADCAST (all clients receive and filter by
    sensor_mac/target_mac). Validated with QuickESPNow (qgw/qclient, both STA on
    the same AP): ESP8266->ESP32 unicast is silently dropped by WiFi/ESP-NOW
    coexistence, while broadcast works in both directions. See AGENTS.md rule 18. */
 
-
-#define PENDING_PAIR_MAX 5
-typedef struct {
-    bool active;
-    uint8_t mac[6];
-    uint8_t sensor_type;
-    uint16_t sequence;
-    uint8_t client_chip;
-    char name[32];
-} pending_pair_t;
-static pending_pair_t s_pending_pairs[PENDING_PAIR_MAX];
-
-#define PENDING_STATE_MAX 5
-static uint8_t s_pending_state_slots[PENDING_STATE_MAX];
-static int s_pending_state_head = 0;
-static int s_pending_state_tail = 0;
-
-static void queue_bridge_state(int slot) {
-    int next = (s_pending_state_head + 1) % PENDING_STATE_MAX;
-    if (next == s_pending_state_tail) return;
-    s_pending_state_slots[s_pending_state_head] = slot;
-    s_pending_state_head = next;
-}
-
-static void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slot);
-static void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot);
-static void send_gw_announce(const uint8_t *mac);
-
+// Forward declaration of C-linkage callback (used in init())
 #ifdef ESP32
-extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len) {
+extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len);
 #else
-extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
+extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len);
 #endif
-    if (!data || len < 1) {
-        s_crc_errors++;
-        console.printf("Errro crc: %d",s_crc_errors);
-        return;
-    }
 
-    s_rx_count++;
-    uint8_t msg_type = data[0];
-    char mac_str[18];
-    mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] RX msg_type=%d len=%d from=%s pairing=%d\n",
-                  msg_type, len, mac_str, s_pairing_mode);
+EspnowHandler* EspnowHandler::s_self = nullptr;
+const uint8_t EspnowHandler::s_bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-    switch (msg_type) {
-        case ESPNOW_MSG_PAIR_REQUEST: {
-            console.println("ESPNOW_MSG_PAIR_REQUEST");
-            if (len < sizeof(espnow_pair_request_t)) { s_crc_errors++; return; }
-            espnow_pair_request_t *req = (espnow_pair_request_t*)data;
-            char sensor_mac_str[18];
-            mac_to_str(req->sensor_mac, sensor_mac_str, sizeof(sensor_mac_str));
-
-            int existing_slot = sensor_registry_find_by_mac(req->sensor_mac);
-            if (existing_slot >= 0) {
-                send_pair_response(mac, req->sequence, existing_slot);
-                console.printf("[ESP-NOW] Re-paired known sensor %s slot=%d\n", sensor_mac_str, existing_slot);
-                return;
-            }
-
-         // test
-         //   if (!s_pairing_mode) { console.printf("[ESP-NOW] New pair request ignored (not pairing)\n"); return; }
-
-            /* Pairing flag check (SPEC_ESPNOW §6) */
-            {
-                EEPROM.begin(EEPROM_SIZE);
-                bool pairing_required = EEPROM.read(EEPROM_PAIRING_EN_OFFSET) == 1;
-                EEPROM.end();
-                if (pairing_required && !s_pairing_mode) {
-                    console.printf("[ESP-NOW] Pair request ignored (pairing disabled, window closed)\n");
-                    espnow_nak_t nak;
-                    memset(&nak, 0, sizeof(nak));
-                    nak.msg_type = ESPNOW_MSG_NAK;
-                    nak.sequence = req->sequence;
-                    mac_copy(nak.target_mac, req->sensor_mac);
-                    nak.reason = NAK_REASON_PAIRING_DISABLED;
-                    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&nak, sizeof(nak), "ESP-NOW");
-                    return;
-                }
-            }
-
-            for (int i = 0; i < PENDING_PAIR_MAX; i++) {
-                if (s_pending_pairs[i].active && mac_equal(s_pending_pairs[i].mac, req->sensor_mac)) {
-                    console.printf("[ESP-NOW] Pair request already pending for %s\n", sensor_mac_str);
-                    return;
-                }
-            }
-
-            for (int i = 0; i < PENDING_PAIR_MAX; i++) {
-                if (!s_pending_pairs[i].active) {
-                    mac_copy(s_pending_pairs[i].mac, req->sensor_mac);
-                    s_pending_pairs[i].sensor_type = req->sensor_type;
-                    s_pending_pairs[i].client_chip = req->client_chip;
-                    s_pending_pairs[i].sequence = req->sequence;
-                    strncpy(s_pending_pairs[i].name, req->device_name, sizeof(s_pending_pairs[i].name) - 1);
-                    s_pending_pairs[i].name[sizeof(s_pending_pairs[i].name) - 1] = '\0';
-                    s_pending_pairs[i].active = true;
-                    console.printf("[ESP-NOW] Pair request queued from %s type=%d seq=%d slot=%d\n",
-                                  sensor_mac_str, req->sensor_type, req->sequence, i);
-                    break;
-                }
-            }
-
-            break;
-        }
-
-        case ESPNOW_MSG_SENSOR_DATA:
-            console.println("ESPNOW_MSG_SENSOR_DATA");
-        case ESPNOW_MSG_HEARTBEAT: {
-            console.println("ESPNOW_MSG_HEARTBEAT");
-            if (len < ESPNOW_HEADER_FIXED_SIZE) { s_crc_errors++; return; }
-            espnow_header_t *hdr = (espnow_header_t*)data;
-
-            if (hdr->version != ESPNOW_PROTOCOL_VERSION) { s_crc_errors++; return; }
-            if (len < ESPNOW_HEADER_FIXED_SIZE + hdr->payload_len) { s_crc_errors++; return; }
-
-            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
-            {
-                char sender_str[18], sensor_str[18];
-                mac_to_str(mac, sender_str, sizeof(sender_str));
-                mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
-                console.printf("[ESP-NOW] %s: sender=%s sensor=%s type=%d len=%d slot=%d\n",
-                    msg_type == ESPNOW_MSG_SENSOR_DATA ? "DATA" : "HB",
-                    sender_str, sensor_str, hdr->sensor_type, len, slot);
-            }
-
-            if (msg_type == ESPNOW_MSG_SENSOR_DATA) {
-                if (slot < 0) {
-                    send_ack(mac, hdr->sequence, PAIR_STATUS_DENIED, 0xFF);
-                    return;
-                }
-                sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
-                send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
-                log_add("info", "Dados recebidos slot %d seq %d", slot, hdr->sequence);
-                s_ack_count++;
-                queue_bridge_state(slot);
-            } else {
-                if (slot >= 0) {
-                    sensor_registry_get(slot)->last_seen = millis();
-                    sensor_registry_get(slot)->online = true;
-                    send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
-                }
-            }
-            break;
-        }
-
-        case ESPNOW_MSG_GW_DISCOVER: {
-            
-            console.println("ESPNOW_MSG_GW_DISCOVER");
-                char from_str[18];
-            mac_to_str(mac, from_str, sizeof(from_str));
-            console.printf("[ESP-NOW] GW_DISCOVER from %s\n", from_str);
-
-            int slot = sensor_registry_find_by_mac(mac);
-            if (slot < 0) {
-                slot = sensor_registry_find_free_slot();
-                if (slot >= 0) {
-                    sensor_registry_add(mac, SENSOR_TYPE_REPEATER, slot, "Repeater", HW_CHIP_ESP_1);
-                    console.printf("[ESP-NOW] Repeater registered on GW_DISCOVER slot=%d\n", slot);
-                }
-            } else {
-                virtual_sensor_t *s = sensor_registry_get(slot);
-                if (s && s->type != SENSOR_TYPE_REPEATER) {
-                    s->type = SENSOR_TYPE_REPEATER;
-                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
-                    s->name[sizeof(s->name) - 1] = '\0';
-                    sensor_registry_save();
-                }
-            }
-
-            send_gw_announce(mac);
-            break;
-        }
-
-        case ESPNOW_MSG_REPEATER_STATUS: {
-            console.println("ESPNOW_MSG_REPEATER_STATUS");
-            if (len < ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t)) { s_crc_errors++; return; }
-            espnow_header_t *hdr = (espnow_header_t*)data;
-
-            if (hdr->version != ESPNOW_PROTOCOL_VERSION) { s_crc_errors++; return; }
-
-            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
-            char sender_str[18], sensor_str[18];
-            mac_to_str(mac, sender_str, sizeof(sender_str));
-            mac_to_str(hdr->sensor_mac, sensor_str, sizeof(sensor_str));
-            console.printf("[ESP-NOW] REPEATER_STATUS: sender=%s sensor=%s slot=%d\n",
-                sender_str, sensor_str, slot);
-
-            if (slot < 0) {
-                slot = sensor_registry_find_free_slot();
-                if (slot < 0) {
-                    console.printf("[ESP-NOW] Repeater rejected: registry full\n");
-                    send_ack(mac, hdr->sequence, PAIR_STATUS_FULL, 0xFF);
-                    return;
-                }
-                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater", HW_CHIP_ESP_1);
-            } else {
-                // A device may change role (e.g. was a light, now a repeater).
-                // Re-type the existing slot so its state is parsed as a repeater.
-                virtual_sensor_t *s = sensor_registry_get(slot);
-                if (s && s->type != SENSOR_TYPE_REPEATER) {
-                    s->type = SENSOR_TYPE_REPEATER;
-                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
-                    s->name[sizeof(s->name) - 1] = '\0';
-                    sensor_registry_save();
-                    console.printf("[ESP-NOW] Slot %d retyped to REPEATER (%s)\n",
-                        slot, sensor_str);
-                }
-            }
-
-            sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
-            send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
-            log_add("info", "Repeater status slot %d seq %d", slot, hdr->sequence);
-            s_ack_count++;
-            queue_bridge_state(slot);
-            break;
-        }
-
-        case ESPNOW_MSG_COMMAND: {
-            console.println("ESPNOW_MSG_COMMAND");
-            /* Minimum size = old struct (10 bytes). target_device_id only
-               present if len >= sizeof(espnow_command_t) — backward compat. */
-            if (len < 10) { s_crc_errors++; return; }
-            espnow_command_t *cmd = (espnow_command_t *)data;
-
-            uint8_t target[6];
-            mac_copy(target, cmd->target_mac);
-
-            /* If target_mac is zero, resolve from target_device_id via name */
-            bool mac_is_zero = (target[0] == 0 && target[1] == 0 && target[2] == 0 &&
-                                target[3] == 0 && target[4] == 0 && target[5] == 0);
-            if (mac_is_zero && len >= (int)sizeof(espnow_command_t) && cmd->target_device_id[0] != '\0') {
-                int slot = sensor_registry_find_by_name(cmd->target_device_id);
-                if (slot < 0) {
-                    console.printf("[ESP-NOW] COMMAND: device '%s' not found in registry\n",
-                                   cmd->target_device_id);
-                    return;
-                }
-                virtual_sensor_t *s = sensor_registry_get(slot);
-                if (!s || !s->paired) return;
-                mac_copy(target, s->mac);
-                char mac_str[18];
-                mac_to_str(target, mac_str, sizeof(mac_str));
-                console.printf("[ESP-NOW] COMMAND: resolved '%s' -> %s slot=%d\n",
-                               cmd->target_device_id, mac_str, slot);
-            }
-
-            if (mac_is_zero) {
-                console.println("[ESP-NOW] COMMAND: no target_mac and no device_id, ignored");
-                return;
-            }
-
-            /* Forward command to target client via broadcast */
-            espnow_command_t fwd;
-            memset(&fwd, 0, sizeof(fwd));
-            fwd.msg_type = ESPNOW_MSG_COMMAND;
-            fwd.sequence = cmd->sequence;
-            mac_copy(fwd.target_mac, target);
-            fwd.command = cmd->command;
-
-            espnow_send_wrapper((uint8_t *)s_bcast_addr, (uint8_t *)&fwd, sizeof(fwd), "ESP-NOW");
-            break;
-        }
-
-        default:
-            s_crc_errors++;
-            break;
-    }
+EspnowHandler::EspnowHandler() {
+    memset(m_pending_pairs, 0, sizeof(m_pending_pairs));
+    memset(m_pending_state_slots, 0, sizeof(m_pending_state_slots));
 }
 
-void send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slot) {
-    if (!mac || mac_equal(mac, s_bcast_addr)) return;
-    espnow_ack_t ack = {
-        .msg_type = ESPNOW_MSG_ACK,
-        .sequence = sequence,
-        .sensor_mac = {0},
-        .status = status,
-        .assigned_slot = slot
-    };
-    mac_copy(ack.sensor_mac, mac);
-
-    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
-    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&ack, sizeof(ack), "ESP-NOW");
-}
-
-void send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
-    if (!mac || mac_equal(mac, s_bcast_addr)) return;
-    espnow_pair_response_t resp = {
-        .msg_type = ESPNOW_MSG_PAIR_RESPONSE,
-        .sequence = sequence,
-        .sensor_mac = {0},
-        .gateway_mac = {0},
-        .status = PAIR_STATUS_OK,
-        .assigned_slot = slot
-    };
-    mac_copy(resp.sensor_mac, mac);
-    mac_copy(resp.gateway_mac, s_gateway_mac);
-
-    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
-    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&resp, sizeof(resp), "ESP-NOW");
-}
-
-static void send_gw_announce(const uint8_t *mac) {
-    espnow_gw_announce_t ann = {
-        .msg_type = ESPNOW_MSG_GW_ANNOUNCE,
-        .gateway_mac = {0},
-        .fw_version = {0}
-    };
-    mac_copy(ann.gateway_mac, s_gateway_mac);
-    strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
-
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    espnow_add_peer_wrapper(s_bcast_addr, ch);
-    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann), "ESP-NOW");
-}
-
-void espnow_announce() {
-    espnow_gw_announce_t ann = {
-        .msg_type = ESPNOW_MSG_GW_ANNOUNCE,
-        .gateway_mac = {0},
-        .fw_version = {0}
-    };
-    mac_copy(ann.gateway_mac, s_gateway_mac);
-    strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
-
-    int ch = WiFi.channel();
-    if (ch < 1 || ch > 13) ch = 1;
-    espnow_add_peer_wrapper(s_bcast_addr, ch);
-    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann), "ESP-NOW");
-}
-
-bool espnow_handler_init() {
-    memset(s_pending_pairs, 0, sizeof(s_pending_pairs));
+int EspnowHandler::init() {
+    s_self = this;
     WiFi.mode(WIFI_STA);
-    WiFi.macAddress(s_gateway_mac);
-    
+    WiFi.macAddress(m_gateway_mac);
+
     if (esp_now_init() != 0) {
         console.println("[ESP-NOW] Init failed");
-        return false;
+        return -1;
     }
-    
+
 #if !defined(ARDUINO_ARCH_ESP32)
     esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
 #endif
@@ -373,64 +47,66 @@ bool espnow_handler_init() {
 
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     espnow_add_peer_wrapper(broadcast_mac, WiFi.channel());
-    
-    char gateway_mac_str[18];
-    mac_to_str(s_gateway_mac, gateway_mac_str, sizeof(gateway_mac_str));
+
+    char mac_str[18];
+    mac_to_str(m_gateway_mac, mac_str, sizeof(mac_str));
     console.printf("[ESP-NOW] Initialized, MAC: %s WiFi ch=%d\n",
-                  gateway_mac_str, WiFi.channel());
+                  mac_str, WiFi.channel());
+    return 0;
+}
+
+int EspnowHandler::send(const uint8_t* data, size_t len) {
+    return espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)data, len, "ESP-NOW") ? 0 : -1;
+}
+
+bool EspnowHandler::is_ready() const {
     return true;
 }
 
-void espnow_handler_loop() {
-    if (s_pairing_mode && millis() - s_pairing_start > PAIRING_WINDOW_MS) {
-        s_pairing_mode = false;
+void EspnowHandler::loop() {
+    if (m_pairing_mode && millis() - m_pairing_start > PAIRING_WINDOW_MS) {
+        m_pairing_mode = false;
         digitalWrite(STATUS_LED_GPIO, HIGH);
         console.println("[ESP-NOW] Pairing mode timeout");
     }
 
     for (int i = 0; i < PENDING_PAIR_MAX; i++) {
-        if (!s_pending_pairs[i].active) continue;
+        if (!m_pending_pairs[i].active) continue;
 
-        s_pending_pairs[i].active = false;
+        m_pending_pairs[i].active = false;
         int free_slot = sensor_registry_find_free_slot();
 
         if (free_slot < 0) {
-            send_ack(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, PAIR_STATUS_FULL, 0xFF);
+            send_ack(m_pending_pairs[i].mac, m_pending_pairs[i].sequence, PAIR_STATUS_FULL, 0xFF);
             continue;
         }
 
-        if (!sensor_registry_add(s_pending_pairs[i].mac, s_pending_pairs[i].sensor_type,
-                                 free_slot, s_pending_pairs[i].name, s_pending_pairs[i].client_chip)) {
-            int existing = sensor_registry_find_by_mac(s_pending_pairs[i].mac);
+        if (!sensor_registry_add(m_pending_pairs[i].mac, m_pending_pairs[i].sensor_type,
+                                 free_slot, m_pending_pairs[i].name, m_pending_pairs[i].client_chip)) {
+            int existing = sensor_registry_find_by_mac(m_pending_pairs[i].mac);
             if (existing >= 0)
-                send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, existing);
+                send_pair_response(m_pending_pairs[i].mac, m_pending_pairs[i].sequence, existing);
             continue;
         }
-        send_pair_response(s_pending_pairs[i].mac, s_pending_pairs[i].sequence, free_slot);
+        send_pair_response(m_pending_pairs[i].mac, m_pending_pairs[i].sequence, free_slot);
         {
             char mac_str[18];
-            mac_to_str(s_pending_pairs[i].mac, mac_str, sizeof(mac_str));
+            mac_to_str(m_pending_pairs[i].mac, mac_str, sizeof(mac_str));
             log_add("info", "Sensor %s pareado slot %d", mac_str, free_slot);
         }
         if (mqtt_client_is_connected())
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
 
         char pending_mac_str[18];
-        mac_to_str(s_pending_pairs[i].mac, pending_mac_str, sizeof(pending_mac_str));
+        mac_to_str(m_pending_pairs[i].mac, pending_mac_str, sizeof(pending_mac_str));
         console.printf("[ESP-NOW] Paired sensor slot %d: %s type=%d\n",
-                      free_slot, pending_mac_str, s_pending_pairs[i].sensor_type);
+                      free_slot, pending_mac_str, m_pending_pairs[i].sensor_type);
     }
 
-    while (s_pending_state_tail != s_pending_state_head) {
-        int slot = s_pending_state_slots[s_pending_state_tail];
-        s_pending_state_tail = (s_pending_state_tail + 1) % PENDING_STATE_MAX;
-        virtual_sensor_t *s = sensor_registry_get(slot);
-        if (s && s->paired && mqtt_client_is_connected())
-            mqtt_client_publish_state(s);
-    }
+    process_bridge_queue();
 
-    if (millis() - s_last_heartbeat > HEARTBEAT_INTERVAL_MS) {
-        s_last_heartbeat = millis();
+    if (millis() - m_last_heartbeat > HEARTBEAT_INTERVAL_MS) {
+        m_last_heartbeat = millis();
 
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
@@ -446,46 +122,115 @@ void espnow_handler_loop() {
     }
 }
 
-bool espnow_start_pairing() {
+bool EspnowHandler::start_pairing() {
     if (sensor_registry_count_paired() >= MAX_VIRTUAL_SENSORS) {
         console.println("[ESP-NOW] Max sensors reached");
         return false;
     }
-    s_pairing_mode = true;
-    s_pairing_start = millis();
+    m_pairing_mode = true;
+    m_pairing_start = millis();
     digitalWrite(STATUS_LED_GPIO, LOW);
     console.printf("[ESP-NOW] Pairing mode started (%us)\n", PAIRING_WINDOW_MS / 1000);
     return true;
 }
 
-void espnow_stop_pairing() {
-    s_pairing_mode = false;
+void EspnowHandler::stop_pairing() {
+    m_pairing_mode = false;
     digitalWrite(STATUS_LED_GPIO, HIGH);
     console.println("[ESP-NOW] Pairing mode stopped");
 }
 
-bool espnow_is_pairing() {
-    return s_pairing_mode;
+bool EspnowHandler::is_pairing() const {
+    return m_pairing_mode;
 }
 
-unsigned long espnow_pairing_remaining_ms() {
-    if (!s_pairing_mode) return 0;
-    unsigned long elapsed = millis() - s_pairing_start;
+unsigned long EspnowHandler::pairing_remaining_ms() const {
+    if (!m_pairing_mode) return 0;
+    unsigned long elapsed = millis() - m_pairing_start;
     if (elapsed >= PAIRING_WINDOW_MS) return 0;
     return PAIRING_WINDOW_MS - elapsed;
 }
 
-const uint8_t* espnow_dest_for_chip(const uint8_t *mac, uint8_t client_chip) {
+void EspnowHandler::queue_bridge_state(int slot) {
+    int next = (m_pending_state_head + 1) % PENDING_STATE_MAX;
+    if (next == m_pending_state_tail) return;
+    m_pending_state_slots[m_pending_state_head] = slot;
+    m_pending_state_head = next;
+}
+
+void EspnowHandler::process_bridge_queue() {
+    while (m_pending_state_tail != m_pending_state_head) {
+        int slot = m_pending_state_slots[m_pending_state_tail];
+        m_pending_state_tail = (m_pending_state_tail + 1) % PENDING_STATE_MAX;
+        virtual_sensor_t *s = sensor_registry_get(slot);
+        if (s && s->paired && mqtt_client_is_connected())
+            mqtt_client_publish_state(s);
+    }
+}
+
+void EspnowHandler::send_ack(const uint8_t *mac, uint16_t sequence, uint8_t status, uint8_t slot) {
+    if (!mac || mac_equal(mac, s_bcast_addr)) return;
+    espnow_ack_t ack;
+    memset(&ack, 0, sizeof(ack));
+    ack.msg_type = ESPNOW_MSG_ACK;
+    ack.sequence = sequence;
+    ack.status = status;
+    ack.assigned_slot = slot;
+    mac_copy(ack.sensor_mac, mac);
+
+    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
+    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&ack, sizeof(ack), "ESP-NOW");
+}
+
+void EspnowHandler::send_pair_response(const uint8_t *mac, uint16_t sequence, uint16_t slot) {
+    if (!mac || mac_equal(mac, s_bcast_addr)) return;
+    espnow_pair_response_t resp;
+    memset(&resp, 0, sizeof(resp));
+    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.sequence = sequence;
+    resp.status = PAIR_STATUS_OK;
+    resp.assigned_slot = slot;
+    mac_copy(resp.sensor_mac, mac);
+    mac_copy(resp.gateway_mac, m_gateway_mac);
+
+    espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
+    espnow_send_wrapper((uint8_t*)mac, (uint8_t*)&resp, sizeof(resp), "ESP-NOW");
+}
+
+void EspnowHandler::send_gw_announce(const uint8_t *mac) {
+    espnow_gw_announce_t ann;
+    memset(&ann, 0, sizeof(ann));
+    ann.msg_type = ESPNOW_MSG_GW_ANNOUNCE;
+    mac_copy(ann.gateway_mac, m_gateway_mac);
+    strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
+
+    int ch = WiFi.channel();
+    if (ch < 1 || ch > 13) ch = 1;
+    espnow_add_peer_wrapper(s_bcast_addr, ch);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ann, sizeof(ann), "ESP-NOW");
+}
+
+void EspnowHandler::announce() {
+    send_gw_announce(s_bcast_addr);
+}
+
+const uint8_t* EspnowHandler::dest_for_chip(const uint8_t *mac, uint8_t client_chip) {
     if (client_chip == HW_CHIP_ESP_1) {
-        /* Unicast funciona para ESP8266->ESP8266 e ESP32->ESP8266 */
         espnow_add_peer_wrapper((uint8_t*)mac, WiFi.channel());
         return mac;
     }
-    /* ESP32 destino ou desconhecido → broadcast seguro */
     return s_bcast_addr;
 }
 
-bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
+bool EspnowHandler::send_command(const uint8_t *mac, uint8_t state) {
+    uint8_t chip = HW_CHIP_UNKNOWN;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (s && s->paired && mac_equal(s->mac, mac)) {
+            chip = s->client_chip;
+            break;
+        }
+    }
     espnow_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
     cmd.msg_type = ESPNOW_MSG_COMMAND;
@@ -493,45 +238,234 @@ bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) {
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
 
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
-    const uint8_t *dest = espnow_dest_for_chip(mac, chip);
-
+    const uint8_t *dest = dest_for_chip(mac, chip);
     return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&cmd, sizeof(cmd), "ESP-NOW");
 }
 
-bool espnow_send_restart(const uint8_t *mac, uint8_t slot) {
+bool EspnowHandler::send_restart(const uint8_t *mac) {
+    uint8_t chip = HW_CHIP_UNKNOWN;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (s && s->paired && mac_equal(s->mac, mac)) {
+            chip = s->client_chip;
+            break;
+        }
+    }
     espnow_restart_t rst;
     memset(&rst, 0, sizeof(rst));
     rst.msg_type = ESPNOW_MSG_RESTART;
     rst.sequence = 0;
     mac_copy(rst.target_mac, mac);
 
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    uint8_t chip = (s && s->paired) ? s->client_chip : HW_CHIP_UNKNOWN;
-    const uint8_t *dest = espnow_dest_for_chip(mac, chip);
-
+    const uint8_t *dest = dest_for_chip(mac, chip);
     return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&rst, sizeof(rst), "ESP-NOW");
 }
 
-static uint8_t s_time_sync_sequence = 0;
-static const uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-void espnow_broadcast_time_sync(uint32_t epoch_seconds) {
+void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {
     espnow_time_sync_t ts;
     memset(&ts, 0, sizeof(ts));
     ts.msg_type = ESPNOW_MSG_TIME_SYNC;
-    ts.sequence = s_time_sync_sequence++;
-    mac_copy(ts.gateway_mac, s_gateway_mac);
+    ts.sequence = m_time_sync_sequence++;
+    mac_copy(ts.gateway_mac, m_gateway_mac);
     ts.epoch_seconds = epoch_seconds;
 
     int ch = WiFi.channel();
     if (ch < 1 || ch > 13) ch = 1;
-    espnow_add_peer_wrapper((uint8_t*)s_broadcast_mac, ch);
-    espnow_send_wrapper((uint8_t*)s_broadcast_mac, (uint8_t*)&ts, sizeof(ts), "ESP-NOW");
+    espnow_add_peer_wrapper((uint8_t*)s_bcast_addr, ch);
+    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ts, sizeof(ts), "ESP-NOW");
 }
 
-unsigned long espnow_get_rx_count() { return s_rx_count; }
-unsigned long espnow_get_ack_count() { return s_ack_count; }
-unsigned long espnow_get_crc_errors() { return s_crc_errors; }
-uint8_t* espnow_get_gateway_mac() { return s_gateway_mac; }
+void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
+    if (!data || len < 1) { m_crc_errors++; return; }
+    m_rx_count++;
+    uint8_t msg_type = data[0];
+
+    char mac_str[18];
+    mac_to_str(mac, mac_str, sizeof(mac_str));
+
+    switch (msg_type) {
+        case ESPNOW_MSG_PAIR_REQUEST: {
+            if (len < (int)sizeof(espnow_pair_request_t)) { m_crc_errors++; return; }
+            const espnow_pair_request_t *req = (const espnow_pair_request_t*)data;
+            char sensor_mac_str[18];
+            mac_to_str(req->sensor_mac, sensor_mac_str, sizeof(sensor_mac_str));
+
+            int existing_slot = sensor_registry_find_by_mac(req->sensor_mac);
+            if (existing_slot >= 0) {
+                send_pair_response(mac, req->sequence, existing_slot);
+                return;
+            }
+            {
+                EEPROM.begin(EEPROM_SIZE);
+                bool pairing_required = EEPROM.read(EEPROM_PAIRING_EN_OFFSET) == 1;
+                EEPROM.end();
+                if (pairing_required && !m_pairing_mode) {
+                    espnow_nak_t nak;
+                    memset(&nak, 0, sizeof(nak));
+                    nak.msg_type = ESPNOW_MSG_NAK;
+                    nak.sequence = req->sequence;
+                    mac_copy(nak.target_mac, req->sensor_mac);
+                    nak.reason = NAK_REASON_PAIRING_DISABLED;
+                    espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&nak, sizeof(nak), "ESP-NOW");
+                    return;
+                }
+            }
+            for (int i = 0; i < PENDING_PAIR_MAX; i++) {
+                if (m_pending_pairs[i].active && mac_equal(m_pending_pairs[i].mac, req->sensor_mac)) {
+                    return;
+                }
+            }
+            for (int i = 0; i < PENDING_PAIR_MAX; i++) {
+                if (!m_pending_pairs[i].active) {
+                    mac_copy(m_pending_pairs[i].mac, req->sensor_mac);
+                    m_pending_pairs[i].sensor_type = req->sensor_type;
+                    m_pending_pairs[i].client_chip = req->client_chip;
+                    m_pending_pairs[i].sequence = req->sequence;
+                    strncpy(m_pending_pairs[i].name, req->device_name, sizeof(m_pending_pairs[i].name) - 1);
+                    m_pending_pairs[i].name[sizeof(m_pending_pairs[i].name) - 1] = '\0';
+                    m_pending_pairs[i].active = true;
+                    break;
+                }
+            }
+            break;
+        }
+
+        case ESPNOW_MSG_SENSOR_DATA:
+        case ESPNOW_MSG_HEARTBEAT: {
+            if (len < (int)ESPNOW_HEADER_FIXED_SIZE) { m_crc_errors++; return; }
+            const espnow_header_t *hdr = (const espnow_header_t*)data;
+            if (hdr->version != ESPNOW_PROTOCOL_VERSION) { m_crc_errors++; return; }
+            if (len < (int)(ESPNOW_HEADER_FIXED_SIZE + hdr->payload_len)) { m_crc_errors++; return; }
+
+            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
+            if (msg_type == ESPNOW_MSG_SENSOR_DATA) {
+                if (slot < 0) {
+                    send_ack(mac, hdr->sequence, PAIR_STATUS_DENIED, 0xFF);
+                    return;
+                }
+                sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
+                send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+                log_add("info", "Dados recebidos slot %d seq %d", slot, hdr->sequence);
+                m_ack_count++;
+                queue_bridge_state(slot);
+            } else {
+                if (slot >= 0) {
+                    sensor_registry_get(slot)->last_seen = millis();
+                    sensor_registry_get(slot)->online = true;
+                    send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+                }
+            }
+            break;
+        }
+
+        case ESPNOW_MSG_GW_DISCOVER: {
+            int slot = sensor_registry_find_by_mac(mac);
+            if (slot < 0) {
+                slot = sensor_registry_find_free_slot();
+                if (slot >= 0) {
+                    sensor_registry_add(mac, SENSOR_TYPE_REPEATER, slot, "Repeater", HW_CHIP_ESP_1);
+                }
+            } else {
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (s && s->type != SENSOR_TYPE_REPEATER) {
+                    s->type = SENSOR_TYPE_REPEATER;
+                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
+                    s->name[sizeof(s->name) - 1] = '\0';
+                    sensor_registry_save();
+                }
+            }
+            send_gw_announce(mac);
+            break;
+        }
+
+        case ESPNOW_MSG_REPEATER_STATUS: {
+            if (len < (int)(ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t))) { m_crc_errors++; return; }
+            const espnow_header_t *hdr = (const espnow_header_t*)data;
+            if (hdr->version != ESPNOW_PROTOCOL_VERSION) { m_crc_errors++; return; }
+
+            int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
+            if (slot < 0) {
+                slot = sensor_registry_find_free_slot();
+                if (slot < 0) {
+                    send_ack(mac, hdr->sequence, PAIR_STATUS_FULL, 0xFF);
+                    return;
+                }
+                sensor_registry_add(hdr->sensor_mac, hdr->sensor_type, slot, "Repeater", HW_CHIP_ESP_1);
+            } else {
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (s && s->type != SENSOR_TYPE_REPEATER) {
+                    s->type = SENSOR_TYPE_REPEATER;
+                    strncpy(s->name, "Repeater", sizeof(s->name) - 1);
+                    s->name[sizeof(s->name) - 1] = '\0';
+                    sensor_registry_save();
+                }
+            }
+            sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
+            send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
+            log_add("info", "Repeater status slot %d seq %d", slot, hdr->sequence);
+            m_ack_count++;
+            queue_bridge_state(slot);
+            break;
+        }
+
+        case ESPNOW_MSG_COMMAND: {
+            if (len < 10) { m_crc_errors++; return; }
+            const espnow_command_t *cmd = (const espnow_command_t *)data;
+            uint8_t target[6];
+            mac_copy(target, cmd->target_mac);
+            bool mac_is_zero = (target[0] == 0 && target[1] == 0 && target[2] == 0 &&
+                                target[3] == 0 && target[4] == 0 && target[5] == 0);
+            if (mac_is_zero && len >= (int)sizeof(espnow_command_t) && cmd->target_device_id[0] != '\0') {
+                int slot = sensor_registry_find_by_name(cmd->target_device_id);
+                if (slot < 0) return;
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                if (!s || !s->paired) return;
+                mac_copy(target, s->mac);
+            }
+            if (mac_is_zero) return;
+            espnow_command_t fwd;
+            memset(&fwd, 0, sizeof(fwd));
+            fwd.msg_type = ESPNOW_MSG_COMMAND;
+            fwd.sequence = cmd->sequence;
+            mac_copy(fwd.target_mac, target);
+            fwd.command = cmd->command;
+            espnow_send_wrapper((uint8_t *)s_bcast_addr, (uint8_t *)&fwd, sizeof(fwd), "ESP-NOW");
+            break;
+        }
+
+        default:
+            m_crc_errors++;
+            break;
+    }
+}
+
+// C-linkage callback registered with ESP-NOW
+#ifdef ESP32
+extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len) {
+#else
+extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
+#endif
+    if (EspnowHandler::s_self) {
+        EspnowHandler::s_self->handle_rx(mac, data, len);
+    }
+}
+
+// ---- Compatibility wrappers ----
+static EspnowHandler s_espnow_handler;
+
+bool espnow_handler_init() { return s_espnow_handler.init() == 0; }
+void espnow_handler_loop() { s_espnow_handler.loop(); }
+bool espnow_start_pairing() { return s_espnow_handler.start_pairing(); }
+void espnow_stop_pairing() { s_espnow_handler.stop_pairing(); }
+bool espnow_is_pairing() { return s_espnow_handler.is_pairing(); }
+unsigned long espnow_pairing_remaining_ms() { return s_espnow_handler.pairing_remaining_ms(); }
+unsigned long espnow_get_rx_count() { return s_espnow_handler.get_rx_count(); }
+unsigned long espnow_get_ack_count() { return s_espnow_handler.get_ack_count(); }
+unsigned long espnow_get_crc_errors() { return s_espnow_handler.get_crc_errors(); }
+uint8_t* espnow_get_gateway_mac() { return s_espnow_handler.get_radio_mac(); }
+void espnow_announce() { s_espnow_handler.announce(); }
+void espnow_broadcast_time_sync(uint32_t epoch) { s_espnow_handler.broadcast_time_sync(epoch); }
+bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) { (void)slot; return s_espnow_handler.send_command(mac, state); }
+bool espnow_send_restart(const uint8_t *mac, uint8_t slot) { (void)slot; return s_espnow_handler.send_restart(mac); }
+
+#endif // HABILITA_ESPNOW

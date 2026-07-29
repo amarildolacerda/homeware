@@ -55,6 +55,8 @@ static int s_button_pin = BUTTON_PIN;
 static int s_battery = 100;
 static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
+static int s_btn_press_count = 0;
+static unsigned long s_btn_press_start = 0;
 static unsigned long s_start_time = 0;
 static unsigned long s_last_send_ms = 0;
 
@@ -75,6 +77,7 @@ static bool s_config_portal_active = false;
 static bool s_ota_in_progress = false;
 static uint32_t s_ota_bytes = 0;
 static bool s_led_enabled = true;
+static bool s_multihub = false;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 static uint8_t s_my_mac[6];
 static unsigned long s_wifi_connect_start = 0;
@@ -104,6 +107,7 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
 #define EEPROM_REPEATER_EN_ADDR (EEPROM_STARTUP_MODE_ADDR + 1)
 #define EEPROM_SSID_ADDR 64
+#define EEPROM_MULTIHUB_ADDR 200
 #define EEPROM_SSID_MAX 32
 #define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
 #define EEPROM_PASS_MAX 64
@@ -485,7 +489,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     {
         if (len < sizeof(espnow_command_t))
             return;
-        if (!mac_equal(mac, s_gateway_mac))
+        if (!s_multihub && !mac_equal(mac, s_gateway_mac))
             return;
         espnow_command_t *cmd = (espnow_command_t *)data;
         if (mac_equal(cmd->target_mac, s_my_mac))
@@ -715,6 +719,12 @@ static void init_hardware(void)
     load_button_pin();
     load_led_enabled();
     load_startup_mode();
+    {
+        EEPROM.begin(EEPROM_SIZE);
+        uint8_t val = EEPROM.read(EEPROM_MULTIHUB_ADDR);
+        EEPROM.end();
+        s_multihub = (val == 1);
+    }
     pinMode(s_relay_pin, OUTPUT);
     if (s_startup_mode == 0)
     {
@@ -744,7 +754,7 @@ static void start_ap(void)
 {
     char ssid[33];
     name_to_ssid(s_device_name, ssid, sizeof(ssid));
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid, WIFI_CONFIG_PORTAL_PASS);
     console.printf("[%s] AP '%s' started, connect to configure WiFi\n", TAG, ssid);
 }
@@ -1168,6 +1178,8 @@ static void handle_console(char c)
     {
     case 'R':
     case 'r':
+        console.println("r - reiniciando....");
+        delay(100);
         ESP.restart();
         break;
     case 'l':
@@ -1390,6 +1402,7 @@ static void handle_api_settings(void)
         doc["button_pin"] = s_button_pin;
         doc["led_enabled"] = s_led_enabled;
         doc["startup_mode"] = s_startup_mode;
+        doc["multihub"] = s_multihub;
         JsonArray pins = doc["available_pins"].to<JsonArray>();
         for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
             pins.add(AVAILABLE_GPIOS[i]);
@@ -1480,6 +1493,20 @@ static void handle_api_settings(void)
                 s_startup_mode = new_mode;
                 save_startup_mode();
                 console.printf("[%s] Startup mode set to %d\n", TAG, s_startup_mode);
+                changed = true;
+            }
+        }
+        if (doc.containsKey("multihub"))
+        {
+            bool new_multihub = doc["multihub"];
+            if (new_multihub != s_multihub)
+            {
+                s_multihub = new_multihub;
+                EEPROM.begin(EEPROM_SIZE);
+                EEPROM.write(EEPROM_MULTIHUB_ADDR, s_multihub ? 1 : 0);
+                EEPROM.commit();
+                EEPROM.end();
+                console.printf("[%s] Multihub mode %s\n", TAG, s_multihub ? "ATIVADO" : "desativado");
                 changed = true;
             }
         }
@@ -1677,6 +1704,7 @@ static void handle_api_timer_next(void)
 static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    console.println("API - reiniciando...");
     delay(500);
     ESP.restart();
 }
@@ -1775,6 +1803,8 @@ void setup(void)
     randomSeed(analogRead(A0));
     init_hardware();
     console.printf("============================================\n");
+
+    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? s_device_id : s_device_name);
 
     hwifi_begin();
 
@@ -1902,6 +1932,17 @@ void loop(void)
             s_button_last = btn;
             if (btn == LOW)
             {
+                if (now - s_btn_press_start > 3000)
+                    s_btn_press_count = 0;
+                if (s_btn_press_count == 0)
+                    s_btn_press_start = now;
+                s_btn_press_count++;
+                if (s_btn_press_count >= 3)
+                {
+                    console.printf("[%s] 3 presses detected, restarting...\n", TAG);
+                    delay(100);
+                    ESP.restart();
+                }
                 toggle_relay();
                 console.printf("[%s] Button press -> relay %s\n", TAG, s_relay_state ? "ON" : "OFF");
             }
@@ -1910,11 +1951,17 @@ void loop(void)
 
     unsigned long now = millis();
 
-    /* Manual pairing only — no auto-pair in loop */
     if (!s_paired)
     {
-        if (s_pair_wait_until > 0 && now < s_pair_wait_until)
-            return;
+        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
+        {
+            s_last_espnow_pair = now;
+            s_pair_attempts++;
+            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
+            espnow_send_pair_request();
+            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
+                s_pair_attempts = 0;
+        }
         return;
     }
 

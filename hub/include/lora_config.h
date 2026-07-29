@@ -1,13 +1,22 @@
 #ifndef LORA_CONFIG_H
 #define LORA_CONFIG_H
 
-// TTGO LORA32 T3_v1.6 — SX1278 via sandeepmistry/LoRa
+#ifdef HELTEC_W32LA
 #define LORA_SS     18
 #define LORA_RST    14
 #define LORA_DIO0   26
 #define LORA_SCK     5
 #define LORA_MISO   19
 #define LORA_MOSI   27
+#else
+// TTGO LORA32 T3_v1.6 — SX1278 via sandeepmistry/LoRa
+#define LORA_SS     18
+#define LORA_RST    23
+#define LORA_DIO0   -1   // DIO0 nao conectado (usa DIO1=33 p/ polling)
+#define LORA_SCK     5
+#define LORA_MISO   19
+#define LORA_MOSI   27
+#endif
 
 // Legacy aliases (compatibilidade)
 #define LORA_SS_PIN   LORA_SS

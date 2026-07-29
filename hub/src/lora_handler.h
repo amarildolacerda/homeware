@@ -15,6 +15,8 @@ public:
     int send(const uint8_t* data, size_t len) override;
     void loop() override;
     bool is_ready() const override;
+    bool send_command(const uint8_t* mac, uint8_t state) override;
+    bool send_restart(const uint8_t* mac) override;
 
 private:
     bool m_ok;

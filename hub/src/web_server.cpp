@@ -1,6 +1,8 @@
 #include "web_server.h"
 #include "sensor_registry.h"
-#include "espnow_handler.h"
+#include "radio_manager.h"
+
+extern RadioManager s_radio_mgr;
 #include "mqtt_client.h"
 #include "config.h"
 #include "pages.h"
@@ -8,6 +10,7 @@
 #include "common_console.h"
 #include "platform.h"
 #include "captive_portal.h"
+#include "device_router.h"
 #include <uri/UriBraces.h>
 #include <ArduinoJson.h>
 
@@ -197,22 +200,34 @@ void web_server_init() {
         JsonDocument doc;
         doc["paired_count"] = sensor_registry_count_paired();
         doc["online_count"] = sensor_registry_count_online();
-        doc["rx_total"] = espnow_get_rx_count();
-        doc["ack_total"] = espnow_get_ack_count();
-        doc["crc_errors"] = espnow_get_crc_errors();
+        doc["rx_total"] = s_radio_mgr.total_rx_count();
+        doc["ack_total"] = s_radio_mgr.total_ack_count();
+        doc["crc_errors"] = s_radio_mgr.total_crc_errors();
         doc["uptime_ms"] = millis();
-        doc["pairing_mode"] = espnow_is_pairing();
+        doc["pairing_mode"] = s_radio_mgr.any_pairing_active();
         doc["pairing_required"] = pairing_config_load();
         doc["pairing_window_sec"] = PAIRING_WINDOW_MS / 1000;
-        doc["pairing_remaining_sec"] = espnow_pairing_remaining_ms() / 1000;
+        {
+            RadioInterface* r = s_radio_mgr.get_radio(RADIO_ESPNOW);
+            doc["pairing_remaining_sec"] = r ? r->pairing_remaining_ms() / 1000 : 0;
+        }
         doc["mqtt_host"] = mqtt_client_get_host();
         doc["mqtt_port"] = mqtt_client_get_port();
         doc["mqtt_user"] = mqtt_client_get_user();
         doc["mqtt_connected"] = mqtt_client_is_connected();
         doc["mqtt_connected_since"] = mqtt_client_connected_since();
-        char mac_buf[18];
-        mac_to_str(espnow_get_gateway_mac(), mac_buf, sizeof(mac_buf));
-        doc["gateway_mac"] = mac_buf;
+        uint8_t mac_buf[6];
+        {
+            RadioInterface* r = s_radio_mgr.get_radio(RADIO_ESPNOW);
+            if (r && r->get_radio_mac()) {
+                memcpy(mac_buf, r->get_radio_mac(), 6);
+            } else {
+                WiFi.macAddress(mac_buf);
+            }
+        }
+        char mac_str[18];
+        mac_to_str(mac_buf, mac_str, sizeof(mac_str));
+        doc["gateway_mac"] = mac_str;
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
 #if defined(ARDUINO_ARCH_ESP32)
@@ -225,6 +240,7 @@ void web_server_init() {
         doc["ntp_synced"] = gateway_ntp_synced();
         doc["epoch"] = (uint32_t)gateway_ntp_epoch();
         doc["ip"] = WiFi.localIP().toString();
+        doc["wifi_channel"] = WiFi.channel();
         doc["wifi_ssid"] = WiFi.SSID();
         {
             int wmode = WIFI_MODE_DHCP;
@@ -341,9 +357,9 @@ void web_server_init() {
     });
     
     s_server.on("/api/pair/start", HTTP_POST, []() {
-        if (espnow_is_pairing()) {
+        if (s_radio_mgr.any_pairing_active()) {
             s_server.send(409, "application/json", "{\"error\":\"already pairing\"}");
-        } else if (espnow_start_pairing()) {
+        } else if (s_radio_mgr.any_start_pairing()) {
             log_add("info", "Pareamento iniciado");
             s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         } else {
@@ -352,7 +368,7 @@ void web_server_init() {
     });
     
     s_server.on("/api/pair/stop", HTTP_POST, []() {
-        espnow_stop_pairing();
+        s_radio_mgr.all_stop_pairing();
         log_add("info", "Pareamento finalizado");
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
@@ -408,7 +424,7 @@ void web_server_init() {
                 s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }
-            if (espnow_send_command(s->mac, slot, state)) {
+            if (device_send_command(s->mac, slot, state)) {
                 log_add("info", "Comando %s enviado para slot %d", state ? "ON" : "OFF", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else
@@ -419,7 +435,7 @@ void web_server_init() {
                 s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
-            if (espnow_send_restart(s->mac, s->slot)) {
+            if (device_send_restart(s->mac, s->slot)) {
                 log_add("info", "Restart enviado para slot %d", slot);
                 s_server.send(200, "application/json", "{\"status\":\"ok\"}");
             } else

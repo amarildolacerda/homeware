@@ -96,7 +96,13 @@ const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>ESP-NOW Gateway</title>
+)rawliteral"
+#ifdef HABILITA_LORA
+"<title>LoRa Hub</title>"
+#else
+"<title>ESP-NOW Gateway</title>"
+#endif
+R"rawliteral(
 <style>
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--border-strong:#d1d5db;--success:#16a34a;--danger:#dc2626;--warn:#f59e0b;--info:#2563eb}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -145,7 +151,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 </head>
 <body>
 <div class="sidebar">
-<div class="logo"><h1>ESP-NOW</h1><span>Gateway</span></div>
+<div class="logo">
+)rawliteral"
+#ifdef HABILITA_LORA
+"<h1>LoRa</h1><span>Hub</span>"
+#else
+"<h1>ESP-NOW</h1><span>Gateway</span>"
+#endif
+R"rawliteral(
+</div>
 <nav>
 <a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
 <a href="#" onclick="navigate('settings');return false" id="nav-settings"><span class="icon">&#x2699;</span><span>Configurações</span></a>
@@ -1018,6 +1032,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <div class="card-body">
 <div class="row"><span class="label">SSID</span><span class="value" id="s-wifi-ssid">--</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="s-wifi-ip">--</span></div>
+<div class="row"><span class="label">Canal</span><span class="value" id="s-wifi-channel">--</span></div>
 <div class="row"><span class="label">Modo</span><span class="value" id="s-wifi-mode">--</span></div>
 <button class="btn btn-primary" onclick="showWifiForm()" style="margin-top:12px;width:100%">Configurar Rede</button>
 </div>
@@ -1116,6 +1131,7 @@ async function loadSettings() {
     window.s_wifiConfig = wifi;
     document.getElementById('s-wifi-ssid').textContent = (wifi.ssid && wifi.ssid.length) ? wifi.ssid : (info.wifi_ssid || '--');
     document.getElementById('s-wifi-ip').textContent = info.ip || '--';
+    document.getElementById('s-wifi-channel').textContent = info.wifi_channel || '--';
     var isStatic = wifi.mode === 1;
     document.getElementById('s-wifi-mode').textContent = isStatic ? 'IP Fixo' : 'DHCP';
     document.getElementById('wifi-sum').textContent = ((wifi.ssid && wifi.ssid.length) ? wifi.ssid : (info.wifi_ssid || 'sem SSID'));
@@ -1277,7 +1293,15 @@ const char PAGE_DOCS[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>API Docs - ESP-NOW Gateway</title>
+<title>API Docs - 
+)rawliteral"
+#ifdef HABILITA_LORA
+"LoRa Hub"
+#else
+"ESP-NOW Gateway"
+#endif
+R"rawliteral(
+</title>
 <style>
 :root{--bg:#0b0f1a;--card:#111827;--border:#1f2937;--text:#e5e7eb;--muted:#9ca3af;--primary:#22d3ee;--get:#22c55e;--post:#60a5fa;--del:#ef4444}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1309,7 +1333,15 @@ h1{font-size:1.1rem}
 </head>
 <body>
 <h1>API Reference</h1>
-<p class="sub">ESP-NOW Gateway &mdash; endpoints REST</p>
+<p class="sub">
+)rawliteral"
+#ifdef HABILITA_LORA
+"LoRa Hub"
+#else
+"ESP-NOW Gateway"
+#endif
+R"rawliteral(
+&mdash; endpoints REST</p>
 
 <h2>Gateway</h2>
 <div class="endpoint">
@@ -1417,7 +1449,15 @@ h1{font-size:1.1rem}
 <div class="desc">Upload de firmware via OTA (multipart/form-data)</div>
 </div>
 
-<p class="footer">ESP-NOW Gateway &mdash; <span id="v">v0.0.21</span></p>
+<p class="footer">
+)rawliteral"
+#ifdef HABILITA_LORA
+"LoRa Hub"
+#else
+"ESP-NOW Gateway"
+#endif
+R"rawliteral(
+&mdash; <span id="v">v0.0.21</span></p>
 </body>
 </html>
 )rawliteral";

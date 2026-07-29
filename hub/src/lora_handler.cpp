@@ -3,6 +3,7 @@
 #include "lora_handler.h"
 #include "lora_config.h"
 #include "lora_protocol.h"
+#include <string.h>
 
 int LoraHandler::init() {
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_SS);
@@ -38,6 +39,25 @@ void LoraHandler::loop() {
     handle_rx();
 }
 
+bool LoraHandler::send_command(const uint8_t* mac, uint8_t state) {
+    lora_command_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.msg_type = LORA_MSG_COMMAND;
+    cmd.sequence = 0;
+    memcpy(cmd.sensor_id, mac, 6);
+    cmd.command = state;
+    return send((const uint8_t*)&cmd, sizeof(cmd)) == 0;
+}
+
+bool LoraHandler::send_restart(const uint8_t* mac) {
+    lora_command_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.msg_type = LORA_MSG_COMMAND;
+    cmd.sequence = 0;
+    memcpy(cmd.sensor_id, mac, 6);
+    cmd.command = 0xFF; // restart
+    return send((const uint8_t*)&cmd, sizeof(cmd)) == 0;
+}
 void LoraHandler::handle_rx() {
     int len = LoRa.parsePacket();
     if (len <= 0 || len > LORA_RX_BUF_SIZE) return;
