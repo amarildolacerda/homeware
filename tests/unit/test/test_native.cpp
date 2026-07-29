@@ -7,6 +7,12 @@ void test_node_protocol_sends_pair_request_on_begin(void);
 void test_node_protocol_sends_heartbeat_when_paired(void);
 void test_node_protocol_pair_response(void);
 void test_node_protocol_handles_command(void);
+void test_pagemanager_no_pages(void);
+void test_pagemanager_add_page(void);
+void test_pagemanager_switches_page(void);
+void test_pagemanager_footer(void);
+void test_pagemanager_page_render(void);
+void test_pagemanager_cycles_back(void);
 
 void setUp(void) {
     fake_millis_set(0);
@@ -21,6 +27,12 @@ int main(int argc, char** argv) {
     RUN_TEST(test_node_protocol_sends_heartbeat_when_paired);
     RUN_TEST(test_node_protocol_pair_response);
     RUN_TEST(test_node_protocol_handles_command);
+    RUN_TEST(test_pagemanager_no_pages);
+    RUN_TEST(test_pagemanager_add_page);
+    RUN_TEST(test_pagemanager_switches_page);
+    RUN_TEST(test_pagemanager_footer);
+    RUN_TEST(test_pagemanager_page_render);
+    RUN_TEST(test_pagemanager_cycles_back);
     UNITY_END();
     return 0;
 }
