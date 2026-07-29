@@ -505,6 +505,7 @@
                 "WIFI_PASS=\"3938373635\"",
                 "HELTEC_W32LA",
                 "HABILITA_LORA",
+                "HABILITA_ESPNOW",
                 "HABILITA_DISPLAY",
                 "HAVE_CONFIG_H",
                 "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\"",
