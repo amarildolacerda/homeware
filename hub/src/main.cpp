@@ -4,8 +4,11 @@
 #include <ArduinoJson.h>
 #include "config.h"
 #include "sensor_registry.h"
-#include "espnow_handler.h"
+#include "radio_manager.h"
 #include "mqtt_client.h"
+#ifdef HABILITA_ESPNOW
+#include "espnow_handler.h"
+#endif
 #include "web_server.h"
 #include "common_ota.h"
 #include "log_buffer.h"
@@ -29,13 +32,18 @@ static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
 
+#ifdef HABILITA_ESPNOW
+static EspnowHandler s_espnow;
+#endif
 #ifdef HABILITA_LORA
-LoraHandler s_lora;
+static LoraHandler s_lora;
 #define LORA_PENDING_STATE_MAX 5
 static uint8_t s_lora_pending_state_slots[LORA_PENDING_STATE_MAX];
 static int s_lora_pending_state_head = 0;
 static int s_lora_pending_state_tail = 0;
 #endif
+
+RadioManager s_radio_mgr;
 
 void print_help() {
     console.println("\n=== Comandos ===");
@@ -65,7 +73,7 @@ void handle_console(char c) {
             
         case 'p':
         case 'P':
-            if (espnow_start_pairing()) {
+            if (s_radio_mgr.any_start_pairing()) {
                 console.println("Modo pareamento iniciado. LED piscando...");
             } else {
                 console.println("Falha: máximo de sensores atingido ou já em pareamento");
@@ -95,23 +103,25 @@ void handle_console(char c) {
         case 'S': {
             console.printf("\n=== Status Gateway ===\n");
             console.printf("Device ID: %s\n", get_gateway_device_id());
+            uint8_t sta_mac[6];
+            WiFi.macAddress(sta_mac);
             char mac_buf[18];
-            mac_to_str(espnow_get_gateway_mac(), mac_buf, sizeof(mac_buf));
+            mac_to_str(sta_mac, mac_buf, sizeof(mac_buf));
             console.printf("MAC: %s\n", mac_buf);
             console.printf("FW: %s\n", FW_VERSION);
             console.printf("Uptime: %lu s\n", millis() / 1000);
             console.printf("NTP: %s\n", s_ntp_synced ? "sincronizado" : "aguardando...");
             console.printf("Sensores: %d pareados, %d online\n", 
                           sensor_registry_count_paired(), sensor_registry_count_online());
-            console.printf("ESP-NOW: RX=%lu ACK=%lu CRC_ERR=%lu\n",
-                          espnow_get_rx_count(), espnow_get_ack_count(), espnow_get_crc_errors());
+            console.printf("Radio RX=%lu ACK=%lu CRC_ERR=%lu\n",
+                          s_radio_mgr.total_rx_count(), s_radio_mgr.total_ack_count(), s_radio_mgr.total_crc_errors());
             console.printf("MQTT: %s:%d (%s)\n", 
                           mqtt_client_get_host(), mqtt_client_get_port(),
                           mqtt_client_is_connected() ? "conectado" : "desconectado");
             console.printf("WiFi: http://%s ch=%d (RSSI: %d dBm)\n",
                           WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
                           WiFi.channel(), WiFi.RSSI());
-            console.printf("Pareamento: %s\n", espnow_is_pairing() ? "ATIVO" : "inativo");
+            console.printf("Pareamento: %s\n", s_radio_mgr.any_pairing_active() ? "ATIVO" : "inativo");
             console.printf("========================\n\n");
             break;
         }
@@ -230,20 +240,19 @@ void setup() {
         snprintf(banner, sizeof(banner), PLATFORM_PREFIX " Gateway %s", FW_VERSION);
         console.set_banner(banner);
     }
-    espnow_handler_init();
-#ifdef HABILITA_DISPLAY
-    display_handler_init();
+#ifdef HABILITA_ESPNOW
+    s_espnow.set_rx_callback(nullptr, nullptr);
+    s_radio_mgr.add_radio(RADIO_ESPNOW, &s_espnow);
 #endif
 #ifdef HABILITA_LORA
     s_lora.set_rx_callback(lora_rx_cb, nullptr);
-    int lora_state = s_lora.init();
-    if (lora_state != 0) {
-        console.printf("[LoRa] Init failed: %d — LoRa disabled\n", lora_state);
-    } else {
-        console.println("[LoRa] Initialized");
-    }
+    s_radio_mgr.add_radio(RADIO_LORA, &s_lora);
 #endif
-    espnow_announce();
+    s_radio_mgr.init_all();
+#ifdef HABILITA_DISPLAY
+    display_handler_init();
+#endif
+    s_radio_mgr.all_announce();
     log_buffer_init();
     
     configTime(0, 0, "162.159.200.123", "216.239.35.0");
@@ -276,8 +285,8 @@ void loop() {
         if (digitalRead(PAIR_BUTTON_GPIO) == LOW) {
             if (press_start == 0) press_start = millis();
             else if (millis() - press_start > 3000) {
-                if (!espnow_is_pairing()) {
-                    espnow_start_pairing();
+                if (!s_radio_mgr.any_pairing_active()) {
+                    s_radio_mgr.any_start_pairing();
                 }
                 press_start = 0;
             }
@@ -289,9 +298,8 @@ void loop() {
     ota_handle();
     web_server_loop();
     web_server_maintain_wifi();
-    espnow_handler_loop();
+    s_radio_mgr.loop_all();
 #ifdef HABILITA_LORA
-    s_lora.loop();
     lora_process_bridge_queue();
 #endif
 #ifdef HABILITA_DISPLAY
@@ -303,7 +311,7 @@ void loop() {
     {
         static unsigned long s_led_toggle = 0;
         static bool s_led_state = false;
-        if (espnow_is_pairing()) {
+        if (s_radio_mgr.any_pairing_active()) {
             if (millis() - s_led_toggle > 300) {
                 s_led_toggle = millis();
                 s_led_state = !s_led_state;
@@ -317,7 +325,7 @@ void loop() {
     if (now - s_last_telemetry > 30000) {
         s_last_telemetry = now;
         console.printf("[%s] Uptime=%lus RX=%lu ACK=%lu Paired=%d Online=%d MQTT=%d\n",
-                      TAG, now / 1000, espnow_get_rx_count(), espnow_get_ack_count(),
+                      TAG, now / 1000, s_radio_mgr.total_rx_count(), s_radio_mgr.total_ack_count(),
                       sensor_registry_count_paired(), sensor_registry_count_online(),
                       mqtt_client_is_connected());
 
@@ -345,7 +353,7 @@ void loop() {
 
     if (s_ntp_synced && millis() - s_last_time_sync > TIME_SYNC_INTERVAL_MS) {
         s_last_time_sync = millis();
-        espnow_broadcast_time_sync((uint32_t)s_ntp_epoch);
+        s_radio_mgr.all_broadcast_time_sync((uint32_t)s_ntp_epoch);
     }
     
     delay(1);
