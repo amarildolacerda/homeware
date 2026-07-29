@@ -1,6 +1,6 @@
 #include "display.h"
-#include "display_ttgo.h"
 #include "page_manager.h"
+#include "display_interface.h"
 #include "config.h"
 #include "lora_node_protocol.h"
 #include "myWiFiManager.h"
@@ -14,10 +14,22 @@ extern char s_device_name[32];
 
 extern LoraNodeProtocol s_proto;
 
-static Ssd1306DisplayTtgo s_display;
-static PageManager s_pages(&s_display);
+#ifdef DISPLAY_TTGO
+#include "display_ttgo.h"
+static Ssd1306DisplayTtgo s_display_obj;
+static DisplayInterface* s_display = &s_display_obj;
+#elif defined(DISPLAY_HELTEC)
+#include "display_heltec.h"
+static Ssd1306DisplayHeltec s_display_obj;
+static DisplayInterface* s_display = &s_display_obj;
+#else
+static DisplayInterface* s_display = nullptr;
+#endif
 
-static void render_page_0(DisplayInterface& d) {
+static PageManager s_pages(s_display);
+
+static void render_page_0(DisplayInterface &d)
+{
     d.set_cursor(0, 0);
     d.print("LoRa Switch");
     d.set_cursor(0, 12);
@@ -30,11 +42,15 @@ static void render_page_0(DisplayInterface& d) {
     d.print(WiFi.localIP().toString().c_str());
 }
 
-static void render_page_1(DisplayInterface& d) {
+static void render_page_1(DisplayInterface &d)
+{
     unsigned long sec = millis() / 1000;
-    int dd = sec / 86400; sec %= 86400;
-    int hh = sec / 3600; sec %= 3600;
-    int mm = sec / 60; sec %= 60;
+    int dd = sec / 86400;
+    sec %= 86400;
+    int hh = sec / 3600;
+    sec %= 3600;
+    int mm = sec / 60;
+    sec %= 60;
     d.set_cursor(0, 0);
     d.printf("TX: %lu", s_proto.tx_count());
     d.set_cursor(0, 12);
@@ -47,16 +63,25 @@ static void render_page_1(DisplayInterface& d) {
     d.printf("WiFi: %s", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "---");
 }
 
-void display_init() {
-    if (!s_display.begin()) return;
-    s_display.set_text_size(1);
-    s_display.clear();
-    s_display.print("Booting...");
-    s_display.display();
-    s_pages.add_page(render_page_0);
-    s_pages.add_page(render_page_1);
+void display_init()
+{
+    if (s_display != nullptr)
+    {
+        if (!s_display->begin())
+            return;
+        s_display->set_text_size(1);
+        s_display->clear();
+        s_display->print("Booting...");
+        s_display->display();
+        s_pages.add_page(render_page_0);
+        s_pages.add_page(render_page_1);
+    }
 }
 
-void display_loop() {
-    s_pages.loop();
+void display_loop()
+{
+    if (s_display != nullptr)
+    {
+        s_pages.loop();
+    }
 }
