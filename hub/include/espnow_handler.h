@@ -34,12 +34,12 @@ public:
     bool send_command(const uint8_t* mac, uint8_t state) override;
     bool send_restart(const uint8_t* mac) override;
 
-    // Callback dispatch — called from C-linkage recv_cb
     void handle_rx(const uint8_t* mac, const uint8_t* data, int len);
 
-private:
-    static EspnowHandler* s_self;  // for C-linkage callback
+public:
+    static EspnowHandler* s_self;  // accessed from C-linkage callback
 
+private:
     bool m_pairing_mode = false;
     unsigned long m_pairing_start = 0;
     uint8_t m_gateway_mac[6];
@@ -76,15 +76,62 @@ private:
     const uint8_t* dest_for_chip(const uint8_t* mac, uint8_t client_chip);
 };
 
+// ---- Compatibility wrapper declarations ----
+// Allow callers not yet migrated to the class API to keep compiling.
+bool espnow_handler_init();
+void espnow_handler_loop();
+bool espnow_start_pairing();
+void espnow_stop_pairing();
+bool espnow_is_pairing();
+unsigned long espnow_pairing_remaining_ms();
+unsigned long espnow_get_rx_count();
+unsigned long espnow_get_ack_count();
+unsigned long espnow_get_crc_errors();
+uint8_t* espnow_get_gateway_mac();
+void espnow_announce();
+void espnow_broadcast_time_sync(uint32_t epoch_seconds);
+bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state);
+bool espnow_send_restart(const uint8_t *mac, uint8_t slot);
+
 #else
-// Stub: EspnowHandler compiles to nothing when ESP-NOW disabled
+
+// Stub: minimal no-op EspnowHandler when ESP-NOW is disabled
 class EspnowHandler : public RadioInterface {
 public:
     int init() override { return -1; }
     int send(const uint8_t*, size_t) override { return -1; }
     void loop() override {}
     bool is_ready() const override { return false; }
+    bool start_pairing() override { return false; }
+    void stop_pairing() override {}
+    bool is_pairing() const override { return false; }
+    unsigned long pairing_remaining_ms() const override { return 0; }
+    unsigned long get_rx_count() const override { return 0; }
+    unsigned long get_ack_count() const override { return 0; }
+    unsigned long get_crc_errors() const override { return 0; }
+    uint8_t* get_radio_mac() override { return nullptr; }
+    void announce() override {}
+    void broadcast_time_sync(uint32_t) override {}
+    bool send_command(const uint8_t*, uint8_t) override { return false; }
+    bool send_restart(const uint8_t*) override { return false; }
 };
+
+// Stub wrappers (no-op, use when HABILITA_ESPNOW is not defined)
+inline bool espnow_handler_init() { return false; }
+inline void espnow_handler_loop() {}
+inline bool espnow_start_pairing() { return false; }
+inline void espnow_stop_pairing() {}
+inline bool espnow_is_pairing() { return false; }
+inline unsigned long espnow_pairing_remaining_ms() { return 0; }
+inline unsigned long espnow_get_rx_count() { return 0; }
+inline unsigned long espnow_get_ack_count() { return 0; }
+inline unsigned long espnow_get_crc_errors() { return 0; }
+inline uint8_t* espnow_get_gateway_mac() { return nullptr; }
+inline void espnow_announce() {}
+inline void espnow_broadcast_time_sync(uint32_t) {}
+inline bool espnow_send_command(const uint8_t*, uint8_t, uint8_t) { return false; }
+inline bool espnow_send_restart(const uint8_t*, uint8_t) { return false; }
+
 #endif
 
 #endif
