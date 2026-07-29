@@ -190,6 +190,7 @@ static void handle_api_settings() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
+                s_proto.set_device_name(s_device_name);
             }
         }
     }
@@ -378,6 +379,7 @@ static void handle_api_wifi() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
+                s_proto.set_device_name(s_device_name);
             }
         }
         console.printf("WiFi credentials received, connecting to %s...\n", ssid);
@@ -516,6 +518,7 @@ void setup() {
 
     if (!name_load(s_device_name, sizeof(s_device_name)))
         strncpy(s_device_name, DEVICE_NAME, sizeof(s_device_name) - 1);
+    s_proto.set_device_name(s_device_name);
 
     display_init();
 
