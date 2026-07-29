@@ -7,26 +7,16 @@
 #include <Wire.h>
 #include "lora_spi_radio.h"
 #include "lora_node_protocol.h"
-#include <Adafruit_SSD1306.h>
-#include <Adafruit_GFX.h>
 #include <ArduinoJson.h>
 
 #include "config.h"
 #include "pages.h"
 #include "lora_protocol.h"
 #include "common_console.h"
+#include "display.h"
 
 #define SENSOR_TYPE_ONOFF 8
 #include "myWiFiManager.h"
-
-
-
-#define DISPLAY_SDA  21
-#define DISPLAY_SCL  22
-#define DISPLAY_RST  -1
-#define DISPLAY_ADDR 0x3C
-#define DISPLAY_W    128
-#define DISPLAY_H    64
 
 static LoraSpiConfig s_lora_cfg = []() {
     LoraSpiConfig cfg;
@@ -37,12 +27,11 @@ static LoraSpiConfig s_lora_cfg = []() {
     return cfg;
 }();
 static LoraSpiRadio s_radio(s_lora_cfg);
-static LoraNodeProtocol s_proto(&s_radio);
+LoraNodeProtocol s_proto(&s_radio);
 
 static WebServer s_server(DASHBOARD_PORT);
-static Adafruit_SSD1306 s_display(DISPLAY_W, DISPLAY_H, &Wire, DISPLAY_RST);
 
-static bool s_relay = false;
+bool s_relay = false;
 static bool s_gateway_connected = false;
 static uint8_t s_my_mac[6];
 static uint32_t s_ota_bytes = 0;
@@ -409,64 +398,6 @@ static void handle_api_wifi() {
     }
 }
 
-static void display_page0() {
-    s_display.clearDisplay();
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.print("LoRa Switch");
-    s_display.setCursor(0, 12);
-    s_display.print(s_relay ? "ON" : "OFF");
-    s_display.setCursor(0, 24);
-    s_display.print(s_proto.is_paired() ? "Pareado" : "---");
-    s_display.setCursor(0, 36);
-    s_display.printf("RSSI: %d", s_proto.last_rssi());
-    s_display.setCursor(0, 48);
-    s_display.print(WiFi.localIP());
-}
-
-static void display_page1() {
-    unsigned long sec = millis() / 1000;
-    int dd = sec / 86400; sec %= 86400;
-    int hh = sec / 3600; sec %= 3600;
-    int mm = sec / 60; sec %= 60;
-    s_display.clearDisplay();
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.printf("TX: %lu", s_proto.tx_count());
-    s_display.setCursor(0, 12);
-    s_display.printf("RX: %lu", s_proto.rx_count());
-    s_display.setCursor(0, 24);
-    s_display.printf("Mem: %u", ESP.getFreeHeap());
-    s_display.setCursor(0, 36);
-    s_display.printf("Uptime: %dd %02d:%02d:%02d", dd, hh, mm, (int)sec);
-    s_display.setCursor(0, 48);
-    s_display.printf("WiFi: %s", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "---");
-}
-
-static void display_update() {
-    static int s_display_page = 0;
-    static unsigned long s_last_page_switch = 0;
-    unsigned long now = millis();
-    if (now - s_last_page_switch > 5000) {
-        s_last_page_switch = now;
-        s_display_page = !s_display_page;
-    }
-    if (s_display_page == 0) display_page0();
-    else display_page1();
-    s_display.display();
-}
-
-static void display_init() {
-    Wire.begin(DISPLAY_SDA, DISPLAY_SCL);
-    if (!s_display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_ADDR)) return;
-    s_display.clearDisplay();
-    s_display.setTextSize(1);
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.print("Booting...");
-    s_display.display();
-}
-
 static void init_radio_and_protocol() {
     s_proto.callbacks.get_sensor_type = get_sensor_type;
     s_proto.callbacks.get_sensor_payload = get_sensor_payload;
@@ -571,11 +502,7 @@ void loop() {
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     }
 
-    static unsigned long last_display = 0;
-    if (millis() - last_display > 2000) {
-        last_display = millis();
-        display_update();
-    }
+    display_loop();
 
     delay(1);
 }
