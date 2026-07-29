@@ -1,7 +1,6 @@
 #include "mqtt_client.h"
 #include "config.h"
 #include "sensor_registry.h"
-#include "espnow_handler.h"
 #include "platform.h"
 #include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768

@@ -8,8 +8,10 @@
 #include "platform.h"
 #include "common_console.h"
 #include "mqtt_client.h"
-#include "espnow_handler.h"
+#include "radio_manager.h"
 #include "common_util.h"
+
+extern RadioManager s_radio_mgr;
 #include <time.h>
 
 #ifdef HELTEC_W32LA
@@ -156,9 +158,7 @@ static void render_page_1(void) {
     uptime_to_str(millis(), uptime_buf, sizeof(uptime_buf));
     disp_printf("Up: %s", uptime_buf);
     cursor(0, 24);
-    extern unsigned long espnow_get_rx_count(void);
-    extern unsigned long espnow_get_ack_count(void);
-    disp_printf("RX: %lu ACK: %lu", espnow_get_rx_count(), espnow_get_ack_count());
+    disp_printf("RX: %lu ACK: %lu", s_radio_mgr.total_rx_count(), s_radio_mgr.total_ack_count());
     cursor(0, 36);
     if (strlen(s_last_device_name) > 0) {
         disp_printf("Last: %s", s_last_device_name);
