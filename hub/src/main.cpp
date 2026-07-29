@@ -16,7 +16,7 @@
 #include "lora_handler.h"
 #include "lora_protocol.h"
 #endif
-#ifdef HABILITA_DISPLAY
+#if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
 #include "display_handler.h"
 #endif
 #include "common_console.h"
@@ -255,7 +255,7 @@ void setup() {
     s_radio_mgr.add_radio(RADIO_LORA, &s_lora);
 #endif
     s_radio_mgr.init_all();
-#ifdef HABILITA_DISPLAY
+#if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_init();
 #endif
     s_radio_mgr.all_announce();
@@ -308,7 +308,7 @@ void loop() {
 #ifdef HABILITA_LORA
     lora_process_bridge_queue();
 #endif
-#ifdef HABILITA_DISPLAY
+#if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_loop();
 #endif
     mqtt_client_loop();
