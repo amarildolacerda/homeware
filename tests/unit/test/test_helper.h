@@ -1,18 +1,15 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include <cstring>   // memset, memcpy
+#include <cstring>
 
-// Stub millis() para testes
-static unsigned long s_fake_millis = 0;
-unsigned long millis() { return s_fake_millis; }
-void fake_millis_set(unsigned long t) { s_fake_millis = t; }
-void fake_millis_advance(unsigned long delta) { s_fake_millis += delta; }
+extern unsigned long s_fake_millis;
+unsigned long millis();
+void fake_millis_set(unsigned long t);
+void fake_millis_advance(unsigned long delta);
 
-// RadioInterface (mesmo caminho que shared/ usa)
 #include "radio_interface.h"
 
-// MockRadio: implementa RadioInterface, grava sends p/ inspeção
 class MockRadio : public RadioInterface {
 public:
     bool m_ready = true;
@@ -31,7 +28,6 @@ public:
     void loop() override {}
     bool is_ready() const override { return m_ready; }
 
-    // Helper para injetar pacotes RX como se o rádio tivesse recebido
     void inject_rx(const uint8_t* data, size_t len, int16_t rssi) {
         if (m_rx_cb) m_rx_cb(data, len, rssi, m_rx_arg);
     }
