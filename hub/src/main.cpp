@@ -219,7 +219,13 @@ void setup() {
     
     console.printf("\n");
     console.printf("============================================\n");
+#ifdef HABILITA_ESPNOW
     console.printf("  " PLATFORM_PREFIX " ESP-NOW Gateway %s\n", FW_VERSION);
+#elif defined(HABILITA_LORA)
+    console.printf("  " PLATFORM_PREFIX " LoRa Gateway %s\n", FW_VERSION);
+#else
+    console.printf("  " PLATFORM_PREFIX " Gateway %s\n", FW_VERSION);
+#endif
     console.printf("  Device: %s\n", get_gateway_device_id());
     console.printf("============================================\n");
     
