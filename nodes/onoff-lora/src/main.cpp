@@ -1,6 +1,5 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WebServer.h>
+#include "platform.h"
 #include <EEPROM.h>
 #include <Update.h>
 #include <DNSServer.h>

@@ -1,12 +1,10 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #ifndef STATIC_WIFI
 #include <WiFiManager.h>
 #endif
 #include <EEPROM.h>
-#include <espnow.h>
 #include <ArduinoOTA.h>
 #include "config.h"
 #include "espnow_protocol.h"
@@ -680,7 +678,7 @@ static void handle_api_status(void)
     doc["fw_version"] = FW_VERSION;
     doc["platform"] = "esp8266";
     doc["type"] = "repeater";
-    doc["device_id"] = String("agri_") + String(ESP.getChipId(), HEX);
+    doc["device_id"] = String("agri_") + String(chip_id(), HEX);
     doc["device_name"] = s_device_name;
     JsonArray arr = doc["client_list"].to<JsonArray>();
     for (int i = 0; i < s_client_count; i++)
@@ -846,7 +844,7 @@ void setup(void)
         console.printf("\n  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
         console.printf("  Telnet:    %s:23\n", WiFi.localIP().toString().c_str());
 
-        String ota_host = String("repeater_") + String(ESP.getChipId(), HEX);
+        String ota_host = String("repeater_") + String(chip_id(), HEX);
         ArduinoOTA.setHostname(ota_host.c_str());
         ArduinoOTA.onStart([]() { console.printf("[%s] OTA update start\n", TAG); });
         ArduinoOTA.onEnd([]() { console.printf("[%s] OTA update end\n", TAG); });

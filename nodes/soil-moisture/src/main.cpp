@@ -1,9 +1,8 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <EEPROM.h>
-#include <espnow.h>
 #include "config.h"
 #include "shared_config.h"
 #include "espnow_protocol.h"
@@ -251,8 +250,8 @@ void setup(void)
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
 
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", chip_id);
+    uint32_t id = chip_id();
+    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     EEPROM.begin(128);
     EEPROM.get(EEPROM_INTERVAL_ADDR, s_interval_s);

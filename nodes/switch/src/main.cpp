@@ -1,11 +1,9 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 #include <ArduinoOTA.h>
 #include <Updater.h>
-#include <espnow.h>
 #include <Espalexa.h>
 #include <sys/time.h>
 #include "config.h"
@@ -1230,8 +1228,8 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", chip_id);
+    uint32_t id = chip_id();
+    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
 

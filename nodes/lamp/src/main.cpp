@@ -1,11 +1,9 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 #include <LittleFS.h>
 #include <Updater.h>
-#include <espnow.h>
 #ifdef HABILITA_ALEXA
 #include <Espalexa.h>
 #endif
@@ -1535,8 +1533,8 @@ void setup(void)
         LittleFS.begin();
     }
 
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", chip_id);
+    uint32_t id = chip_id();
+    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
