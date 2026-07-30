@@ -7,13 +7,13 @@
 #include <DHT.h>
 #include <ArduinoOTA.h>
 #include <Updater.h>
-#include <espnow.h>
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
 #include "common_console.h"
 #include "common_espnow.h"
 #include "common_web.h"
+#include "espnow_node_protocol.h"
 
 static const char *TAG = "dht-gas";
 
@@ -22,28 +22,6 @@ static DHT *s_dht = nullptr;
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;
 static unsigned long s_last_reconnect_attempt = 0;
-static unsigned long s_last_espnow_send = 0;
-static unsigned long s_last_espnow_pair = 0;
-static unsigned long s_last_heartbeat = 0;
-
-static bool s_gateway_connected = false;
-static bool s_paired = false;
-static uint8_t s_gateway_mac[6];
-static uint16_t s_sequence = 0;
-static uint16_t s_assigned_slot = 0;
-static int s_pair_attempts = 0;
-static bool s_ack_received = false;
-static bool s_send_pending = false;
-static bool s_espnow_ready = false;
-static uint8_t s_my_mac[6];
-
-static unsigned long s_pair_cooldown_end = 0;
-
-enum SendState { SEND_IDLE, SEND_WAIT_ACK, SEND_RETRY_DELAY, SEND_RETRY_WAIT_ACK };
-static SendState s_send_state = SEND_IDLE;
-static int s_retry_count = 0;
-static unsigned long s_ack_deadline = 0;
-static unsigned long s_retry_deadline = 0;
 
 static float s_temperature = 0;
 static float s_humidity = 0;
@@ -53,9 +31,6 @@ static bool s_sensor_error = false;
 static bool s_dht_valid = false;
 static int s_battery = 100;
 static unsigned long s_start_time = 0;
-static uint32_t s_espnow_tx_count = 0;
-static uint32_t s_espnow_rx_count = 0;
-static unsigned long s_last_send_ms = 0;
 
 static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
@@ -68,7 +43,7 @@ static unsigned long s_wifi_config_start_time = 0;
 
 static ESP8266WebServer s_server(80);
 
-static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static EspnowNodeProtocol s_espnow;
 
 #define EEPROM_GATEWAY_MAC_ADDR 0
 #define EEPROM_GATEWAY_MAC_SIZE 6
@@ -93,204 +68,47 @@ static void save_enable_flags(void)
     EEPROM.end();
 }
 
-static bool espnow_send_heartbeat(void);
-
-extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
-{
-    (void)mac;
-    (void)status;
-    s_espnow_tx_count++;
+static uint8_t get_sensor_type() {
+    return SENSOR_TYPE_DHT_GAS;
 }
 
-extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
-{
-    s_espnow_rx_count++;
-    if (!data || len < 1) return;
-
-    switch (data[0])
-    {
-        case ESPNOW_MSG_PAIR_RESPONSE:
-        {
-            if (len < sizeof(espnow_pair_response_t)) return;
-            espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
-            if (resp->status == PAIR_STATUS_OK)
-            {
-                mac_copy(s_gateway_mac, mac);
-                s_assigned_slot = resp->assigned_slot;
-                espnow_save_gateway_mac(mac, TAG);
-                s_paired = true;
-                s_gateway_connected = true;
-                char mac_str[18];
-                mac_to_str(mac, mac_str, sizeof(mac_str));
-                console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
-            }
-            else
-            {
-                console.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
-            }
-            break;
-        }
-        case ESPNOW_MSG_ACK:
-        {
-            if (len < sizeof(espnow_ack_t)) return;
-            espnow_ack_t *ack = (espnow_ack_t *)data;
-            if (ack->status == PAIR_STATUS_DENIED)
-            {
-                s_paired = false;
-                s_gateway_connected = false;
-                console.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
-            }
-            else
-            {
-                s_gateway_connected = true;
-            }
-            s_ack_received = true;
-            break;
-        }
-        case ESPNOW_MSG_NAK:
-        {
-            if (len < sizeof(espnow_nak_t)) return;
-            espnow_nak_t *nak = (espnow_nak_t *)data;
-            if (nak->reason == NAK_REASON_GATEWAY_LOST)
-            {
-                console.printf("[%s] Gateway lost notification (NAK), re-pairing...\n", TAG);
-                s_paired = false;
-                s_gateway_connected = false;
-                s_pair_attempts = 0;
-            }
-            break;
-        }
-        case ESPNOW_MSG_RESTART:
-        {
-            if (len < sizeof(espnow_restart_t)) return;
-            espnow_restart_t *rst = (espnow_restart_t *)data;
-            if (mac_equal(rst->target_mac, s_my_mac))
-            {
-                console.printf("[%s] Restart command received, rebooting...\n", TAG);
-                if (s_paired) {
-                    espnow_send_heartbeat();
-                    delay(50);
-                }
-                delay(100);
-                ESP.restart();
-            }
-            break;
-        }
+static uint8_t get_sensor_payload(uint8_t* buf, uint8_t max_len) {
+    payload_dht_gas_t pl;
+    memset(&pl, 0, sizeof(pl));
+    if (s_enable_temp) {
+        pl.temperature = s_temperature;
+        pl.humidity = s_humidity;
     }
+    if (s_enable_gas) {
+        pl.gas_level = (uint16_t)s_gas_level;
+        pl.alarm = s_alarm ? 1 : 0;
+    }
+    uint8_t len = sizeof(pl);
+    if (len > max_len) len = max_len;
+    memcpy(buf, &pl, len);
+    if (len + 4 <= max_len) {
+        IPAddress ip = WiFi.localIP();
+        buf[len] = ip[0];
+        buf[len + 1] = ip[1];
+        buf[len + 2] = ip[2];
+        buf[len + 3] = ip[3];
+        len += 4;
+    }
+    return len;
 }
 
-
-#define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t*)0)->payload))
-
-static bool espnow_send_data(void)
-{
-    if (!s_paired || !s_espnow_ready) return false;
-
-    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_dht_gas_t) + 4];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_header_t *hdr = (espnow_header_t *)buf;
-    hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_SENSOR_DATA;
-    hdr->sequence = s_sequence++;
-    WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_DHT_GAS;
-    hdr->battery_pct = (uint8_t)s_battery;
-    hdr->rssi = (int16_t)WiFi.RSSI();
-
-    payload_dht_gas_t *pl = (payload_dht_gas_t *)hdr->payload;
-    if (s_enable_temp)
-    {
-        pl->temperature = s_temperature;
-        pl->humidity = s_humidity;
-    }
-    else
-    {
-        pl->temperature = 0;
-        pl->humidity = 0;
-    }
-    if (s_enable_gas)
-    {
-        pl->gas_level = (uint16_t)s_gas_level;
-        pl->alarm = s_alarm ? 1 : 0;
-    }
-    else
-    {
-        pl->gas_level = 0;
-        pl->alarm = 0;
-    }
-
-    IPAddress ip = WiFi.localIP();
-    uint8_t *ip_ptr = hdr->payload + sizeof(payload_dht_gas_t);
-    ip_ptr[0] = ip[0];
-    ip_ptr[1] = ip[1];
-    ip_ptr[2] = ip[2];
-    ip_ptr[3] = ip[3];
-    hdr->payload_len = sizeof(payload_dht_gas_t) + 4;
-
-    if (!espnow_client_add_peer(s_gateway_mac, TAG))
-    {
-        console.printf("[%s] Failed to add gateway peer\n", TAG);
-        return false;
-    }
-
-    s_ack_received = false;
-    s_send_pending = true;
-    if (!espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG))
-    {
-        s_send_pending = false;
-        return false;
-    }
-    return true;
+static void on_command(uint8_t command) {
+    console.printf("[%s] Command received: %d\n", TAG, command);
 }
 
-static bool espnow_send_heartbeat(void)
-{
-    if (!s_paired || !s_espnow_ready) return false;
-
-    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_header_t *hdr = (espnow_header_t *)buf;
-    hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_HEARTBEAT;
-    hdr->sequence = s_sequence++;
-    WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_DHT_GAS;
-    hdr->battery_pct = (uint8_t)s_battery;
-    hdr->rssi = (int16_t)WiFi.RSSI();
-    hdr->payload_len = 0;
-
-    if (!espnow_client_add_peer(s_broadcast_mac, TAG)) return false;
-
-    s_ack_received = false;
-    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
+static void on_paired(uint8_t slot) {
+    console.printf("[%s] Paired, slot %d\n", TAG, slot);
 }
 
-static bool espnow_send_pair_request(void)
-{
-    if (!s_espnow_ready) return false;
-
-    uint8_t buf[sizeof(espnow_pair_request_t)];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_pair_request_t *req = (espnow_pair_request_t *)buf;
-    req->msg_type = ESPNOW_MSG_PAIR_REQUEST;
-    req->sequence = s_sequence++;
-    WiFi.macAddress(req->sensor_mac);
-    req->sensor_type = SENSOR_TYPE_DHT_GAS;
-    uint32_t ver = 0x000A000B;
-    req->firmware_version[0] = (uint8_t)(ver >> 24);
-    req->firmware_version[1] = (uint8_t)(ver >> 16);
-    req->firmware_version[2] = (uint8_t)(ver >> 8);
-    req->firmware_version[3] = (uint8_t)(ver);
-    strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
-    req->device_name[sizeof(req->device_name) - 1] = '\0';
-
-    if (!espnow_client_add_peer(s_broadcast_mac, TAG)) return false;
-
-    s_ack_received = false;
-    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
+static void on_restart() {
+    console.printf("[%s] Restart command received\n", TAG);
+    delay(100);
+    ESP.restart();
 }
 
 static void read_sensors(void)
@@ -555,12 +373,11 @@ static void handle_api_state(void)
         doc["fw_version"] = FW_VERSION;
         doc["platform"] = "esp8266";
         doc["type"] = "dht_gas";
-        doc["gateway_connected"] = s_gateway_connected;
-        doc["paired"] = s_paired;
+        doc["gateway_connected"] = s_espnow.is_paired();
+        doc["paired"] = s_espnow.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
-        if (s_last_send_ms) doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
         doc["gas_analog_pin"] = GAS_ANALOG_PIN;
         doc["gas_digital_pin"] = GAS_DIGITAL_PIN;
         doc["led_pin"] = LED_PIN;
@@ -571,9 +388,9 @@ static void handle_api_state(void)
         doc["led_state"] = digitalRead(LED_PIN);
         doc["alert_led_state"] = digitalRead(GAS_LED_ALERT_PIN);
         doc["alarm_led_state"] = digitalRead(GAS_LED_ALARM_PIN);
-        doc["slot"] = s_assigned_slot;
-        doc["tx_count"] = s_espnow_tx_count;
-        doc["rx_count"] = s_espnow_rx_count;
+        doc["slot"] = s_espnow.assigned_slot();
+        doc["tx_count"] = s_espnow.tx_count();
+        doc["rx_count"] = s_espnow.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
         serializeJson(doc, json);
     }
@@ -606,11 +423,9 @@ static void handle_serial(char c)
         console.printf("  Alarme:      %s\n", s_alarm ? "SIM - VAZAMENTO!" : "Seguro");
         console.printf("  DHT22:       GPIO %d\n", s_dht_pin);
         console.printf("  Bateria:     %d %%\n", s_battery);
-        if (s_paired)
+        if (s_espnow.is_paired())
         {
-            s_last_espnow_send = 0;
-            if (espnow_send_data())
-                s_last_send_ms = millis();
+            s_espnow.publish_state();
         }
         else
         {
@@ -646,15 +461,8 @@ static void handle_serial(char c)
     case 'P':
     {
         console.printf("\n--- Par ---\n");
-        s_paired = false;
-        s_gateway_connected = false;
-        s_pair_attempts = 0;
+        s_espnow.force_repair();
         console.printf("  Estado de pareamento resetado\n");
-        console.printf("  Enviando requisição de par...\n");
-        if (espnow_send_pair_request())
-            console.printf("  Requisição enviada!\n");
-        else
-            console.printf("  Falha ao enviar requisição\n");
         console.printf("----------------\n\n");
         break;
     }
@@ -670,11 +478,11 @@ static void handle_serial(char c)
         console.printf("  u    - info OTA\n");
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
-        if (s_paired)
+        if (s_espnow.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_assigned_slot);
+            mac_to_str(s_espnow.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_espnow.assigned_slot());
         }
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
@@ -688,7 +496,7 @@ static void handle_serial(char c)
         console.printf("\n--- Status ---\n");
         console.printf("  Dispositivo: %s\n", s_device_id);
         char mac_str[18];
-        mac_to_str(s_my_mac, mac_str, sizeof(mac_str));
+        mac_to_str(s_espnow.my_mac(), mac_str, sizeof(mac_str));
         console.printf("  MAC:         %s\n", mac_str);
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Temperatura: %.1f C%s\n", s_temperature, s_dht_valid ? "" : " (invalido)");
@@ -696,12 +504,11 @@ static void handle_serial(char c)
         console.printf("  Gas:         %d %%\n", s_gas_level);
         console.printf("  Alarme:      %s\n", s_alarm ? "SIM" : "nao");
         console.printf("  Bateria:     %d %%\n", s_battery);
-        if (s_paired)
+        if (s_espnow.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway:     %s (slot %d) %s\n", mac_str, s_assigned_slot,
-                          s_gateway_connected ? "conectado" : "desconectado");
+            mac_to_str(s_espnow.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_espnow.assigned_slot());
         }
         else
         {
@@ -784,12 +591,13 @@ void setup(void)
         ESP.restart();
     }
 
-    s_espnow_ready = espnow_client_init(TAG);
-    if (s_espnow_ready) {
-        esp_now_register_send_cb(espnow_send_cb);
-        esp_now_register_recv_cb(espnow_recv_cb);
-    }
-    WiFi.macAddress(s_my_mac);
+    uint8_t my_mac[6];
+    WiFi.macAddress(my_mac);
+    s_espnow.set_mac(my_mac);
+    s_espnow.set_device_name(s_device_name);
+    s_espnow.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr };
+    s_espnow.load_gateway_mac();
+    s_espnow.begin();
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []() { serve_pgm_page(s_server, PAGE_DOCS); });
@@ -814,15 +622,6 @@ void setup(void)
 
     console.printf("\n  => Browser: http://%s\n", WiFi.localIP().toString().c_str());
     console.printf("  => Terminal: 'h' comando de ajuda\n");
-
-    if (espnow_load_gateway_mac(s_gateway_mac, TAG))
-    {
-        s_paired = true;
-    }
-    else
-    {
-        console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
-    }
 
     console.printf("============================================\n");
     console.printf("  Pronto! Pressione 'h' para ajuda\n");
@@ -857,123 +656,11 @@ void loop(void)
         read_sensors();
     }
 
-    if (!s_paired)
-    {
-        if (s_pair_cooldown_end && now < s_pair_cooldown_end)
-            return;
-        if (s_pair_cooldown_end && now >= s_pair_cooldown_end)
-        {
-            s_pair_cooldown_end = 0;
-            s_pair_attempts = 0;
-        }
+    s_espnow.loop();
 
-        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
-        {
-            s_last_espnow_pair = now;
-            s_pair_attempts++;
-            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
-            espnow_send_pair_request();
-            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
-            {
-                console.printf("[%s] Max pair attempts, waiting 60s before retry\n", TAG);
-                s_pair_cooldown_end = millis() + 60000;
-            }
-        }
-        return;
-    }
-
-    if (s_send_state == SEND_WAIT_ACK)
-    {
-        if (s_ack_received || now >= s_ack_deadline)
-        {
-            if (s_ack_received)
-            {
-                s_gateway_connected = true;
-                s_last_send_ms = now;
-                s_send_state = SEND_IDLE;
-            }
-            else
-            {
-                s_retry_count++;
-                if (s_retry_count >= ESPNOW_SEND_RETRIES)
-                {
-                    console.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
-                    s_paired = false;
-                    s_pair_attempts = 0;
-                    s_last_espnow_pair = 0;
-                    s_pair_cooldown_end = 0;
-                    s_send_state = SEND_IDLE;
-                }
-                else
-                {
-                    s_retry_deadline = now + 50;
-                    s_send_state = SEND_RETRY_DELAY;
-                }
-            }
-        }
-        return;
-    }
-
-    if (s_send_state == SEND_RETRY_DELAY)
-    {
-        if (now >= s_retry_deadline)
-        {
-            s_ack_received = false;
-            if (espnow_send_data())
-            {
-                s_ack_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
-                s_send_state = SEND_WAIT_ACK;
-            }
-            else
-            {
-                s_retry_count++;
-                if (s_retry_count >= ESPNOW_SEND_RETRIES)
-                {
-                    console.printf("[%s] Send failed after %d retries, re-pairing\n", TAG, ESPNOW_SEND_RETRIES);
-                    s_paired = false;
-                    s_pair_attempts = 0;
-                    s_last_espnow_pair = 0;
-                    s_pair_cooldown_end = 0;
-                    s_send_state = SEND_IDLE;
-                }
-                else
-                {
-                    s_retry_deadline = now + 50;
-                    s_send_state = SEND_RETRY_DELAY;
-                }
-            }
-        }
-        return;
-    }
-
-    if (s_send_state == SEND_IDLE && now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
-    {
-        s_last_espnow_send = now;
-        s_ack_received = false;
-        s_retry_count = 0;
-        if (espnow_send_data())
-        {
-            s_ack_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
-            s_send_state = SEND_WAIT_ACK;
-        }
-    }
-
-    if (now - s_last_heartbeat > HEARTBEAT_INTERVAL)
-    {
-        s_last_heartbeat = now;
-        console.printf("[%s] RSSI=%d dBm  up=%lus\n", TAG, WiFi.RSSI(), (millis() - s_start_time) / 1000);
-        if (s_paired)
-            espnow_send_heartbeat();
-    }
-
-    // LED status
     #ifdef LED_PIN
     static unsigned long last_led = 0;
-    if (s_wifi_configuration_mode)
-    {
-        digitalWrite(LED_PIN, HIGH);
-    }
-    else if (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED)
     {
         if (now - last_led >= LED_BLINK_WIFI_MS)
         {
@@ -981,7 +668,7 @@ void loop(void)
             digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
     }
-    else if (!s_paired)
+    else if (!s_espnow.is_paired())
     {
         if (now - last_led >= LED_BLINK_GATEWAY_MS)
         {
@@ -995,7 +682,6 @@ void loop(void)
     }
     #endif
 
-    // Gas alert LED
     #ifdef GAS_LED_ALERT_PIN
     if (!s_sensor_error && s_gas_level < GAS_ALERT_THRESHOLD)
     {
@@ -1016,7 +702,6 @@ void loop(void)
     }
     #endif
 
-    // Gas alarm LED
     #ifdef GAS_LED_ALARM_PIN
     static unsigned long last_alarm_led = 0;
     if (s_gas_level >= GAS_ALARM_THRESHOLD)
