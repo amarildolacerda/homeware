@@ -97,7 +97,9 @@ const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"<title>LoRa + ESP-NOW Hub</title>"
+#elif defined(LORA_ENABLED)
 "<title>LoRa Hub</title>"
 #else
 "<title>ESP-NOW Gateway</title>"
@@ -153,7 +155,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="sidebar">
 <div class="logo">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"<h1>LoRa + ESP-NOW</h1><span>Hub</span>"
+#elif defined(LORA_ENABLED)
 "<h1>LoRa</h1><span>Hub</span>"
 #else
 "<h1>ESP-NOW</h1><span>Gateway</span>"
@@ -1295,7 +1299,9 @@ const char PAGE_DOCS[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>API Docs - 
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"
@@ -1335,7 +1341,9 @@ h1{font-size:1.1rem}
 <h1>API Reference</h1>
 <p class="sub">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"
@@ -1451,7 +1459,9 @@ R"rawliteral(
 
 <p class="footer">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"

@@ -39,7 +39,7 @@ nodes/<tipo>/
 - [ ] `FW_VERSION` de `shared_config.h`
 - [ ] `common_console.h` — telnet obrigatório
 - [ ] Se ESP-NOW: `common_espnow.h`, `espnow_protocol.h`, `espnow_client_init()` com `WIFI_NONE_SLEEP`
-- [ ] Se LoRa: `-DLORA_DEVICE` em `platformio.ini`, `lora_protocol.h`, definir `SENSOR_TYPE_ONOFF` localmente
+- [ ] Se LoRa: `-DLORA_ENABLED` em `platformio.ini`, `lora_protocol.h`, definir `SENSOR_TYPE_ONOFF` localmente
 - [ ] `myWiFiManager.h` — WiFi não-bloqueante (NUNCA `wm.autoConnect()`)
 
 #### WiFi (não-bloqueante)
@@ -101,7 +101,7 @@ nodes/<tipo>/
 - [ ] `lib_extra_dirs = ../../shared`
 - [ ] `board_build.filesystem = littlefs` (se usar SPIFFS/LittleFS)
 - [ ] `build_flags` com `-I../../shared/src`
-- [ ] Se LoRa: `-DLORA_DEVICE` em `build_flags`
+- [ ] Se LoRa: `-DLORA_ENABLED` em `build_flags`
 - [ ] lib_deps: `ArduinoJson`, `tzapu/WiFiManager @ ^2.0` (ESP32) ou `^0.16` (ESP8266)
 - [ ] env `<node>_ota` para OTA
 
@@ -138,7 +138,7 @@ nodes/<tipo>/
 | 12 | Non-blocking loop — zero `delay()` |
 | 13 | `FW_VERSION` = tag atual (shared_config.h) |
 | 14 | `lib_extra_dirs` apontando para `../../shared` (nunca copiar shared) |
-| 15 | `LORA_DEVICE` flag desativa ESP-NOW; `SENSOR_TYPE_ONOFF` define localmente |
+| 15 | `LORA_ENABLED` flag desativa ESP-NOW; `SENSOR_TYPE_ONOFF` define localmente |
 | 16 | WiFi não-bloqueante: `mywifi_begin` + `mywifi_loop` + captive portal |
 | 17 | Dashboard padrão: sidebar 180px, stats-header, polling 3s, footer-bar |
 | 18 | API endpoints obrigatórios: `/api/state`, `/api/settings`, `/api/wifi`, `/api/ota`, `/api/restart` |

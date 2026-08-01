@@ -1,4 +1,4 @@
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
 
 #include "lora_handler.h"
 #include "lora_config.h"

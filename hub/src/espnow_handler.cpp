@@ -8,7 +8,7 @@
 #include <EEPROM.h>
 #include "common_console.h"
 
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
 
 /* ESP-NOW delivery uses BROADCAST (all clients receive and filter by
    sensor_mac/target_mac). Validated with QuickESPNow (qgw/qclient, both STA on
@@ -468,4 +468,4 @@ void espnow_broadcast_time_sync(uint32_t epoch) { s_espnow_handler.broadcast_tim
 bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) { (void)slot; return s_espnow_handler.send_command(mac, state); }
 bool espnow_send_restart(const uint8_t *mac, uint8_t slot) { (void)slot; return s_espnow_handler.send_restart(mac); }
 
-#endif // HABILITA_ESPNOW
+#endif // ESPNOW_ENABLED

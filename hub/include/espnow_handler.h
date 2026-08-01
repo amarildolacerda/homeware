@@ -6,7 +6,7 @@
 #include "sensor_registry.h"
 #include <stdint.h>
 
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
 
 class EspnowHandler : public RadioInterface {
 public:
@@ -116,7 +116,7 @@ public:
     bool send_restart(const uint8_t*) override { return false; }
 };
 
-// Stub wrappers (no-op, use when HABILITA_ESPNOW is not defined)
+// Stub wrappers (no-op, use when ESPNOW_ENABLED is not defined)
 inline bool espnow_handler_init() { return false; }
 inline void espnow_handler_loop() {}
 inline bool espnow_start_pairing() { return false; }
