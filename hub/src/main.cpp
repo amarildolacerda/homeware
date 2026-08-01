@@ -16,6 +16,9 @@
 #include "lora_handler.h"
 #include "lora_protocol.h"
 #endif
+#ifdef TCP_ENABLED
+#include "tcp_radio_handler.h"
+#endif
 #if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
 #include "display_handler.h"
 #endif
@@ -41,6 +44,9 @@ static LoraHandler s_lora;
 static uint8_t s_lora_pending_state_slots[LORA_PENDING_STATE_MAX];
 static int s_lora_pending_state_head = 0;
 static int s_lora_pending_state_tail = 0;
+#endif
+#ifdef TCP_ENABLED
+static TcpRadioHandler s_tcp;
 #endif
 
 RadioManager s_radio_mgr;
@@ -265,6 +271,10 @@ void setup() {
     s_lora.set_rx_callback(lora_rx_cb, nullptr);
     s_radio_mgr.add_radio(RADIO_LORA, &s_lora);
     console.println("LoRa provisioned");
+#endif
+#ifdef TCP_ENABLED
+    s_radio_mgr.add_radio(RADIO_TCP, &s_tcp);
+    console.println("TCP provisioned");
 #endif
     s_radio_mgr.init_all();
 #if defined(DISPLAY_ENABLED) || defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
