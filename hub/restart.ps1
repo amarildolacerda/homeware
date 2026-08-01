@@ -26,14 +26,13 @@ if ($All) {
     Write-Host "Scanning rede..." -ForegroundColor Cyan
     $json = python $scanPy --json 2>$null
     $devices = $json | ConvertFrom-Json
-    $gateways = $devices | Where-Object { $_.type -eq "gateway" }
-    if (-not $gateways -or $gateways.Count -eq 0) {
-        Write-Host "Nenhum gateway encontrado na rede" -ForegroundColor Yellow
+    if (-not $devices -or $devices.Count -eq 0) {
+        Write-Host "Nenhum dispositivo encontrado na rede" -ForegroundColor Yellow
         exit 0
     }
-    Write-Host "Encontrados $($gateways.Count) gateway(s):" -ForegroundColor Cyan
-    foreach ($gw in $gateways) {
-        Restart-Gateway $gw.ip
+    Write-Host "Reiniciando $($devices.Count) dispositivo(s):" -ForegroundColor Cyan
+    foreach ($dev in $devices) {
+        Restart-Gateway $dev.ip
     }
 } elseif ($Gateway) {
     Restart-Gateway $Gateway
