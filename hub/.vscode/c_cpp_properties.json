@@ -139,6 +139,7 @@
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/mdns/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_local_ctrl/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/sdmmc/include",
+<<<<<<< Updated upstream
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_serial_slave_link/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_websocket_client/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/expat/expat/expat/lib",
@@ -536,3 +537,6 @@
     ],
     "version": 4
 }
+=======
+                "/
+>>>>>>> Stashed changes
