@@ -6,6 +6,7 @@
 #include "common_console.h"
 #include "web_server.h"
 #include <ESP8266WebServer.h>
+#include <algorithm>
 
 extern MyWebServer s_server;
 
@@ -221,7 +222,12 @@ bool TcpRadioHandler::send_restart(const uint8_t* mac) {
 void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version) {
     int slot = find_slot_by_device_id(device_id);
     if (slot >= 0) {
-        console.printf("[tcp] Device %s already registered at slot %d\n", device_id, slot);
+        console.printf("[tcp] Device %s already registered at slot %d, fw=%s\n", device_id, slot, fw_version ? fw_version : "unknown");
+        virtual_sensor_t* sensor = sensor_registry_get(slot);
+        if (sensor) {
+            sensor->last_seen = millis();
+            sensor->online = true;
+        }
         return;
     }
 
@@ -242,7 +248,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         sensor->last_seen = millis();
     }
 
-    console.printf("[tcp] Device %s registered at slot %d (type %d)\n", device_id, slot, sensor_type);
+    console.printf("[tcp] Device %s registered at slot %d (type %d, fw=%s)\n", device_id, slot, sensor_type, fw_version ? fw_version : "unknown");
 }
 
 void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
