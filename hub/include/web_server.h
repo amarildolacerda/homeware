@@ -2,6 +2,9 @@
 #define WEB_SERVER_H
 
 #include <Arduino.h>
+#include "platform.h"
+
+extern MyWebServer s_server;
 
 void web_server_init();
 void web_server_loop();

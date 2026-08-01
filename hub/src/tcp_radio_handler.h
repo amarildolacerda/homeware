@@ -5,7 +5,7 @@
 #include "tcp_protocol.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <WiFiUDP.h>
+#include <WiFiUdp.h>
 #include <map>
 #include <string>
 #include <vector>
