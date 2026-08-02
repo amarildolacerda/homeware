@@ -694,6 +694,38 @@ static void handle_api_wifi(void)
     }
 }
 
+/* Envia múltiplas seções PROGMEM diretamente via WiFiClient,
+   sem montar String intermediária (evita fragmentação de heap). */
+static void serve_pgm_sections(ESP8266WebServer &server, const char *const *sections, int count)
+{
+    /* Calcular tamanho total */
+    size_t total = 0;
+    for (int i = 0; i < count; i++) {
+        if (sections[i]) total += strlen_P(sections[i]);
+    }
+
+    WiFiClient cl = server.client();
+    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
+    cl.print(total);
+    cl.print(F("\r\nConnection: close\r\n\r\n"));
+
+    /* Enviar cada seção em chunks de 256 bytes */
+    char buf[256];
+    for (int i = 0; i < count; i++) {
+        if (!sections[i]) continue;
+        PGM_P src = sections[i];
+        size_t remaining = strlen_P(src);
+        while (remaining > 0) {
+            size_t chunk = remaining > sizeof(buf) ? sizeof(buf) : remaining;
+            memcpy_P(buf, src, chunk);
+            cl.write((const uint8_t *)buf, chunk);
+            src += chunk;
+            remaining -= chunk;
+            yield();
+        }
+    }
+}
+
 static void handle_root(void)
 {
     if (s_config_portal_active)
@@ -701,20 +733,20 @@ static void handle_root(void)
         s_server.send(200, "text/html", FPSTR(PAGE_WIFI_CONFIG));
         return;
     }
-    String page;
-    page.reserve(4096);
-    page = FPSTR(PAGE_DASHBOARD);
-    page += FPSTR(PAGE_PINS_NAV);
-    page += FPSTR(PAGE_DASHBOARD_CONT1);
+    const char *sections[] = {
+        (const char *)FPSTR(PAGE_DASHBOARD),
+        (const char *)FPSTR(PAGE_PINS_NAV),
+        (const char *)FPSTR(PAGE_DASHBOARD_CONT1),
 #ifdef HABILITA_REPEATER
-    page += FPSTR(PAGE_DASHBOARD_REPEATER_CFG);
+        (const char *)FPSTR(PAGE_DASHBOARD_REPEATER_CFG),
 #endif
-    page += FPSTR(PAGE_DASHBOARD_CONT3);
-    page += FPSTR(PAGE_PINS_SEC);
-    page += FPSTR(PAGE_DASHBOARD_CONT2);
-    page += FPSTR(PAGE_SCRIPT_PINS);
-    page += FPSTR(PAGE_DASHBOARD_END);
-    serve_pgm_page(s_server, page.c_str());
+        (const char *)FPSTR(PAGE_DASHBOARD_CONT3),
+        (const char *)FPSTR(PAGE_PINS_SEC),
+        (const char *)FPSTR(PAGE_DASHBOARD_CONT2),
+        (const char *)FPSTR(PAGE_SCRIPT_PINS),
+        (const char *)FPSTR(PAGE_DASHBOARD_END)
+    };
+    serve_pgm_sections(s_server, sections, sizeof(sections) / sizeof(sections[0]));
 }
 
 static void handle_api_state(void)
