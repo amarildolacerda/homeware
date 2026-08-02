@@ -12,7 +12,7 @@
 #include "common_console.h"
 #include "common_espnow.h"
 #include "common_web.h"
-#include "espnow_node_protocol.h"
+#include "radio_node_strategy.h"
 
 static const char *TAG = "dht-gas";
 
@@ -42,7 +42,7 @@ static unsigned long s_wifi_config_start_time = 0;
 
 static ESP8266WebServer s_server(80);
 
-static EspnowNodeProtocol s_espnow;
+static NodeRadioType s_radio;
 
 #define EEPROM_GATEWAY_MAC_ADDR 0
 #define EEPROM_GATEWAY_MAC_SIZE 6
@@ -372,8 +372,8 @@ static void handle_api_state(void)
         doc["fw_version"] = FW_VERSION;
         doc["platform"] = "esp8266";
         doc["type"] = "dht_gas";
-        doc["gateway_connected"] = s_espnow.is_paired();
-        doc["paired"] = s_espnow.is_paired();
+        doc["gateway_connected"] = s_radio.is_paired();
+        doc["paired"] = s_radio.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
@@ -387,9 +387,9 @@ static void handle_api_state(void)
         doc["led_state"] = digitalRead(LED_PIN);
         doc["alert_led_state"] = digitalRead(GAS_LED_ALERT_PIN);
         doc["alarm_led_state"] = digitalRead(GAS_LED_ALARM_PIN);
-        doc["slot"] = s_espnow.assigned_slot();
-        doc["tx_count"] = s_espnow.tx_count();
-        doc["rx_count"] = s_espnow.rx_count();
+        doc["slot"] = s_radio.assigned_slot();
+        doc["tx_count"] = s_radio.tx_count();
+        doc["rx_count"] = s_radio.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
         serializeJson(doc, json);
     }
@@ -422,9 +422,9 @@ static void handle_serial(char c)
         console.printf("  Alarme:      %s\n", s_alarm ? "SIM - VAZAMENTO!" : "Seguro");
         console.printf("  DHT22:       GPIO %d\n", s_dht_pin);
         console.printf("  Bateria:     %d %%\n", s_battery);
-        if (s_espnow.is_paired())
+        if (s_radio.is_paired())
         {
-            s_espnow.publish_state();
+            s_radio.publish_state();
         }
         else
         {
@@ -460,7 +460,7 @@ static void handle_serial(char c)
     case 'P':
     {
         console.printf("\n--- Par ---\n");
-        s_espnow.force_repair();
+        s_radio.force_repair();
         console.printf("  Estado de pareamento resetado\n");
         console.printf("----------------\n\n");
         break;
@@ -477,11 +477,11 @@ static void handle_serial(char c)
         console.printf("  u    - info OTA\n");
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Browser: http://%s\n", WiFi.localIP().toString().c_str());
-        if (s_espnow.is_paired())
+        if (s_radio.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_espnow.gateway_mac(), mac_str, sizeof(mac_str));
-            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_espnow.assigned_slot());
+            mac_to_str(s_radio.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
@@ -495,7 +495,7 @@ static void handle_serial(char c)
         console.printf("\n--- Status ---\n");
         console.printf("  Dispositivo: %s\n", s_device_id);
         char mac_str[18];
-        mac_to_str(s_espnow.my_mac(), mac_str, sizeof(mac_str));
+        mac_to_str(s_radio.my_mac(), mac_str, sizeof(mac_str));
         console.printf("  MAC:         %s\n", mac_str);
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Temperatura: %.1f C%s\n", s_temperature, s_dht_valid ? "" : " (invalido)");
@@ -503,11 +503,11 @@ static void handle_serial(char c)
         console.printf("  Gas:         %d %%\n", s_gas_level);
         console.printf("  Alarme:      %s\n", s_alarm ? "SIM" : "nao");
         console.printf("  Bateria:     %d %%\n", s_battery);
-        if (s_espnow.is_paired())
+        if (s_radio.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_espnow.gateway_mac(), mac_str, sizeof(mac_str));
-            console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_espnow.assigned_slot());
+            mac_to_str(s_radio.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
         else
         {
@@ -592,11 +592,11 @@ void setup(void)
 
     uint8_t my_mac[6];
     WiFi.macAddress(my_mac);
-    s_espnow.set_mac(my_mac);
-    s_espnow.set_device_name(s_device_name);
-    s_espnow.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr };
-    s_espnow.load_gateway_mac();
-    s_espnow.begin();
+    s_radio.set_mac(my_mac);
+    s_radio.set_device_name(s_device_name);
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr };
+    s_radio.load_gateway_mac();
+    s_radio.begin();
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []() { serve_pgm_page(s_server, PAGE_DOCS); });
@@ -655,7 +655,7 @@ void loop(void)
         read_sensors();
     }
 
-    s_espnow.loop();
+    s_radio.loop();
 
     #ifdef LED_PIN
     static unsigned long last_led = 0;
@@ -667,7 +667,7 @@ void loop(void)
             digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
     }
-    else if (!s_espnow.is_paired())
+    else if (!s_radio.is_paired())
     {
         if (now - last_led >= LED_BLINK_GATEWAY_MS)
         {

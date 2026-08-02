@@ -5,7 +5,7 @@
 #include <DNSServer.h>
 #include <Wire.h>
 #include "lora_spi_radio.h"
-#include "lora_node_protocol.h"
+#include "radio_node_strategy.h"
 #include <ArduinoJson.h>
 
 #include "config.h"
@@ -25,8 +25,8 @@ static LoraSpiConfig s_lora_cfg = []() {
     cfg.cr = 7; cfg.preamble = 8; cfg.tx_power = 17;
     return cfg;
 }();
-static LoraSpiRadio s_radio(s_lora_cfg);
-LoraNodeProtocol s_proto(&s_radio);
+static LoraSpiRadio s_radio_hw(s_lora_cfg);
+NodeRadioType s_radio(&s_radio_hw);
 
 static WebServer s_server(DASHBOARD_PORT);
 
@@ -98,7 +98,7 @@ static void set_relay(bool state) {
     EEPROM.write(EEPROM_RELAY_STATE, state);
     EEPROM.commit();
     EEPROM.end();
-    s_proto.publish_state();
+    s_radio.publish_state();
     console.printf("Relay set to %s\n", state ? "ON" : "OFF");
 }
 
@@ -136,7 +136,7 @@ static void handle_docs() {
 static void handle_api_state() {
     JsonDocument doc;
     doc["relay"] = s_relay;
-    doc["paired"] = s_proto.is_paired();
+    doc["paired"] = s_radio.is_paired();
     doc["gateway_connected"] = s_gateway_connected;
     doc["device_id"] = s_device_id;
     doc["device_name"] = s_device_name;
@@ -144,11 +144,11 @@ static void handle_api_state() {
     doc["ip"] = WiFi.localIP().toString();
     doc["wifi_ssid"] = WiFi.SSID();
     doc["wifi_channel"] = WiFi.channel();
-    doc["rssi"] = s_proto.last_rssi();
+    doc["rssi"] = s_radio.last_rssi();
     doc["free_heap"] = ESP.getFreeHeap();
     doc["uptime_s"] = millis() / 1000;
-    doc["rx_count"] = s_proto.rx_count();
-    doc["tx_count"] = s_proto.tx_count();
+    doc["rx_count"] = s_radio.rx_count();
+    doc["tx_count"] = s_radio.tx_count();
     String json;
     serializeJson(doc, json);
     s_server.send(200, "application/json", json);
@@ -178,7 +178,7 @@ static void handle_api_settings() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
-                s_proto.set_device_name(s_device_name);
+                s_radio.set_device_name(s_device_name);
             }
         }
     }
@@ -240,12 +240,12 @@ static void handle_serial(char c) {
             console.printf("  Device:  %s\n", s_device_id);
             console.printf("  Nome:    %s\n", s_device_name);
             console.printf("  Relé:    %s\n", s_relay ? "ON" : "OFF");
-            console.printf("  Pareado: %s\n", s_proto.is_paired() ? "Sim" : "Nao");
-            console.printf("  RSSI:    %d dBm (LoRa)\n", s_proto.last_rssi());
+            console.printf("  Pareado: %s\n", s_radio.is_paired() ? "Sim" : "Nao");
+            console.printf("  RSSI:    %d dBm (LoRa)\n", s_radio.last_rssi());
             console.printf("  IP:      %s\n", WiFi.localIP().toString().c_str());
             console.printf("  WiFi:    %s ch%d\n", WiFi.SSID().c_str(), WiFi.channel());
             console.printf("  Uptime:  %lus\n", millis() / 1000);
-            console.printf("  RX/TX:   %lu / %lu\n", s_proto.rx_count(), s_proto.tx_count());
+            console.printf("  RX/TX:   %lu / %lu\n", s_radio.rx_count(), s_radio.tx_count());
             console.printf("  FW:      %s\n", FW_VERSION);
             break;
         case 'l': case 'L':
@@ -253,7 +253,7 @@ static void handle_serial(char c) {
             console.printf("  Relé: %s\n", s_relay ? "ON" : "OFF");
             break;
         case 'p': case 'P':
-            s_proto.force_repair();
+            s_radio.force_repair();
             s_gateway_connected = false;
             console.printf("  Re-pareando...\n");
             break;
@@ -367,7 +367,7 @@ static void handle_api_wifi() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
-                s_proto.set_device_name(s_device_name);
+                s_radio.set_device_name(s_device_name);
             }
         }
         console.printf("WiFi credentials received, connecting to %s...\n", ssid);
@@ -398,19 +398,19 @@ static void handle_api_wifi() {
 }
 
 static void init_radio_and_protocol() {
-    s_proto.callbacks.get_sensor_type = get_sensor_type;
-    s_proto.callbacks.get_sensor_payload = get_sensor_payload;
-    s_proto.callbacks.on_command = on_command;
-    s_proto.callbacks.on_paired = on_paired;
-    s_proto.set_mac(s_my_mac);
-    s_proto.set_device_name(s_device_name);
+    s_radio.callbacks.get_sensor_type = get_sensor_type;
+    s_radio.callbacks.get_sensor_payload = get_sensor_payload;
+    s_radio.callbacks.on_command = on_command;
+    s_radio.callbacks.on_paired = on_paired;
+    s_radio.set_mac(s_my_mac);
+    s_radio.set_device_name(s_device_name);
 
-    if (s_radio.init() != 0) {
+    if (s_radio_hw.init() != 0) {
         console.printf("LoRa init failed\n");
         return;
     }
     console.printf("LoRa initialized\n");
-    s_proto.begin();
+    s_radio.begin();
 }
 
 void setup() {
@@ -448,7 +448,7 @@ void setup() {
 
     if (!name_load(s_device_name, sizeof(s_device_name)))
         strncpy(s_device_name, DEVICE_NAME, sizeof(s_device_name) - 1);
-    s_proto.set_device_name(s_device_name);
+    s_radio.set_device_name(s_device_name);
 
     display_init();
 
@@ -481,7 +481,7 @@ void loop() {
     handle_wifi();
     s_server.handleClient();
     s_radio.loop();
-    s_proto.loop();
+    s_radio.loop();
 
     if (Serial.available() > 0) handle_serial(Serial.read());
     int tc = console.telnet_read();
@@ -495,7 +495,7 @@ void loop() {
         }
     }
 
-    if (s_proto.is_paired()) {
+    if (s_radio.is_paired()) {
         digitalWrite(LED_PIN, s_relay ? LOW : HIGH);
     } else {
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));

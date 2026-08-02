@@ -2,7 +2,7 @@
 #include "page_manager.h"
 #include "display_interface.h"
 #include "config.h"
-#include "lora_node_protocol.h"
+#include "radio_node_strategy.h"
 #include "myWiFiManager.h"
 #include <WiFi.h>
 #include <Arduino.h>
@@ -12,7 +12,7 @@ extern uint8_t s_my_mac[6];
 extern char s_device_id[32];
 extern char s_device_name[32];
 
-extern LoraNodeProtocol s_proto;
+extern NodeRadioType s_radio;
 
 #ifdef DISPLAY_TTGO
 #include "display_ttgo.h"
@@ -35,9 +35,9 @@ static void render_page_0(DisplayInterface &d)
     d.set_cursor(0, 12);
     d.print(s_relay ? "ON" : "OFF");
     d.set_cursor(0, 24);
-    d.print(s_proto.is_paired() ? "Pareado" : "---");
+    d.print(s_radio.is_paired() ? "Pareado" : "---");
     d.set_cursor(0, 36);
-    d.printf("RSSI: %d", s_proto.last_rssi());
+    d.printf("RSSI: %d", s_radio.last_rssi());
     d.set_cursor(0, 48);
     d.print(WiFi.localIP().toString().c_str());
 }
@@ -52,9 +52,9 @@ static void render_page_1(DisplayInterface &d)
     int mm = sec / 60;
     sec %= 60;
     d.set_cursor(0, 0);
-    d.printf("TX: %lu", s_proto.tx_count());
+    d.printf("TX: %lu", s_radio.tx_count());
     d.set_cursor(0, 12);
-    d.printf("RX: %lu", s_proto.rx_count());
+    d.printf("RX: %lu", s_radio.rx_count());
     d.set_cursor(0, 24);
     d.printf("Mem: %u", ESP.getFreeHeap());
     d.set_cursor(0, 36);
