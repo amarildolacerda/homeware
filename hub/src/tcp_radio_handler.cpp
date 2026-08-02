@@ -5,7 +5,7 @@
 #include "config.h"
 #include "common_console.h"
 #include "web_server.h"
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <algorithm>
 
 extern MyWebServer s_server;
@@ -26,7 +26,7 @@ int TcpRadioHandler::init() {
             return;
         }
 
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
         if (error) {
             s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
@@ -62,7 +62,7 @@ int TcpRadioHandler::init() {
 
         int slot = find_slot_by_device_id(device_id);
 
-        DynamicJsonDocument response(256);
+        JsonDocument response;
         response["status"] = "ok";
         response["assigned_slot"] = slot;
         response["device_id"] = device_id;
@@ -78,7 +78,7 @@ int TcpRadioHandler::init() {
             return;
         }
 
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
         if (error) {
             s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
@@ -103,7 +103,7 @@ int TcpRadioHandler::init() {
             return;
         }
 
-        DynamicJsonDocument doc(256);
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
         if (error) {
             s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
@@ -130,7 +130,7 @@ int TcpRadioHandler::init() {
             return;
         }
 
-        DynamicJsonDocument response(256);
+        JsonDocument response;
         JsonObject resObj = response.as<JsonObject>();
         handle_command_get(device_id.c_str(), resObj);
 
@@ -263,15 +263,15 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
 
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM:
-            if (state.containsKey("temperature")) sensor->state.temp_hum.temperature = state["temperature"];
-            if (state.containsKey("humidity")) sensor->state.temp_hum.humidity = state["humidity"];
+            if (state["temperature"].is<float>()) sensor->state.temp_hum.temperature = state["temperature"];
+            if (state["humidity"].is<float>()) sensor->state.temp_hum.humidity = state["humidity"];
             break;
         case SENSOR_TYPE_GAS:
-            if (state.containsKey("gas_level")) sensor->state.gas.gas_level = state["gas_level"];
-            if (state.containsKey("alarm")) sensor->state.gas.alarm = state["alarm"];
+            if (state["gas_level"].is<uint16_t>()) sensor->state.gas.gas_level = state["gas_level"];
+            if (state["alarm"].is<uint8_t>()) sensor->state.gas.alarm = state["alarm"];
             break;
         case SENSOR_TYPE_ONOFF:
-            if (state.containsKey("state")) sensor->state.onoff.state = state["state"];
+            if (state["state"].is<uint8_t>()) sensor->state.onoff.state = state["state"];
             break;
         default:
             break;
