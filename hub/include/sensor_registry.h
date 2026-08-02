@@ -7,6 +7,7 @@
 enum radio_type_t {
     RADIO_ESPNOW = 0,
     RADIO_LORA  = 1,
+    RADIO_TCP   = 2,
 };
 
 typedef struct {

@@ -113,13 +113,17 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 4. quando marcar estavel anotar a tag e a data
 
 ### Nodes estáveis (não modificar)
-- `nodes/lamp` — relé ON/OFF com suporte a Alexa (Espalexa) + função extender ESP-NOW — estável em **v1.0.1** (2026-07-24)
-- `hub` — ESP8266/ESP32 ESP-NOW Hub — estável em **v1.0.1** (2026-07-24)
-- `nodes/climate-gas` — sensor DHT22 + MQ-2 ESP-NOW (dashboard Detalhes/OTA/toggles temp+gás, WIFI_NONE_SLEEP) — estável em **v0.0.30** (2026-07-22)
-- `nodes/presence` — sensor PIR ESP-NOW (broadcast, OTA, /api/restart) — estável em **v0.0.30** (2026-07-22)
 
 ### Nodes em desenvolvimento
+- `hub` — ESP8266/ESP32 ESP-NOW Hub
+- `nodes/lamp` — relé ON/OFF com suporte a Alexa (Espalexa) + função extender ESP-NOW
+- `nodes/climate-gas` — sensor DHT22 + MQ-2 ESP-NOW (dashboard Detalhes/OTA/toggles temp+gás, WIFI_NONE_SLEEP)
+- `nodes/presence` — sensor PIR ESP-NOW (broadcast, OTA, /api/restart)
+- `nodes/tcp` — node TCP via WiFi HTTP + UDP discovery
 - `nodes/switch` - relé com suporte a Alexa - atributos exclusivo para on/off
 - `nodes/onoff-lora` — relé LoRa (SX1278 + TTGO LoRa32 V1), dashboard padrão, WiFi não-bloqueante, OTA, console/telnet
 - `nodes/extender` — extensor de alcance ESP-NOW
 - `nodes/rain` — sensor de chuva ESP-NOW
+
+##Sanitize
+- se algum texto conter vicios de linguagem, corrigir e apresentar o texto corrigido em seguida, não dispensar acentuações, concordância ou vícios na sintática

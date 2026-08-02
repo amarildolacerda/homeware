@@ -23,7 +23,7 @@ extern void gateway_set_browser_epoch(time_t epoch);
 #include <Update.h>
 #endif
 
-static MyWebServer s_server(80);
+MyWebServer s_server(80);
 static bool s_wifi_config_mode = false;
 static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;
@@ -319,7 +319,7 @@ void web_server_init() {
                         state["rain_level"] = s->state.rain.rain_level;
                         state["rain_digital"] = s->state.rain.rain_digital;
                         break;
-                    case SENSOR_TYPE_TANK:
+                    case SENSOR_TYPE_LEVEL:
                         state["level_pct"] = s->state.tank.level_pct;
                         state["distance_cm"] = s->state.tank.distance_cm;
                         break;

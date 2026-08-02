@@ -1,5 +1,7 @@
 #include "radio_manager.h"
 #include "sensor_registry.h"
+#include "common_console.h"
+
 
 void RadioManager::add_radio(uint8_t radio_type, RadioInterface* radio) {
     if (m_count >= MAX_RADIOS) return;
@@ -11,6 +13,7 @@ void RadioManager::add_radio(uint8_t radio_type, RadioInterface* radio) {
 void RadioManager::init_all() {
     for (int i = 0; i < m_count; i++) {
         m_entries[i].radio->init();
+        console.printf("[radio] Radio %d initialized\n", m_entries[i].type);
     }
 }
 

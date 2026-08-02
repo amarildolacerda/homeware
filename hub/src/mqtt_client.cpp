@@ -372,7 +372,7 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
                                  String(sensor->state.soil_moisture.moisture_pct).c_str());
             break;
         }
-        case SENSOR_TYPE_TANK: {
+        case SENSOR_TYPE_LEVEL: {
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
             publish_entity_config("sensor", entity, name, "Nível", "water", "%", false, id, model);
             publish_entity_state("sensor", entity,
@@ -479,7 +479,7 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
             publish_entity_state("sensor", entity, val);
             break;
         }
-        case SENSOR_TYPE_TANK: {
+        case SENSOR_TYPE_LEVEL: {
             char val[16];
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
             snprintf(val, sizeof(val), "%u", sensor->state.tank.level_pct);

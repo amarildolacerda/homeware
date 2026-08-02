@@ -139,6 +139,7 @@
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/mdns/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_local_ctrl/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/sdmmc/include",
+<<<<<<< Updated upstream
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_serial_slave_link/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_websocket_client/include",
                 "/home/kzuca/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/expat/expat/expat/lib",
@@ -505,7 +506,9 @@
                 "WIFI_PASS=\"3938373635\"",
                 "HELTEC_W32LA",
                 "HABILITA_LORA",
-                "HABILITA_DISPLAY",
+                "HABILITA_ESPNOW",
+                "LORA_DEVICE",
+                "DISPLAY_HELTEC",
                 "HAVE_CONFIG_H",
                 "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\"",
                 "UNITY_INCLUDE_CONFIG_H",
@@ -534,3 +537,6 @@
     ],
     "version": 4
 }
+=======
+                "/
+>>>>>>> Stashed changes

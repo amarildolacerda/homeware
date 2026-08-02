@@ -97,7 +97,9 @@ const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"<title>LoRa + ESP-NOW Hub</title>"
+#elif defined(LORA_ENABLED)
 "<title>LoRa Hub</title>"
 #else
 "<title>ESP-NOW Gateway</title>"
@@ -153,7 +155,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <div class="sidebar">
 <div class="logo">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"<h1>LoRa + ESP-NOW</h1><span>Hub</span>"
+#elif defined(LORA_ENABLED)
 "<h1>LoRa</h1><span>Hub</span>"
 #else
 "<h1>ESP-NOW</h1><span>Gateway</span>"
@@ -1295,7 +1299,9 @@ const char PAGE_DOCS[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>API Docs - 
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"
@@ -1335,7 +1341,9 @@ h1{font-size:1.1rem}
 <h1>API Reference</h1>
 <p class="sub">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"
@@ -1439,6 +1447,41 @@ R"rawliteral(
 <div class="desc">Lista redes Wi-Fi visíveis (usado pelo portal)</div>
 </div>
 
+<h2>TCP Radio (Nodes)</h2>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/register</span></div>
+<div class="desc">Registra um node TCP no hub</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
+<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor 1-10 (obrigatorio)</td></tr>
+<tr><td><code>device_name</code></td><td>string</td><td>Nome do device (obrigatorio)</td></tr>
+<tr><td><code>fw_version</code></td><td>string</td><td>Versao do firmware (opcional)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/state</span></div>
+<div class="desc">Atualiza estado de um node TCP</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
+<tr><td><code>state</code></td><td>object</td><td>Campos variam por tipo de sensor (temperature, humidity, gas_level, alarm, state)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/heartbeat</span></div>
+<div class="desc">Heartbeat de um node TCP (mantem online)</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method get">GET</span><span class="path">/node/command/<span>{device_id}</span></span></div>
+<div class="desc">Consulta comandos pendentes para um node (polling)</div>
+<div class="desc">Retorna <code>{"command":"on"|"off"|"restart"}</code> ou <code>{}</code> se vazio</div>
+</div>
+
 <h2>Manutencao</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>
@@ -1451,7 +1494,9 @@ R"rawliteral(
 
 <p class="footer">
 )rawliteral"
-#ifdef HABILITA_LORA
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+"LoRa + ESP-NOW Hub"
+#elif defined(LORA_ENABLED)
 "LoRa Hub"
 #else
 "ESP-NOW Gateway"

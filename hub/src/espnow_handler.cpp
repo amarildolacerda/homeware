@@ -8,7 +8,7 @@
 #include <EEPROM.h>
 #include "common_console.h"
 
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
 
 /* ESP-NOW delivery uses BROADCAST (all clients receive and filter by
    sensor_mac/target_mac). Validated with QuickESPNow (qgw/qclient, both STA on
@@ -172,7 +172,7 @@ void EspnowHandler::send_ack(const uint8_t *mac, uint16_t sequence, uint8_t stat
     if (!mac || mac_equal(mac, s_bcast_addr)) return;
     espnow_ack_t ack;
     memset(&ack, 0, sizeof(ack));
-    ack.msg_type = ESPNOW_MSG_ACK;
+    ack.msg_type = MSG_ACK;
     ack.sequence = sequence;
     ack.status = status;
     ack.assigned_slot = slot;
@@ -186,7 +186,7 @@ void EspnowHandler::send_pair_response(const uint8_t *mac, uint16_t sequence, ui
     if (!mac || mac_equal(mac, s_bcast_addr)) return;
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     resp.sequence = sequence;
     resp.status = PAIR_STATUS_OK;
     resp.assigned_slot = slot;
@@ -200,7 +200,7 @@ void EspnowHandler::send_pair_response(const uint8_t *mac, uint16_t sequence, ui
 void EspnowHandler::send_gw_announce(const uint8_t *mac) {
     espnow_gw_announce_t ann;
     memset(&ann, 0, sizeof(ann));
-    ann.msg_type = ESPNOW_MSG_GW_ANNOUNCE;
+    ann.msg_type = MSG_GW_ANNOUNCE;
     mac_copy(ann.gateway_mac, m_gateway_mac);
     strncpy((char*)ann.fw_version, FW_VERSION, sizeof(ann.fw_version));
 
@@ -233,7 +233,7 @@ bool EspnowHandler::send_command(const uint8_t *mac, uint8_t state) {
     }
     espnow_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.msg_type = ESPNOW_MSG_COMMAND;
+    cmd.msg_type = MSG_COMMAND;
     cmd.sequence = 0;
     mac_copy(cmd.target_mac, mac);
     cmd.command = state;
@@ -253,7 +253,7 @@ bool EspnowHandler::send_restart(const uint8_t *mac) {
     }
     espnow_restart_t rst;
     memset(&rst, 0, sizeof(rst));
-    rst.msg_type = ESPNOW_MSG_RESTART;
+    rst.msg_type = MSG_RESTART;
     rst.sequence = 0;
     mac_copy(rst.target_mac, mac);
 
@@ -264,7 +264,7 @@ bool EspnowHandler::send_restart(const uint8_t *mac) {
 void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {
     espnow_time_sync_t ts;
     memset(&ts, 0, sizeof(ts));
-    ts.msg_type = ESPNOW_MSG_TIME_SYNC;
+    ts.msg_type = MSG_TIME_SYNC;
     ts.sequence = m_time_sync_sequence++;
     mac_copy(ts.gateway_mac, m_gateway_mac);
     ts.epoch_seconds = epoch_seconds;
@@ -276,15 +276,16 @@ void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {
 }
 
 void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
-    if (!data || len < 1) { m_crc_errors++; return; }
+    if (!data || len < 1) { m_crc_errors++; console.printf("[ESPNOW] RX null/empty, len=%d\n", len); return; }
     m_rx_count++;
     uint8_t msg_type = data[0];
 
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
+    console.printf("[ESPNOW] RX msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
 
     switch (msg_type) {
-        case ESPNOW_MSG_PAIR_REQUEST: {
+        case MSG_PAIR_REQUEST: {
             if (len < (int)sizeof(espnow_pair_request_t)) { m_crc_errors++; return; }
             const espnow_pair_request_t *req = (const espnow_pair_request_t*)data;
             char sensor_mac_str[18];
@@ -302,7 +303,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                 if (pairing_required && !m_pairing_mode) {
                     espnow_nak_t nak;
                     memset(&nak, 0, sizeof(nak));
-                    nak.msg_type = ESPNOW_MSG_NAK;
+                    nak.msg_type = MSG_NAK;
                     nak.sequence = req->sequence;
                     mac_copy(nak.target_mac, req->sensor_mac);
                     nak.reason = NAK_REASON_PAIRING_DISABLED;
@@ -330,15 +331,15 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             break;
         }
 
-        case ESPNOW_MSG_SENSOR_DATA:
-        case ESPNOW_MSG_HEARTBEAT: {
+        case MSG_SENSOR_DATA:
+        case MSG_HEARTBEAT: {
             if (len < (int)ESPNOW_HEADER_FIXED_SIZE) { m_crc_errors++; return; }
             const espnow_header_t *hdr = (const espnow_header_t*)data;
             if (hdr->version != ESPNOW_PROTOCOL_VERSION) { m_crc_errors++; return; }
             if (len < (int)(ESPNOW_HEADER_FIXED_SIZE + hdr->payload_len)) { m_crc_errors++; return; }
 
             int slot = sensor_registry_find_by_mac(hdr->sensor_mac);
-            if (msg_type == ESPNOW_MSG_SENSOR_DATA) {
+            if (msg_type == MSG_SENSOR_DATA) {
                 if (slot < 0) {
                     send_ack(mac, hdr->sequence, PAIR_STATUS_DENIED, 0xFF);
                     return;
@@ -358,7 +359,16 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             break;
         }
 
-        case ESPNOW_MSG_GW_DISCOVER: {
+        case MSG_GW_ANNOUNCE: {
+            // Another gateway/extender announcing — log only, no action needed
+            const espnow_gw_announce_t *ann = (const espnow_gw_announce_t*)data;
+            char ann_mac[18];
+            mac_to_str(ann->gateway_mac, ann_mac, sizeof(ann_mac));
+            console.printf("[ESPNOW] GW_ANNOUNCE from extender %s (src %s)\n", ann_mac, mac_str);
+            break;
+        }
+
+        case MSG_GW_DISCOVER: {
             int slot = sensor_registry_find_by_mac(mac);
             if (slot < 0) {
                 slot = sensor_registry_find_free_slot();
@@ -378,7 +388,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             break;
         }
 
-        case ESPNOW_MSG_REPEATER_STATUS: {
+        case MSG_REPEATER_STATUS: {
             if (len < (int)(ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_repeater_status_t))) { m_crc_errors++; return; }
             const espnow_header_t *hdr = (const espnow_header_t*)data;
             if (hdr->version != ESPNOW_PROTOCOL_VERSION) { m_crc_errors++; return; }
@@ -408,7 +418,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             break;
         }
 
-        case ESPNOW_MSG_COMMAND: {
+        case MSG_COMMAND: {
             if (len < 10) { m_crc_errors++; return; }
             const espnow_command_t *cmd = (const espnow_command_t *)data;
             uint8_t target[6];
@@ -425,7 +435,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             if (mac_is_zero) return;
             espnow_command_t fwd;
             memset(&fwd, 0, sizeof(fwd));
-            fwd.msg_type = ESPNOW_MSG_COMMAND;
+            fwd.msg_type = MSG_COMMAND;
             fwd.sequence = cmd->sequence;
             mac_copy(fwd.target_mac, target);
             fwd.command = cmd->command;
@@ -434,6 +444,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
         }
 
         default:
+            console.printf("[ESPNOW] UNKNOWN msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
             m_crc_errors++;
             break;
     }
@@ -468,4 +479,4 @@ void espnow_broadcast_time_sync(uint32_t epoch) { s_espnow_handler.broadcast_tim
 bool espnow_send_command(const uint8_t *mac, uint8_t slot, uint8_t state) { (void)slot; return s_espnow_handler.send_command(mac, state); }
 bool espnow_send_restart(const uint8_t *mac, uint8_t slot) { (void)slot; return s_espnow_handler.send_restart(mac); }
 
-#endif // HABILITA_ESPNOW
+#endif // ESPNOW_ENABLED

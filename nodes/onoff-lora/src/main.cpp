@@ -1,56 +1,38 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WebServer.h>
+#include "platform.h"
 #include <EEPROM.h>
 #include <Update.h>
 #include <DNSServer.h>
-#include <LoRa.h>
 #include <Wire.h>
-#include <Adafruit_SSD1306.h>
-#include <Adafruit_GFX.h>
+#include "lora_spi_radio.h"
+#include "radio_node_strategy.h"
 #include <ArduinoJson.h>
 
 #include "config.h"
 #include "pages.h"
 #include "lora_protocol.h"
 #include "common_console.h"
+#include "display.h"
 
-#define SENSOR_TYPE_ONOFF 8
+#include "sensor_type.h"
 #include "myWiFiManager.h"
 
-
-
-#define DISPLAY_SDA  21
-#define DISPLAY_SCL  22
-#define DISPLAY_RST  -1
-#define DISPLAY_ADDR 0x3C
-#define DISPLAY_W    128
-#define DISPLAY_H    64
-
-#define LORA_SS    18
-#define LORA_RST   14
-#define LORA_DIO0  -1
-#define LORA_SCK    5
-#define LORA_MISO  19
-#define LORA_MOSI  27
-#define LORA_FREQ  868.0
+static LoraSpiConfig s_lora_cfg = []() {
+    LoraSpiConfig cfg;
+    cfg.ss = 18; cfg.rst = 14; cfg.dio0 = -1;
+    cfg.sck = 5; cfg.miso = 19; cfg.mosi = 27;
+    cfg.freq = 868.0; cfg.sf = 10; cfg.bw = 125E3;
+    cfg.cr = 7; cfg.preamble = 8; cfg.tx_power = 17;
+    return cfg;
+}();
+static LoraSpiRadio s_radio_hw(s_lora_cfg);
+NodeRadioType s_radio(&s_radio_hw);
 
 static WebServer s_server(DASHBOARD_PORT);
-static Adafruit_SSD1306 s_display(DISPLAY_W, DISPLAY_H, &Wire, DISPLAY_RST);
 
-static bool s_relay = false;
-static bool s_paired = false;
+bool s_relay = false;
 static bool s_gateway_connected = false;
 static uint8_t s_my_mac[6];
-static uint8_t s_hub_id[6];
-static uint16_t s_seq = 0;
-static unsigned long s_last_heartbeat = 0;
-static unsigned long s_last_state_send = 0;
-static unsigned long s_last_pair_attempt = 0;
-static int s_pair_attempts = 0;
-static int s_last_rssi = 0;
-static uint32_t s_tx_count = 0;
-static uint32_t s_rx_count = 0;
 static uint32_t s_ota_bytes = 0;
 static bool s_ota_in_progress = false;
 static char s_device_id[32];
@@ -109,8 +91,6 @@ static bool name_load(char *out, size_t max_len) {
     return found;
 }
 
-static void lora_send_state();
-
 static void set_relay(bool state) {
     s_relay = state;
     digitalWrite(RELAY_PIN, state ? RELAY_ON : !RELAY_ON);
@@ -118,7 +98,7 @@ static void set_relay(bool state) {
     EEPROM.write(EEPROM_RELAY_STATE, state);
     EEPROM.commit();
     EEPROM.end();
-    lora_send_state();
+    s_radio.publish_state();
     console.printf("Relay set to %s\n", state ? "ON" : "OFF");
 }
 
@@ -126,92 +106,23 @@ static void toggle_relay() {
     set_relay(!s_relay);
 }
 
-static void lora_send(uint8_t msg_type, const uint8_t *payload, uint8_t payload_len) {
-    uint8_t buf[LORA_HEADER_SIZE + payload_len];
-    lora_frame_t *frame = (lora_frame_t *)buf;
-    frame->msg_type = msg_type;
-    frame->sequence = s_seq++;
-    memcpy(frame->sensor_id, s_my_mac, 6);
-    frame->rssi = 0;
-    frame->payload_len = payload_len;
-    if (payload_len > 0) memcpy(frame->payload, payload, payload_len);
-
-    LoRa.beginPacket();
-    LoRa.write(buf, LORA_HEADER_SIZE + payload_len);
-    LoRa.endPacket();
-    LoRa.receive();
-    s_tx_count++;
-    console.printf("LoRa packet sent: type=%d, seq=%d, payload_len=%d\n", msg_type, frame->sequence, payload_len);
+static uint8_t get_sensor_type() {
+    return SENSOR_TYPE_ONOFF;
 }
 
-static void lora_send_pair_request() {
-    lora_pair_request_t req;
-    memset(&req, 0, sizeof(req));
-    req.msg_type = LORA_MSG_PAIR_REQUEST;
-    req.sequence = s_seq++;
-    memcpy(req.sensor_id, s_my_mac, 6);
-    req.rssi = 0;
-    req.payload_len = 1;
-    req.sensor_type = SENSOR_TYPE_ONOFF;
-    strncpy(req.device_name, s_device_name, sizeof(req.device_name) - 1);
-    req.device_name[sizeof(req.device_name) - 1] = '\0';
-
-    LoRa.beginPacket();
-    LoRa.write((uint8_t *)&req, sizeof(req));
-    LoRa.endPacket();
-    console.printf("LoRa pair request sent: seq=%d, name=%s\n", req.sequence, req.device_name);
-    LoRa.receive();
-    s_tx_count++;
+static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len) {
+    if (max_len < 1) return 0;
+    buf[0] = s_relay ? 1 : 0;
+    return 1;
 }
 
-static void lora_send_state() {
-    uint8_t payload[] = { (uint8_t)(s_relay ? 1 : 0) };
-    lora_send(LORA_MSG_SENSOR_DATA, payload, 1);
-    console.printf("LoRa state sent: relay=%s\n", s_relay ? "ON" : "OFF");
+static void on_command(uint8_t command) {
+    set_relay(command ? true : false);
 }
 
-static void lora_send_heartbeat() {
-    uint8_t payload[] = { (uint8_t)(s_relay ? 1 : 0) };
-    lora_send(LORA_MSG_HEARTBEAT, payload, 1);
-}
-
-static void handle_lora_rx() {
-    int packet_size = LoRa.parsePacket();
-    if (packet_size < LORA_HEADER_SIZE) return;
-
-    uint8_t buf[LORA_MAX_PAYLOAD];
-    int len = 0;
-    while (LoRa.available() && len < (int)sizeof(buf)) {
-        buf[len++] = LoRa.read();
-    }
-    s_last_rssi = LoRa.packetRssi();
-    s_rx_count++;
-
-    lora_frame_t *frame = (lora_frame_t *)buf;
-console.printf("LoRa packet received: type=%d, seq=%d, rssi=%d, payload_len=%d\n",
-              frame->msg_type, frame->sequence, frame->rssi, frame->payload_len);
-    switch (frame->msg_type) {
-        case LORA_MSG_PAIR_RESPONSE: {
-            lora_pair_response_t *resp = (lora_pair_response_t *)buf;
-            memcpy(s_hub_id, resp->sensor_id, 6);
-            s_paired = true;
-            s_gateway_connected = true;
-            s_pair_attempts = 0;
-            console.printf("Paired, hub MAC: %02X:%02X:%02X:%02X:%02X:%02X, RSSI: %d dBm\n",
-                          s_hub_id[0], s_hub_id[1], s_hub_id[2],
-                          s_hub_id[3], s_hub_id[4], s_hub_id[5],
-                          s_last_rssi);
-            lora_send_state();
-            break;
-        }
-        case LORA_MSG_COMMAND: {
-            lora_command_t *cmd = (lora_command_t *)buf;
-            if (memcmp(cmd->sensor_id, s_my_mac, 6) == 0) {
-                set_relay(cmd->command ? true : false);
-            }
-            break;
-        }
-    }
+static void on_paired(uint8_t slot) {
+    (void)slot;
+    s_gateway_connected = true;
 }
 
 static void handle_root() {
@@ -225,7 +136,7 @@ static void handle_docs() {
 static void handle_api_state() {
     JsonDocument doc;
     doc["relay"] = s_relay;
-    doc["paired"] = s_paired;
+    doc["paired"] = s_radio.is_paired();
     doc["gateway_connected"] = s_gateway_connected;
     doc["device_id"] = s_device_id;
     doc["device_name"] = s_device_name;
@@ -233,11 +144,11 @@ static void handle_api_state() {
     doc["ip"] = WiFi.localIP().toString();
     doc["wifi_ssid"] = WiFi.SSID();
     doc["wifi_channel"] = WiFi.channel();
-    doc["rssi"] = s_last_rssi;
+    doc["rssi"] = s_radio.last_rssi();
     doc["free_heap"] = ESP.getFreeHeap();
     doc["uptime_s"] = millis() / 1000;
-    doc["rx_count"] = s_rx_count;
-    doc["tx_count"] = s_tx_count;
+    doc["rx_count"] = s_radio.rx_count();
+    doc["tx_count"] = s_radio.tx_count();
     String json;
     serializeJson(doc, json);
     s_server.send(200, "application/json", json);
@@ -267,6 +178,7 @@ static void handle_api_settings() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
+                s_radio.set_device_name(s_device_name);
             }
         }
     }
@@ -328,23 +240,21 @@ static void handle_serial(char c) {
             console.printf("  Device:  %s\n", s_device_id);
             console.printf("  Nome:    %s\n", s_device_name);
             console.printf("  Relé:    %s\n", s_relay ? "ON" : "OFF");
-            console.printf("  Pareado: %s\n", s_paired ? "Sim" : "Nao");
-            console.printf("  RSSI:    %d dBm (LoRa)\n", s_last_rssi);
+            console.printf("  Pareado: %s\n", s_radio.is_paired() ? "Sim" : "Nao");
+            console.printf("  RSSI:    %d dBm (LoRa)\n", s_radio.last_rssi());
             console.printf("  IP:      %s\n", WiFi.localIP().toString().c_str());
             console.printf("  WiFi:    %s ch%d\n", WiFi.SSID().c_str(), WiFi.channel());
             console.printf("  Uptime:  %lus\n", millis() / 1000);
-            console.printf("  RX/TX:   %lu / %lu\n", s_rx_count, s_tx_count);
+            console.printf("  RX/TX:   %lu / %lu\n", s_radio.rx_count(), s_radio.tx_count());
             console.printf("  FW:      %s\n", FW_VERSION);
             break;
         case 'l': case 'L':
             toggle_relay();
-            lora_send_state();
             console.printf("  Relé: %s\n", s_relay ? "ON" : "OFF");
             break;
         case 'p': case 'P':
-            s_paired = false;
-            s_pair_attempts = 0;
-            s_last_pair_attempt = 0;
+            s_radio.force_repair();
+            s_gateway_connected = false;
             console.printf("  Re-pareando...\n");
             break;
         case 'r': case 'R':
@@ -457,6 +367,7 @@ static void handle_api_wifi() {
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 name_save(s_device_name);
+                s_radio.set_device_name(s_device_name);
             }
         }
         console.printf("WiFi credentials received, connecting to %s...\n", ssid);
@@ -486,74 +397,20 @@ static void handle_api_wifi() {
     }
 }
 
-static void display_page0() {
-    s_display.clearDisplay();
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.print("LoRa Switch");
-    s_display.setCursor(0, 12);
-    s_display.print(s_relay ? "ON" : "OFF");
-    s_display.setCursor(0, 24);
-    s_display.print(s_paired ? "Pareado" : "---");
-    s_display.setCursor(0, 36);
-    s_display.printf("RSSI: %d", s_last_rssi);
-    s_display.setCursor(0, 48);
-    s_display.print(WiFi.localIP());
-}
+static void init_radio_and_protocol() {
+    s_radio.callbacks.get_sensor_type = get_sensor_type;
+    s_radio.callbacks.get_sensor_payload = get_sensor_payload;
+    s_radio.callbacks.on_command = on_command;
+    s_radio.callbacks.on_paired = on_paired;
+    s_radio.set_mac(s_my_mac);
+    s_radio.set_device_name(s_device_name);
 
-static void display_page1() {
-    unsigned long sec = millis() / 1000;
-    int dd = sec / 86400; sec %= 86400;
-    int hh = sec / 3600; sec %= 3600;
-    int mm = sec / 60; sec %= 60;
-    s_display.clearDisplay();
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.printf("TX: %lu", s_tx_count);
-    s_display.setCursor(0, 12);
-    s_display.printf("RX: %lu", s_rx_count);
-    s_display.setCursor(0, 24);
-    s_display.printf("Mem: %u", ESP.getFreeHeap());
-    s_display.setCursor(0, 36);
-    s_display.printf("Uptime: %dd %02d:%02d:%02d", dd, hh, mm, (int)sec);
-    s_display.setCursor(0, 48);
-    s_display.printf("WiFi: %s", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "---");
-}
-
-static void display_update() {
-    static int s_display_page = 0;
-    static unsigned long s_last_page_switch = 0;
-    unsigned long now = millis();
-    if (now - s_last_page_switch > 5000) {
-        s_last_page_switch = now;
-        s_display_page = !s_display_page;
+    if (s_radio_hw.init() != 0) {
+        console.printf("LoRa init failed\n");
+        return;
     }
-    if (s_display_page == 0) display_page0();
-    else display_page1();
-    s_display.display();
-}
-
-static void display_init() {
-    Wire.begin(DISPLAY_SDA, DISPLAY_SCL);
-    if (!s_display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_ADDR)) return;
-    s_display.clearDisplay();
-    s_display.setTextSize(1);
-    s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(0, 0);
-    s_display.print("Booting...");
-    s_display.display();
-}
-
-static void lora_init() {
-    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_SS);
-    LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
-    if (!LoRa.begin(LORA_FREQ * 1E6)) return;
-    LoRa.setSpreadingFactor(10);
-    LoRa.setSignalBandwidth(125E3);
-    LoRa.setCodingRate4(7);
-    LoRa.setPreambleLength(8);
-    LoRa.setTxPower(17);
-    LoRa.receive();
+    console.printf("LoRa initialized\n");
+    s_radio.begin();
 }
 
 void setup() {
@@ -591,11 +448,12 @@ void setup() {
 
     if (!name_load(s_device_name, sizeof(s_device_name)))
         strncpy(s_device_name, DEVICE_NAME, sizeof(s_device_name) - 1);
+    s_radio.set_device_name(s_device_name);
 
     display_init();
 
-    lora_init();
-console.printf("LoRa initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    init_radio_and_protocol();
+console.printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
                   s_my_mac[0], s_my_mac[1], s_my_mac[2],
                   s_my_mac[3], s_my_mac[4], s_my_mac[5]);
     s_server.on("/", handle_root);
@@ -622,7 +480,8 @@ void loop() {
     console.loop();
     handle_wifi();
     s_server.handleClient();
-    handle_lora_rx();
+    s_radio.loop();
+    s_radio.loop();
 
     if (Serial.available() > 0) handle_serial(Serial.read());
     int tc = console.telnet_read();
@@ -636,34 +495,13 @@ void loop() {
         }
     }
 
-    if (!s_paired) {
-        if (millis() - s_last_pair_attempt > LORA_PAIR_INTERVAL_MS && s_pair_attempts < LORA_MAX_PAIR_ATTEMPTS) {
-            s_last_pair_attempt = millis();
-            s_pair_attempts++;
-            lora_send_pair_request();
-            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-            console.printf("Pair request sent, attempt %d/%d\n", s_pair_attempts, LORA_MAX_PAIR_ATTEMPTS);   
-        }
-    } else {
+    if (s_radio.is_paired()) {
         digitalWrite(LED_PIN, s_relay ? LOW : HIGH);
-        if (millis() - s_last_heartbeat > HEARTBEAT_INTERVAL) {
-            s_last_heartbeat = millis();
-            lora_send_heartbeat();
-            console.printf("Heartbeat sent, RSSI: %d dBm\n", s_last_rssi);
-        }
-
-        if (millis() - s_last_state_send > STATE_UPDATE_INTERVAL) {
-            s_last_state_send = millis();
-            lora_send_state();
-            console.printf("State update sent, relay: %s\n", s_relay ? "ON" : "OFF");
-        }
+    } else {
+        digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     }
 
-    static unsigned long last_display = 0;
-    if (millis() - last_display > 2000) {
-        last_display = millis();
-        display_update();
-    }
+    display_loop();
 
     delay(1);
 }

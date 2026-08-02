@@ -1,7 +1,7 @@
 # SPEC_LORA — Protocolo LoRa (Hub ↔ Nodes)
 
 Especificação do protocolo de rádio LoRa entre o hub e nodes LoRa via `RadioInterface` + `sandeepmistry/LoRa` (SX1278).
-Referente a `FW_VERSION` atual do hub. Compilado condicionalmente com `HABILITA_LORA`.
+Referente a `FW_VERSION` atual do hub. Compilado condicionalmente com `LORA_ENABLED`.
 
 ## 1. Geral
 

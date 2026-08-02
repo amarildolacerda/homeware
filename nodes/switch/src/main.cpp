@@ -1,20 +1,20 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 #include <ArduinoOTA.h>
 #include <Updater.h>
-#include <espnow.h>
 #include <Espalexa.h>
 #include <sys/time.h>
 #include "config.h"
 #include "pages.h"
 #include "espnow_protocol.h"
+#include "radio_node_strategy.h"
 #include "common_console.h"
 #include "common_espnow.h"
 #include "common_web.h"
 #include "common_repeater.h"
+#include "common_wifi.h"
 #include "timer.h"
 #include <LittleFS.h>
 
@@ -23,27 +23,8 @@ static const char *TAG = "agri-switch";
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;
 static unsigned long s_last_reconnect_attempt = 0;
-static unsigned long s_last_espnow_send = 0;
-static unsigned long s_last_espnow_pair = 0;
 static unsigned long s_last_heartbeat = 0;
 static unsigned long s_last_alexa_activity = 0;
-static unsigned long s_send_deadline = 0;
-static int s_send_retries_left = 0;
-static unsigned long s_pair_wait_until = 0;
-
-static bool s_gateway_connected = false;
-static bool s_paired = false;
-static uint8_t s_gateway_mac[6];
-
-static bool mac_is_nonzero(const uint8_t *mac) {
-    return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
-}
-static uint16_t s_sequence = 0;
-static uint16_t s_assigned_slot = 0;
-static int s_pair_attempts = 0;
-static bool s_ack_received = false;
-static bool s_send_pending = false;
-static bool s_espnow_ready = false;
 
 static bool s_relay_state = false;
 static int s_relay_pin = RELAY_PIN;
@@ -52,9 +33,6 @@ static int s_battery = 100;
 static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
 static unsigned long s_start_time = 0;
-static unsigned long s_last_send_ms = 0;
-static uint32_t s_espnow_tx_count = 0;
-static uint32_t s_espnow_rx_count = 0;
 static uint32_t s_on_count = 0;
 
 static char s_device_id[32];
@@ -64,7 +42,6 @@ static unsigned long s_wifi_config_start_time = 0;
 static bool s_config_portal_active = false;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
-static uint8_t s_my_mac[6];
 static unsigned long s_wifi_connect_start = 0;
 static bool s_wifi_connected = false;
 
@@ -73,7 +50,8 @@ static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 static bool s_alexa_initialized = false;
 
-static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static NodeRadioType s_radio;
+
 static unsigned long s_last_timer_check = 0;
 static unsigned long s_last_cyclic_check = 0;
 static int s_timezone_offset = -3;
@@ -113,16 +91,13 @@ static uint16_t s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
 static unsigned long s_pulse_on_time = 0;
 
 static void set_relay(bool state);
-static bool espnow_send_data(void);
-
 static void on_timer_fire(uint8_t action)
 {
     console.printf("[%s] Timer fired: action=%d\n", TAG, action);
     set_relay(action ? true : false);
-    if (s_paired)
+    if (s_radio.is_paired())
     {
-        s_last_espnow_send = 0;
-        espnow_send_data();
+        s_radio.publish_state();
     }
 }
 
@@ -294,8 +269,6 @@ static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size
     return found;
 }
 
-static void set_relay(bool state);
-
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
     size_t j = 0;
@@ -316,250 +289,47 @@ static void name_to_ssid(const char *name, char *out, size_t max)
     out[j] = '\0';
 }
 
-extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
-{
-    s_espnow_tx_count++;
-    if (status != 0)
-    {
-        char mac_str[18];
-        mac_to_str(mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] ESPNOW send failed to %s: status=%d\n", TAG, mac_str, status);
+static uint8_t get_sensor_type() {
+    return SENSOR_TYPE_ONOFF;
+}
+
+static uint8_t get_sensor_payload(uint8_t* buf, uint8_t max_len) {
+    payload_onoff_t pl;
+    memset(&pl, 0, sizeof(pl));
+    pl.state = s_relay_state ? 1 : 0;
+    uint8_t len = sizeof(pl);
+    if (len > max_len) len = max_len;
+    memcpy(buf, &pl, len);
+    return len;
+}
+
+static void on_command(uint8_t command) {
+    console.printf("[%s] Command received: %d\n", TAG, command);
+    if (command == 0x01) {
+        set_relay(true);
+        if (s_radio.is_paired()) {
+            s_radio.publish_state();
+        }
+    } else if (command == 0x00) {
+        set_relay(false);
+        if (s_radio.is_paired()) {
+            s_radio.publish_state();
+        }
     }
 }
 
-static bool espnow_send_heartbeat(void);
-
-static void espnow_send_fn(const uint8_t *mac, const uint8_t *data, int len, const char *tag)
-{
-    espnow_send_wrapper(mac, data, (size_t)len, tag);
+static void on_paired(uint8_t slot) {
+    console.printf("[%s] Paired, slot %d\n", TAG, slot);
 }
 
-extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
-{
-    s_espnow_rx_count++;
-    if (!data || len < 1)
-        return;
-
-    switch (data[0])
-    {
-    case ESPNOW_MSG_PAIR_RESPONSE:
-    {
-        if (len < sizeof(espnow_pair_response_t))
-            return;
-        espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
-        if (mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
-            return;
-        if (resp->status == PAIR_STATUS_OK)
-        {
-            if (!repeater_is_enabled())
-            {
-                mac_copy(s_gateway_mac, mac);
-                espnow_save_gateway_mac(mac, TAG);
-            }
-            s_assigned_slot = resp->assigned_slot;
-            s_paired = true;
-            s_gateway_connected = true;
-            char mac_str[18];
-            mac_to_str(mac, mac_str, sizeof(mac_str));
-            console.printf("[%s] Paired with gateway %s slot %d\n", TAG, mac_str, s_assigned_slot);
-        }
-        else
-        {
-            console.printf("[%s] Pair response: status=%d\n", TAG, resp->status);
-        }
-        break;
+static void on_restart() {
+    console.printf("[%s] Restart command received\n", TAG);
+    if (s_radio.is_paired()) {
+        s_radio.publish_state();
+        delay(50);
     }
-    case ESPNOW_MSG_COMMAND:
-    {
-        if (len < sizeof(espnow_command_t))
-            return;
-        if (!mac_equal(mac, s_gateway_mac))
-            return;
-        espnow_command_t *cmd = (espnow_command_t *)data;
-        if (mac_equal(cmd->target_mac, s_my_mac))
-        {
-            console.printf("[%s] Command for me: state=%d\n", TAG, cmd->command);
-            set_relay(cmd->command ? true : false);
-        }
-        break;
-    }
-    case ESPNOW_MSG_RESTART:
-    {
-        if (len < sizeof(espnow_restart_t)) return;
-        if (!mac_equal(mac, s_gateway_mac)) return;
-        espnow_restart_t *rst = (espnow_restart_t *)data;
-        if (mac_equal(rst->target_mac, s_my_mac))
-        {
-            console.printf("[%s] Restart command received, rebooting...\n", TAG);
-            if (s_paired) {
-                espnow_send_heartbeat();
-                delay(50);
-            }
-            delay(100);
-            ESP.restart();
-        }
-        break;
-    }
-    case ESPNOW_MSG_NAK:
-    {
-        if (len < sizeof(espnow_nak_t)) return;
-        if (!mac_equal(mac, s_gateway_mac)) return;
-        espnow_nak_t *nak = (espnow_nak_t *)data;
-        if (nak->reason == NAK_REASON_GATEWAY_LOST)
-        {
-            console.printf("[%s] Gateway lost notification (NAK), re-pairing...\n", TAG);
-            s_paired = false;
-            s_gateway_connected = false;
-            s_pair_attempts = 0;
-        }
-        break;
-    }
-    case ESPNOW_MSG_TIME_SYNC:
-    {
-        if (len < sizeof(espnow_time_sync_t))
-            return;
-        if (!mac_equal(mac, s_gateway_mac))
-            return;
-        espnow_time_sync_t *ts = (espnow_time_sync_t *)data;
-        s_synced_epoch = ts->epoch_seconds;
-        struct timeval tv = { (time_t)s_synced_epoch, 0 };
-        settimeofday(&tv, NULL);
-        console.printf("[%s] Time sync: epoch=%lu seq=%d\n", TAG, s_synced_epoch, ts->sequence);
-        break;
-    }
-    case ESPNOW_MSG_ACK:
-    {
-        if (len < sizeof(espnow_ack_t))
-            return;
-        espnow_ack_t *ack = (espnow_ack_t *)data;
-        console.printf("[%s] ACK received: status=%d seq=%d slot=%d\n", TAG, ack->status, ack->sequence, ack->assigned_slot);
-        if (ack->status == PAIR_STATUS_DENIED)
-        {
-            s_paired = false;
-            s_gateway_connected = false;
-            console.printf("[%s] Gateway rejected data (denied), need re-pair\n", TAG);
-        }
-        else
-        {
-            s_gateway_connected = true;
-        }
-        s_ack_received = true;
-        break;
-    }
-    }
-
-    /* Repeater: forward messages between clients and gateway */
-    if (s_paired && repeater_is_enabled())
-    {
-        repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac, espnow_send_fn, TAG);
-    }
-}
-
-#define ESPNOW_HEADER_FIXED_SIZE (sizeof(espnow_header_t) - sizeof(((espnow_header_t *)0)->payload))
-
-static bool espnow_send_data(void)
-{
-    if (!s_paired || !s_espnow_ready)
-        return false;
-
-    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE + sizeof(payload_onoff_t) + 4 + 2];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_header_t *hdr = (espnow_header_t *)buf;
-    hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_SENSOR_DATA;
-    hdr->sequence = s_sequence++;
-    WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_ONOFF;
-    hdr->battery_pct = (uint8_t)s_battery;
-    hdr->rssi = (int16_t)WiFi.RSSI();
-
-    payload_onoff_t *pl = (payload_onoff_t *)hdr->payload;
-    pl->state = s_relay_state ? 1 : 0;
-
-    IPAddress ip = WiFi.localIP();
-    uint8_t *ip_ptr = hdr->payload + sizeof(payload_onoff_t);
-    ip_ptr[0] = ip[0];
-    ip_ptr[1] = ip[1];
-    ip_ptr[2] = ip[2];
-    ip_ptr[3] = ip[3];
-
-    uint16_t free_heap = ESP.getFreeHeap();
-    uint8_t *fh_ptr = hdr->payload + sizeof(payload_onoff_t) + 4;
-    fh_ptr[0] = free_heap & 0xFF;
-    fh_ptr[1] = (free_heap >> 8) & 0xFF;
-
-    hdr->payload_len = sizeof(payload_onoff_t) + 4 + 2;
-
-    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (!espnow_client_add_peer(bcast, TAG))
-    {
-        console.printf("[%s] Failed to add broadcast peer\n", TAG);
-        return false;
-    }
-
-    s_ack_received = false;
-    s_send_pending = true;
-    if (!espnow_send_wrapper(bcast, buf, sizeof(buf), TAG))
-    {
-        s_send_pending = false;
-        return false;
-    }
-    return true;
-}
-
-static bool espnow_send_heartbeat(void)
-{
-    if (!s_paired || !s_espnow_ready)
-        return false;
-
-    uint8_t buf[ESPNOW_HEADER_FIXED_SIZE];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_header_t *hdr = (espnow_header_t *)buf;
-    hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_HEARTBEAT;
-    hdr->sequence = s_sequence++;
-    WiFi.macAddress(hdr->sensor_mac);
-    hdr->sensor_type = SENSOR_TYPE_ONOFF;
-    hdr->battery_pct = (uint8_t)s_battery;
-    hdr->rssi = (int16_t)WiFi.RSSI();
-    hdr->payload_len = 0;
-
-    static uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (!espnow_client_add_peer(bcast, TAG))
-        return false;
-
-    s_ack_received = false;
-    return espnow_send_wrapper(bcast, buf, sizeof(buf), TAG);
-}
-
-static bool espnow_send_pair_request(void)
-{
-    if (!s_espnow_ready)
-        return false;
-
-    uint8_t buf[sizeof(espnow_pair_request_t)];
-    memset(buf, 0, sizeof(buf));
-
-    espnow_pair_request_t *req = (espnow_pair_request_t *)buf;
-    req->msg_type = ESPNOW_MSG_PAIR_REQUEST;
-    req->sequence = s_sequence++;
-    WiFi.macAddress(req->sensor_mac);
-    req->sensor_type = SENSOR_TYPE_ONOFF;
-    uint32_t ver = 0x000A000B;
-    req->firmware_version[0] = (uint8_t)(ver >> 24);
-    req->firmware_version[1] = (uint8_t)(ver >> 16);
-    req->firmware_version[2] = (uint8_t)(ver >> 8);
-    req->firmware_version[3] = (uint8_t)(ver);
-    strncpy(req->device_name, s_device_name, sizeof(req->device_name) - 1);
-    req->device_name[sizeof(req->device_name) - 1] = '\0';
-
-    if (!espnow_client_add_peer(s_broadcast_mac, TAG))
-        return false;
-
-    s_ack_received = false;
-    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
+    delay(100);
+    ESP.restart();
 }
 
 static void set_relay(bool state)
@@ -573,7 +343,6 @@ static void set_relay(bool state)
         s_pulse_on_time = millis();
     if (!state)
         cyclic_reset();
-    s_last_espnow_send = 0;
 }
 
 static void toggle_relay(void)
@@ -587,10 +356,9 @@ static void alexa_callback(EspalexaDevice *d)
     s_last_alexa_activity = millis();
     console.printf("[%s] Alexa: %s -> %s\n", TAG, s_device_name, state ? "ON" : "OFF");
     set_relay(state);
-    if (s_paired)
+    if (s_radio.is_paired())
     {
-        s_last_espnow_send = 0;
-        espnow_send_data();
+        s_radio.publish_state();
     }
 }
 
@@ -748,6 +516,8 @@ static void handle_api_wifi(void)
         doc["ap_active"] = s_config_portal_active;
         doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
         doc["device_name"] = s_device_name;
+        doc["channel"] = mywifi_configured_channel();
+        doc["wifi_channel"] = WiFi.channel();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -781,14 +551,22 @@ static void handle_api_wifi(void)
 
             if (doc.containsKey("repeater_mac"))
             {
+                uint8_t gw_mac[6];
                 const char *mac_str = doc["repeater_mac"];
-                if (strlen(mac_str) > 0 && mac_parse(mac_str, s_gateway_mac))
+                if (strlen(mac_str) > 0 && mac_parse(mac_str, gw_mac))
                 {
                     repeater_set_enabled(true);
                     repeater_save_enable();
-                    s_paired = true;
-                    espnow_save_gateway_mac(s_gateway_mac, TAG);
+                    s_radio.set_gateway_mac(gw_mac);
+                    espnow_save_gateway_mac(gw_mac, TAG);
                 }
+            }
+
+            if (doc.containsKey("channel"))
+            {
+                uint8_t ch = doc["channel"];
+                if (ch > 0 && ch <= 13)
+                    mywifi_save_channel(ch);
             }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
@@ -824,14 +602,13 @@ static void handle_api_state(void)
         doc["battery"] = s_battery;
         doc["device_id"] = s_device_id;
         doc["device_name"] = s_device_name;
-        doc["gateway_connected"] = s_gateway_connected;
-        doc["paired"] = s_paired;
+        doc["gateway_connected"] = s_radio.is_paired();
+        doc["paired"] = s_radio.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
+        doc["wifi_channel"] = WiFi.channel();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
-        if (s_last_send_ms)
-            doc["last_send_s"] = (millis() - s_last_send_ms) / 1000;
-        doc["slot"] = s_assigned_slot;
+        doc["slot"] = s_radio.assigned_slot();
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
 #ifdef LED_PIN
         doc["led_enabled"] = (s_led_enabled ? "true" : "false");
@@ -845,8 +622,8 @@ static void handle_api_state(void)
         if (s_pulse_enabled && s_relay_state)
             doc["pulse_remaining_s"] = (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000;
         doc["type"] = "onoff";
-        doc["tx_count"] = s_espnow_tx_count;
-        doc["rx_count"] = s_espnow_rx_count;
+        doc["tx_count"] = s_radio.tx_count();
+        doc["rx_count"] = s_radio.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
         doc["on_count"] = s_on_count;
 #ifdef HABILITA_REPEATER
@@ -927,11 +704,9 @@ static void handle_console(char c)
         console.printf("\n--- Controle do OnOff ---\n");
         toggle_relay();
         console.printf("  OnOff: %s\n", s_relay_state ? "LIGADO" : "DESLIGADO");
-        if (s_paired)
+        if (s_radio.is_paired())
         {
-            s_last_espnow_send = 0;
-            if (espnow_send_data())
-                s_last_send_ms = millis();
+            s_radio.publish_state();
         }
         else
         {
@@ -943,19 +718,17 @@ static void handle_console(char c)
     case '0':
         set_relay(false);
         console.printf("[%s] Relay OFF\n", TAG);
-        if (s_paired)
+        if (s_radio.is_paired())
         {
-            s_last_espnow_send = 0;
-            espnow_send_data();
+            s_radio.publish_state();
         }
         break;
     case '1':
         set_relay(true);
         console.printf("[%s] Relay ON\n", TAG);
-        if (s_paired)
+        if (s_radio.is_paired())
         {
-            s_last_espnow_send = 0;
-            espnow_send_data();
+            s_radio.publish_state();
         }
         break;
     case 'u':
@@ -973,15 +746,9 @@ static void handle_console(char c)
     case 'P':
     {
         console.printf("\n--- Par ---\n");
-        s_paired = false;
-        s_gateway_connected = false;
-        s_pair_attempts = 0;
+        s_radio.force_repair();
         console.printf("  Estado de pareamento resetado\n");
         console.printf("  Enviando requisicao de par...\n");
-        if (espnow_send_pair_request())
-            console.printf("  Requisicao enviada!\n");
-        else
-            console.printf("  Falha ao enviar requisicao\n");
         console.printf("----------------\n\n");
         break;
     }
@@ -1021,11 +788,11 @@ static void handle_console(char c)
         console.printf("  a    - info Alexa\n");
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
-        if (s_paired)
+        if (s_radio.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_assigned_slot);
+            mac_to_str(s_radio.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
@@ -1067,12 +834,11 @@ static void handle_console(char c)
         console.printf("  Led:         %s\n", digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
 
-        if (s_paired)
+        if (s_radio.is_paired())
         {
             char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway:     %s (slot %d) %s\n", mac_str, s_assigned_slot,
-                           s_gateway_connected ? "conectado" : "desconectado");
+            mac_to_str(s_radio.gateway_mac(), mac_str, sizeof(mac_str));
+            console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
         else
         {
@@ -1083,7 +849,7 @@ static void handle_console(char c)
         if (repeater_is_enabled())
         {
             char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
+            mac_to_str(s_radio.gateway_mac(), mac_str, sizeof(mac_str));
             console.printf("  Repeater:    %s\n", mac_str);
         }
         console.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
@@ -1466,6 +1232,15 @@ static void handle_ota_upload(void)
     }
 }
 
+static void on_pairing_failed() {
+    console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
+    if (mywifi_try_next_bssid()) {
+        console.printf("[%s] Reconnecting, will retry pairing\n", TAG);
+    } else {
+        console.printf("[%s] No other APs found, will retry on current\n", TAG);
+    }
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -1473,8 +1248,8 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", chip_id);
+    uint32_t id = chip_id();
+    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
 
@@ -1491,12 +1266,13 @@ void setup(void)
 
     hwifi_begin();
 
-    s_espnow_ready = espnow_client_init(TAG);
-    if (s_espnow_ready) {
-        esp_now_register_send_cb(espnow_send_cb);
-        esp_now_register_recv_cb(espnow_recv_cb);
-    }
-    WiFi.macAddress(s_my_mac);
+    uint8_t my_mac[6];
+    WiFi.macAddress(my_mac);
+    s_radio.set_mac(my_mac);
+    s_radio.set_device_name(s_device_name);
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr, on_pairing_failed };
+    s_radio.load_gateway_mac();
+    s_radio.begin();
 
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
@@ -1543,22 +1319,18 @@ void setup(void)
     repeater_init(EEPROM_REPEATER_EN_ADDR);
 
     /* Check for REPEATER_MAC from config.h */
-    if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
+    if (strlen(REPEATER_MAC) > 0)
     {
-        repeater_set_enabled(true);
-        repeater_save_enable();
-        s_paired = true;
-        char mac_str[18];
-        mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-        console.printf("[%s] Using repeater MAC: %s\n", TAG, mac_str);
-    }
-    else if (espnow_load_gateway_mac(s_gateway_mac, TAG))
-    {
-        s_paired = true;
-    }
-    else
-    {
-        console.printf("[%s] No saved gateway MAC, will pair\n", TAG);
+        uint8_t gw_mac[6];
+        if (mac_parse(REPEATER_MAC, gw_mac))
+        {
+            repeater_set_enabled(true);
+            repeater_save_enable();
+            s_radio.set_gateway_mac(gw_mac);
+            char mac_str[18];
+            mac_to_str(gw_mac, mac_str, sizeof(mac_str));
+            console.printf("[%s] Using repeater MAC: %s\n", TAG, mac_str);
+        }
     }
 
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
@@ -1615,68 +1387,7 @@ void loop(void)
 
     unsigned long now = millis();
 
-    if (!s_paired)
-    {
-        if (s_pair_wait_until > 0 && now < s_pair_wait_until)
-            return;
-        if (now - s_last_espnow_pair > ESPNOW_PAIR_INTERVAL_MS)
-        {
-            s_last_espnow_pair = now;
-            s_pair_attempts++;
-            console.printf("[%s] Pair attempt %d/%d\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
-            espnow_send_pair_request();
-            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
-            {
-                s_pair_attempts = 0;
-                s_pair_wait_until = now + 5000;
-                console.printf("[%s] Max pair attempts, waiting 60s\n", TAG);
-            }
-        }
-        return;
-    }
-
-    if (s_send_pending)
-    {
-        if (s_ack_received)
-        {
-            s_send_pending = false;
-            s_gateway_connected = true;
-            s_last_send_ms = millis();
-        }
-        else if (now > s_send_deadline)
-        {
-            if (s_send_retries_left > 0)
-            {
-                s_send_retries_left--;
-                s_ack_received = false;
-                if (espnow_send_data())
-                    s_send_deadline = millis() + ESPNOW_ACK_TIMEOUT_MS;
-                else
-                    s_send_pending = false;
-            }
-            else
-            {
-                s_send_pending = false;
-                s_gateway_connected = false;
-                console.printf("[%s] Send failed, re-pairing\n", TAG);
-                s_paired = false;
-                s_pair_attempts = 0;
-                s_last_espnow_pair = 0;
-            }
-        }
-    }
-
-    if (!s_send_pending && now - s_last_espnow_send > STATE_UPDATE_INTERVAL)
-    {
-        s_last_espnow_send = now;
-        s_ack_received = false;
-        if (espnow_send_data())
-        {
-            s_send_pending = true;
-            s_send_deadline = now + ESPNOW_ACK_TIMEOUT_MS;
-            s_send_retries_left = ESPNOW_SEND_RETRIES;
-        }
-    }
+    s_radio.loop();
 
     if (now - s_last_timer_check > TIMER_CHECK_INTERVAL_MS)
     {
@@ -1701,11 +1412,9 @@ void loop(void)
     {
         console.printf("[%s] Pulse timeout (%d min), turning OFF\n", TAG, s_pulse_duration_min);
         set_relay(false);
-        if (s_paired)
+        if (s_radio.is_paired())
         {
-            s_last_espnow_send = 0;
-            if (espnow_send_data())
-                s_last_send_ms = millis();
+            s_radio.publish_state();
         }
     }
 
@@ -1713,8 +1422,6 @@ void loop(void)
     {
         s_last_heartbeat = now;
         console.printf("[%s] RSSI=%d dBm  up=%lus\n", TAG, WiFi.RSSI(), (millis() - s_start_time) / 1000);
-        if (s_paired)
-            espnow_send_heartbeat();
     }
 
 #ifdef LED_PIN
@@ -1735,7 +1442,7 @@ void loop(void)
             digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
     }
-    else if (!s_paired)
+    else if (!s_radio.is_paired())
     {
         if (now - last_led >= LED_BLINK_GATEWAY_MS)
         {

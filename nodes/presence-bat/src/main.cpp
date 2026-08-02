@@ -1,9 +1,8 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include "platform.h"
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 #include <EEPROM.h>
-#include <espnow.h>
 #include "config.h"
 #include "shared_config.h"
 #include "espnow_protocol.h"
@@ -99,7 +98,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     if (!data || len < 1) return;
     switch (data[0])
     {
-    case ESPNOW_MSG_PAIR_RESPONSE:
+    case MSG_PAIR_RESPONSE:
     {
         if (len < sizeof(espnow_pair_response_t)) return;
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
@@ -115,7 +114,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         }
         break;
     }
-    case ESPNOW_MSG_ACK:
+    case MSG_ACK:
     {
         if (len < sizeof(espnow_ack_t)) return;
         espnow_ack_t *ack = (espnow_ack_t *)data;
@@ -123,7 +122,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
             s_ack_received = true;
         break;
     }
-    case ESPNOW_MSG_RESTART:
+    case MSG_RESTART:
     {
         if (len < sizeof(espnow_restart_t)) return;
         espnow_restart_t *rst = (espnow_restart_t *)data;
@@ -144,7 +143,7 @@ static bool espnow_send_pair_request(void)
     uint8_t buf[sizeof(espnow_pair_request_t)];
     memset(buf, 0, sizeof(buf));
     espnow_pair_request_t *req = (espnow_pair_request_t *)buf;
-    req->msg_type = ESPNOW_MSG_PAIR_REQUEST;
+    req->msg_type = MSG_PAIR_REQUEST;
     req->sequence = s_sequence++;
     WiFi.macAddress(req->sensor_mac);
     req->sensor_type = SENSOR_TYPE_MOTION;
@@ -166,7 +165,7 @@ static bool espnow_send_data(void)
     memset(buf, 0, sizeof(buf));
     espnow_header_t *hdr = (espnow_header_t *)buf;
     hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_SENSOR_DATA;
+    hdr->msg_type = MSG_SENSOR_DATA;
     hdr->sequence = s_sequence++;
     WiFi.macAddress(hdr->sensor_mac);
     hdr->sensor_type = SENSOR_TYPE_MOTION;
@@ -260,8 +259,8 @@ void setup(void)
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
 
-    uint32_t chip_id = ESP.getChipId();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", chip_id);
+    uint32_t id = chip_id();
+    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     EEPROM.begin(128);
     EEPROM.get(EEPROM_INTERVAL_ADDR, s_interval_s);

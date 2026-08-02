@@ -2,28 +2,23 @@
 #define LORA_HANDLER_H
 
 #include "radio_interface.h"
-#include <LoRa.h>
-
-#define LORA_RX_BUF_SIZE 256
+#include "lora_spi_radio.h"
+#include "lora_protocol.h"
 
 class LoraHandler : public RadioInterface {
 public:
-    LoraHandler() : m_ok(false), m_rx_len(0) {}
-    ~LoraHandler() {}
-
+    LoraHandler();
     int init() override;
     int send(const uint8_t* data, size_t len) override;
     void loop() override;
     bool is_ready() const override;
     bool send_command(const uint8_t* mac, uint8_t state) override;
     bool send_restart(const uint8_t* mac) override;
-
+    void set_rx_callback(rx_callback_t cb, void* arg = nullptr) {
+        m_radio.set_rx_callback(cb, arg);
+    }
 private:
-    bool m_ok;
-    uint8_t m_rx_buf[LORA_RX_BUF_SIZE];
-    int m_rx_len;
-
-    void handle_rx();
+    LoraSpiRadio m_radio;
 };
 
 #endif

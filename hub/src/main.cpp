@@ -6,17 +6,20 @@
 #include "sensor_registry.h"
 #include "radio_manager.h"
 #include "mqtt_client.h"
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
 #include "espnow_handler.h"
 #endif
 #include "web_server.h"
 #include "common_ota.h"
 #include "log_buffer.h"
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
 #include "lora_handler.h"
 #include "lora_protocol.h"
 #endif
-#ifdef HABILITA_DISPLAY
+#ifdef TCP_ENABLED
+#include "tcp_radio_handler.h"
+#endif
+#if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
 #include "display_handler.h"
 #endif
 #include "common_console.h"
@@ -32,15 +35,18 @@ static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
 
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
 static EspnowHandler s_espnow;
 #endif
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
 static LoraHandler s_lora;
 #define LORA_PENDING_STATE_MAX 5
 static uint8_t s_lora_pending_state_slots[LORA_PENDING_STATE_MAX];
 static int s_lora_pending_state_head = 0;
 static int s_lora_pending_state_tail = 0;
+#endif
+#ifdef TCP_ENABLED
+static TcpRadioHandler s_tcp;
 #endif
 
 RadioManager s_radio_mgr;
@@ -134,7 +140,7 @@ void handle_console(char c) {
     }
 }
 
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
 static void queue_bridge_state(int slot) {
     int next = (s_lora_pending_state_head + 1) % LORA_PENDING_STATE_MAX;
     if (next == s_lora_pending_state_tail) return;
@@ -160,7 +166,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
     int slot = sensor_registry_find_by_mac(frame->sensor_id);
 
     switch (frame->msg_type) {
-        case LORA_MSG_PAIR_REQUEST: {
+        case MSG_PAIR_REQUEST: {
             if (slot < 0) {
                 slot = sensor_registry_find_free_slot();
                 if (slot < 0) return;
@@ -174,7 +180,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             }
             lora_pair_response_t resp;
             memset(&resp, 0, sizeof(resp));
-            resp.msg_type = LORA_MSG_PAIR_RESPONSE;
+            resp.msg_type = MSG_PAIR_RESPONSE;
             resp.sequence = frame->sequence;
             memcpy(resp.sensor_id, frame->sensor_id, 6);
             resp.payload_len = 1;
@@ -182,7 +188,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             s_lora.send((const uint8_t*)&resp, sizeof(resp));
             break;
         }
-        case LORA_MSG_SENSOR_DATA: {
+        case MSG_SENSOR_DATA: {
             if (slot >= 0) {
                 espnow_header_t hdr;
                 memset(&hdr, 0, sizeof(hdr));
@@ -194,7 +200,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             }
             break;
         }
-        case LORA_MSG_HEARTBEAT: {
+        case MSG_HEARTBEAT: {
             if (slot >= 0) {
                 virtual_sensor_t *s = sensor_registry_get(slot);
                 if (s) {
@@ -219,9 +225,11 @@ void setup() {
     
     console.printf("\n");
     console.printf("============================================\n");
-#ifdef HABILITA_ESPNOW
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+    console.printf("  " PLATFORM_PREFIX " LoRa + ESP-NOW Gateway %s\n", FW_VERSION);
+#elif defined(ESPNOW_ENABLED)
     console.printf("  " PLATFORM_PREFIX " ESP-NOW Gateway %s\n", FW_VERSION);
-#elif defined(HABILITA_LORA)
+#elif defined(LORA_ENABLED)
     console.printf("  " PLATFORM_PREFIX " LoRa Gateway %s\n", FW_VERSION);
 #else
     console.printf("  " PLATFORM_PREFIX " Gateway %s\n", FW_VERSION);
@@ -242,20 +250,34 @@ void setup() {
     ota_setup(get_gateway_device_id());
     console.begin();
     {
-        char banner[48];
+        char banner[64];
+#if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
+        snprintf(banner, sizeof(banner), PLATFORM_PREFIX " LoRa + ESP-NOW Gateway %s", FW_VERSION);
+#elif defined(ESPNOW_ENABLED)
+        snprintf(banner, sizeof(banner), PLATFORM_PREFIX " ESP-NOW Gateway %s", FW_VERSION);
+#elif defined(LORA_ENABLED)
+        snprintf(banner, sizeof(banner), PLATFORM_PREFIX " LoRa Gateway %s", FW_VERSION);
+#else
         snprintf(banner, sizeof(banner), PLATFORM_PREFIX " Gateway %s", FW_VERSION);
+#endif
         console.set_banner(banner);
     }
-#ifdef HABILITA_ESPNOW
+#ifdef ESPNOW_ENABLED
     s_espnow.set_rx_callback(nullptr, nullptr);
     s_radio_mgr.add_radio(RADIO_ESPNOW, &s_espnow);
+    console.println("ESPNOW provisioned");
 #endif
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
     s_lora.set_rx_callback(lora_rx_cb, nullptr);
     s_radio_mgr.add_radio(RADIO_LORA, &s_lora);
+    console.println("LoRa provisioned");
+#endif
+#ifdef TCP_ENABLED
+    s_radio_mgr.add_radio(RADIO_TCP, &s_tcp);
+    console.println("TCP provisioned");
 #endif
     s_radio_mgr.init_all();
-#ifdef HABILITA_DISPLAY
+#if defined(DISPLAY_ENABLED) || defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_init();
 #endif
     s_radio_mgr.all_announce();
@@ -305,10 +327,10 @@ void loop() {
     web_server_loop();
     web_server_maintain_wifi();
     s_radio_mgr.loop_all();
-#ifdef HABILITA_LORA
+#ifdef LORA_ENABLED
     lora_process_bridge_queue();
 #endif
-#ifdef HABILITA_DISPLAY
+#if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_loop();
 #endif
     mqtt_client_loop();
