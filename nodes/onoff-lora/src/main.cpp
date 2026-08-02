@@ -14,7 +14,7 @@
 #include "common_console.h"
 #include "display.h"
 
-#define SENSOR_TYPE_ONOFF 8
+#include "sensor_type.h"
 #include "myWiFiManager.h"
 
 static LoraSpiConfig s_lora_cfg = []() {
