@@ -2,8 +2,16 @@
 #include <Arduino.h>
 #include "shared_config.h"
 #include "tcp_protocol.h"
+#include "espnow_protocol.h"
 
 #define DEVICE_NAME "AgriSense TCP Node"
+#define DEVICE_TYPE "tcp_node"
+#define SENSOR_TYPE SENSOR_TYPE_TEMP_HUM
+
+// WiFi
+#define WIFI_CONFIG_PORTAL_SSID "AgriSense-TCP-Setup"
+#define WIFI_CONFIG_PORTAL_PASS "agrisense"
+#define WIFI_CONNECT_TIMEOUT 120000
 
 // Hub connection defaults (overridden by EEPROM or UDP discovery)
 #define HUB_IP_DEFAULT "192.168.1.100"
