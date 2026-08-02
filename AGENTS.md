@@ -117,6 +117,7 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 - `hub` — ESP8266/ESP32 ESP-NOW Hub — estável em **v1.0.1** (2026-07-24)
 - `nodes/climate-gas` — sensor DHT22 + MQ-2 ESP-NOW (dashboard Detalhes/OTA/toggles temp+gás, WIFI_NONE_SLEEP) — estável em **v0.0.30** (2026-07-22)
 - `nodes/presence` — sensor PIR ESP-NOW (broadcast, OTA, /api/restart) — estável em **v0.0.30** (2026-07-22)
+- `nodes/tcp` — node TCP via WiFi HTTP + UDP discovery — estável em **v0.0.1** (2026-08-01)
 
 ### Nodes em desenvolvimento
 - `nodes/switch` - relé com suporte a Alexa - atributos exclusivo para on/off
