@@ -307,6 +307,9 @@ input:focus{border-color:var(--primary)}
 <input type="text" id="ssid" placeholder="Nome da rede WiFi" required>
 <label for="password">Senha</label>
 <input type="password" id="password" placeholder="Senha">
+<label for="wifiChannel">Canal WiFi (0=auto)</label>
+<input type="number" id="wifiChannel" min="0" max="13" placeholder="0 = auto">
+<div class="hint">0 = automático. 1-13 = força canal específico.</div>
 <label for="devName">Nome do Dispositivo</label>
 <input type="text" id="devName" placeholder="Ex: Gas">
 <button type="submit" class="btn" id="submitBtn">Conectar</button>
@@ -314,12 +317,12 @@ input:focus{border-color:var(--primary)}
 <div id="msg" class="msg" style="display:none"></div>
 </div>
 <script>
-async function loadStatus(){try{var r=await fetch('/api/wifi');var d=await r.json();document.getElementById('devName').value=d.device_name||''}catch(e){}}
+async function loadStatus(){try{var r=await fetch('/api/wifi');var d=await r.json();document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
 function showMsg(t,c){var m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
 function loading(v){document.getElementById('submitBtn').style.opacity=v?0.5:1;document.getElementById('submitBtn').disabled=v}
 async function submitForm(){var ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}
-var pass=document.getElementById('password').value;var name=document.getElementById('devName').value.trim();loading(true);
-var body={ssid:ssid,password:pass};if(name)body.device_name=name;
+var pass=document.getElementById('password').value;var name=document.getElementById('devName').value.trim();var ch=parseInt(document.getElementById('wifiChannel').value)||0;loading(true);
+var body={ssid:ssid,password:pass};if(name)body.device_name=name;if(ch>=0&&ch<=13)body.channel=ch;
 try{var r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});var d=await r.json();
 if(d.status==='ok'){showMsg('Conectando...','ok');setTimeout(function(){showMsg('AP reativado se falhar','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
 catch(e){showMsg('Erro: '+e.message,'err');loading(false)}return false}

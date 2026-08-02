@@ -124,3 +124,6 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 - `nodes/onoff-lora` — relé LoRa (SX1278 + TTGO LoRa32 V1), dashboard padrão, WiFi não-bloqueante, OTA, console/telnet
 - `nodes/extender` — extensor de alcance ESP-NOW
 - `nodes/rain` — sensor de chuva ESP-NOW
+
+##Sanitize
+- se algum texto conter vicios de linguagem, corrigir e apresentar o texto corrigido em seguida, não dispensar acentuações, concordância ou vícios na sintática

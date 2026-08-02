@@ -276,12 +276,13 @@ void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {
 }
 
 void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
-    if (!data || len < 1) { m_crc_errors++; return; }
+    if (!data || len < 1) { m_crc_errors++; console.printf("[ESPNOW] RX null/empty, len=%d\n", len); return; }
     m_rx_count++;
     uint8_t msg_type = data[0];
 
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
+    console.printf("[ESPNOW] RX msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
 
     switch (msg_type) {
         case MSG_PAIR_REQUEST: {
@@ -355,6 +356,15 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                     send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
                 }
             }
+            break;
+        }
+
+        case MSG_GW_ANNOUNCE: {
+            // Another gateway/extender announcing — log only, no action needed
+            const espnow_gw_announce_t *ann = (const espnow_gw_announce_t*)data;
+            char ann_mac[18];
+            mac_to_str(ann->gateway_mac, ann_mac, sizeof(ann_mac));
+            console.printf("[ESPNOW] GW_ANNOUNCE from extender %s (src %s)\n", ann_mac, mac_str);
             break;
         }
 
@@ -434,6 +444,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
         }
 
         default:
+            console.printf("[ESPNOW] UNKNOWN msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
             m_crc_errors++;
             break;
     }

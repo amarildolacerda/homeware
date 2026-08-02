@@ -11,6 +11,7 @@
 #include "radio_node_strategy.h"
 #include "common_console.h"
 #include "common_espnow.h"
+#include "common_wifi.h"
 #include "common_web.h"
 
 static const char *TAG = "agri-presence";
@@ -223,6 +224,7 @@ static void handle_api_state(void)
         doc["paired"] = s_radio.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
+        doc["wifi_channel"] = WiFi.channel();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         doc["slot"] = s_radio.assigned_slot();
         doc["tx_count"] = s_radio.tx_count();
@@ -366,6 +368,15 @@ static void handle_ota_upload(void)
     }
 }
 
+static void on_pairing_failed() {
+    console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
+    if (mywifi_try_next_bssid()) {
+        console.printf("[%s] Reconnecting, will retry pairing\n", TAG);
+    } else {
+        console.printf("[%s] No other APs found, will retry on current\n", TAG);
+    }
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -400,7 +411,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr };
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr, on_pairing_failed };
     s_radio.load_gateway_mac();
     s_radio.begin();
 

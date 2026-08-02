@@ -1447,6 +1447,41 @@ R"rawliteral(
 <div class="desc">Lista redes Wi-Fi visíveis (usado pelo portal)</div>
 </div>
 
+<h2>TCP Radio (Nodes)</h2>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/register</span></div>
+<div class="desc">Registra um node TCP no hub</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
+<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor 1-10 (obrigatorio)</td></tr>
+<tr><td><code>device_name</code></td><td>string</td><td>Nome do device (obrigatorio)</td></tr>
+<tr><td><code>fw_version</code></td><td>string</td><td>Versao do firmware (opcional)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/state</span></div>
+<div class="desc">Atualiza estado de um node TCP</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
+<tr><td><code>state</code></td><td>object</td><td>Campos variam por tipo de sensor (temperature, humidity, gas_level, alarm, state)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method post">POST</span><span class="path">/node/heartbeat</span></div>
+<div class="desc">Heartbeat de um node TCP (mantem online)</div>
+<div class="params">
+<table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
+<tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr></table>
+</div>
+</div>
+<div class="endpoint">
+<div class="head"><span class="method get">GET</span><span class="path">/node/command/<span>{device_id}</span></span></div>
+<div class="desc">Consulta comandos pendentes para um node (polling)</div>
+<div class="desc">Retorna <code>{"command":"on"|"off"|"restart"}</code> ou <code>{}</code> se vazio</div>
+</div>
+
 <h2>Manutencao</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>

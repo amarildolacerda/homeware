@@ -14,6 +14,7 @@
 #include "common_espnow.h"
 #include "common_web.h"
 #include "common_repeater.h"
+#include "common_wifi.h"
 #include "timer.h"
 #include <LittleFS.h>
 
@@ -515,6 +516,8 @@ static void handle_api_wifi(void)
         doc["ap_active"] = s_config_portal_active;
         doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
         doc["device_name"] = s_device_name;
+        doc["channel"] = mywifi_configured_channel();
+        doc["wifi_channel"] = WiFi.channel();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -559,6 +562,13 @@ static void handle_api_wifi(void)
                 }
             }
 
+            if (doc.containsKey("channel"))
+            {
+                uint8_t ch = doc["channel"];
+                if (ch > 0 && ch <= 13)
+                    mywifi_save_channel(ch);
+            }
+
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
             save_wifi_credentials(ssid, pass);
@@ -596,6 +606,7 @@ static void handle_api_state(void)
         doc["paired"] = s_radio.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
+        doc["wifi_channel"] = WiFi.channel();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         doc["slot"] = s_radio.assigned_slot();
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
@@ -1221,6 +1232,15 @@ static void handle_ota_upload(void)
     }
 }
 
+static void on_pairing_failed() {
+    console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
+    if (mywifi_try_next_bssid()) {
+        console.printf("[%s] Reconnecting, will retry pairing\n", TAG);
+    } else {
+        console.printf("[%s] No other APs found, will retry on current\n", TAG);
+    }
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -1250,7 +1270,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr };
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr, on_pairing_failed };
     s_radio.load_gateway_mac();
     s_radio.begin();
 

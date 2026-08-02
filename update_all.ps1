@@ -80,7 +80,7 @@ function Discover-Devices {
         exit 1
     }
     Write-Host "Descobrindo dispositivos via scan.py..." -ForegroundColor Cyan
-    $raw = & python3 $scanPy --json 2>&1
+    $raw = & py $scanPy --json 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Error "scan.py falhou: $raw"
         exit 1

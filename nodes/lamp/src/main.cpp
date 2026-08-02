@@ -625,6 +625,8 @@ static void handle_api_wifi(void)
         doc["ap_active"] = s_config_portal_active;
         doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
         doc["device_name"] = s_device_name;
+        doc["channel"] = mywifi_configured_channel();
+        doc["wifi_channel"] = WiFi.channel();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -669,6 +671,13 @@ static void handle_api_wifi(void)
                 }
             }
 #endif
+
+            if (doc.containsKey("channel"))
+            {
+                uint8_t ch = doc["channel"];
+                if (ch > 0 && ch <= 13)
+                    mywifi_save_channel(ch);
+            }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
@@ -722,6 +731,7 @@ static void handle_api_state(void)
         doc["paired"] = s_radio.is_paired();
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
+        doc["wifi_channel"] = WiFi.channel();
         char upbuf[32];
         uptime_to_str(millis() - s_start_time, upbuf, sizeof(upbuf));
         doc["uptime"] = upbuf;
@@ -1524,6 +1534,15 @@ static void on_forward(const uint8_t* data, size_t len, const uint8_t* mac) {
 #endif
 }
 
+static void on_pairing_failed() {
+    console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
+    if (mywifi_try_next_bssid()) {
+        console.printf("[%s] Reconnecting, will retry pairing\n", TAG);
+    } else {
+        console.printf("[%s] No other APs found, will retry on current\n", TAG);
+    }
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -1571,7 +1590,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward };
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed };
     s_radio.set_pair_interval(ESPNOW_PAIR_INTERVAL_MS);
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
@@ -1689,7 +1708,8 @@ void loop(void)
     {
         bool btn = digitalRead(s_button_pin);
         unsigned long now = millis();
-        if (btn != s_button_last && now - s_button_last_ms > 50)
+        // Ignorar GPIO nos primeiros 2s apos boot (float/ruido)
+        if (now - s_start_time > 2000 && btn != s_button_last && now - s_button_last_ms > 100)
         {
             s_button_last_ms = now;
             s_button_last = btn;
