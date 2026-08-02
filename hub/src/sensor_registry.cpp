@@ -170,7 +170,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             }
             break;
         }
-        case SENSOR_TYPE_TANK: {
+        case SENSOR_TYPE_LEVEL: {
             if (payload_len >= sizeof(payload_tank_t)) {
                 payload_tank_t *p = (payload_tank_t*)payload;
                 s->state.tank.level_pct = p->level_pct;
@@ -217,7 +217,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_GAS:      expected = sizeof(payload_gas_t); break;
         case SENSOR_TYPE_DHT_GAS:  expected = sizeof(payload_dht_gas_t); break;
         case SENSOR_TYPE_RAIN:     expected = sizeof(payload_rain_t); break;
-        case SENSOR_TYPE_TANK:     expected = sizeof(payload_tank_t); break;
+        case SENSOR_TYPE_LEVEL:     expected = sizeof(payload_tank_t); break;
         case SENSOR_TYPE_ONOFF:
         case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
         case SENSOR_TYPE_REPEATER: expected = sizeof(payload_repeater_status_t); break;
@@ -347,7 +347,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
         case SENSOR_TYPE_RAIN: return "Chuva";
         case SENSOR_TYPE_ONOFF: return "Interruptor";
         case SENSOR_TYPE_LIGHT: return "Lâmpada";
-        case SENSOR_TYPE_TANK: return "Tanque";
+        case SENSOR_TYPE_LEVEL: return "Tanque";
         case SENSOR_TYPE_REPEATER: return "Repeater";
         case SENSOR_TYPE_SOIL_MOISTURE: return "Solo";
         default: return "Sensor";
@@ -364,7 +364,7 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_RAIN: return "rain";
         case SENSOR_TYPE_ONOFF: return "onoff";
         case SENSOR_TYPE_LIGHT: return "light";
-        case SENSOR_TYPE_TANK: return "tanque";
+        case SENSOR_TYPE_LEVEL: return "tanque";
         case SENSOR_TYPE_REPEATER: return "repeater";
         case SENSOR_TYPE_SOIL_MOISTURE: return "soil_moisture";
         default: return "unknown";

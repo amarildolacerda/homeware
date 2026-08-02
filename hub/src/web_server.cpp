@@ -319,7 +319,7 @@ void web_server_init() {
                         state["rain_level"] = s->state.rain.rain_level;
                         state["rain_digital"] = s->state.rain.rain_digital;
                         break;
-                    case SENSOR_TYPE_TANK:
+                    case SENSOR_TYPE_LEVEL:
                         state["level_pct"] = s->state.tank.level_pct;
                         state["distance_cm"] = s->state.tank.distance_cm;
                         break;
