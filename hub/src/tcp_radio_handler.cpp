@@ -318,7 +318,7 @@ void TcpRadioHandler::handle_udp_discover() {
     if (len < 1) return;
 
     uint8_t msg_type = buf[0];
-    if (msg_type != TCP_MSG_GW_DISCOVER) return;
+    if (msg_type != MSG_GW_DISCOVER) return;
 
     tcp_gw_discover_t* discover = (tcp_gw_discover_t*)buf;
 
@@ -326,7 +326,7 @@ void TcpRadioHandler::handle_udp_discover() {
                    discover->device_name, discover->sensor_type);
 
     tcp_gw_announce_t announce;
-    announce.msg_type = TCP_MSG_GW_ANNOUNCE;
+    announce.msg_type = MSG_GW_ANNOUNCE;
     memset(announce.fw_version, 0, sizeof(announce.fw_version));
 
     IPAddress ip = WiFi.localIP();

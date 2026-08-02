@@ -69,7 +69,7 @@ void test_espnow_init_sends_pair_request() {
     s_proto.set_mac(s_test_mac);
     s_proto.begin();
     TEST_ASSERT_TRUE(g_mock_last_send.sent);
-    TEST_ASSERT_EQUAL(ESPNOW_MSG_PAIR_REQUEST, g_mock_last_send.data[0]);
+    TEST_ASSERT_EQUAL(MSG_PAIR_REQUEST, g_mock_last_send.data[0]);
 }
 
 void test_espnow_paired_after_pair_response() {
@@ -81,7 +81,7 @@ void test_espnow_paired_after_pair_response() {
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.version = ESPNOW_PROTOCOL_VERSION;
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     resp.sequence = 0;
     memcpy(resp.sensor_mac, s_test_mac, 6);
     resp.assigned_slot = 3;
@@ -102,7 +102,7 @@ void test_espnow_sends_sensor_data() {
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.version = ESPNOW_PROTOCOL_VERSION;
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     memcpy(resp.sensor_mac, s_test_mac, 6);
     resp.assigned_slot = 1;
     s_proto.handle_frame(s_test_mac, (const uint8_t*)&resp, sizeof(resp));
@@ -112,7 +112,7 @@ void test_espnow_sends_sensor_data() {
     s_proto.publish_state();
     s_proto.loop();
     TEST_ASSERT_TRUE(g_mock_last_send.sent);
-    TEST_ASSERT_EQUAL(ESPNOW_MSG_SENSOR_DATA, g_mock_last_send.data[1]);
+    TEST_ASSERT_EQUAL(MSG_SENSOR_DATA, g_mock_last_send.data[1]);
 }
 
 void test_espnow_heartbeat() {
@@ -124,7 +124,7 @@ void test_espnow_heartbeat() {
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.version = ESPNOW_PROTOCOL_VERSION;
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     memcpy(resp.sensor_mac, s_test_mac, 6);
     resp.assigned_slot = 1;
     s_proto.handle_frame(s_test_mac, (const uint8_t*)&resp, sizeof(resp));
@@ -133,7 +133,7 @@ void test_espnow_heartbeat() {
     memset(&g_mock_last_send, 0, sizeof(g_mock_last_send));
     s_proto.loop();
     TEST_ASSERT_TRUE(g_mock_last_send.sent);
-    TEST_ASSERT_EQUAL(ESPNOW_MSG_HEARTBEAT, g_mock_last_send.data[1]);
+    TEST_ASSERT_EQUAL(MSG_HEARTBEAT, g_mock_last_send.data[1]);
 }
 
 void test_espnow_command_callback() {
@@ -145,7 +145,7 @@ void test_espnow_command_callback() {
     espnow_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
     cmd.version = ESPNOW_PROTOCOL_VERSION;
-    cmd.msg_type = ESPNOW_MSG_COMMAND;
+    cmd.msg_type = MSG_COMMAND;
     memcpy(cmd.target_mac, s_test_mac, 6);
     cmd.state = 1;
     s_proto.handle_frame(s_test_mac, (const uint8_t*)&cmd, sizeof(cmd));
@@ -174,7 +174,7 @@ void test_espnow_force_repair() {
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.version = ESPNOW_PROTOCOL_VERSION;
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     memcpy(resp.sensor_mac, s_test_mac, 6);
     s_proto.handle_frame(s_test_mac, (const uint8_t*)&resp, sizeof(resp));
     TEST_ASSERT_TRUE(s_proto.is_paired());
@@ -203,7 +203,7 @@ void test_espnow_ack_timeout_retry() {
     espnow_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.version = ESPNOW_PROTOCOL_VERSION;
-    resp.msg_type = ESPNOW_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     memcpy(resp.sensor_mac, s_test_mac, 6);
     s_proto.handle_frame(s_test_mac, (const uint8_t*)&resp, sizeof(resp));
 

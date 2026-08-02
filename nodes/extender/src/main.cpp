@@ -168,7 +168,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     s_received++;
 
     /* Learn unknown peers as clients (except gateway and GW_ANNOUNCE) */
-    if ((!s_gateway_configured || !mac_equal(mac, s_gateway_mac)) && data[0] != ESPNOW_MSG_GW_ANNOUNCE)
+    if ((!s_gateway_configured || !mac_equal(mac, s_gateway_mac)) && data[0] != MSG_GW_ANNOUNCE)
     {
         if (!is_client_known(mac))
             learn_client(mac);
@@ -178,30 +178,30 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     uint16_t sequence = 0;
 
     /* Extract sequence from known message types */
-    if (msg_type == ESPNOW_MSG_SENSOR_DATA && len >= 3)
+    if (msg_type == MSG_SENSOR_DATA && len >= 3)
     {
         sequence = data[1] | ((uint16_t)data[2] << 8);
     }
-    else if (msg_type == ESPNOW_MSG_HEARTBEAT && len >= 3)
+    else if (msg_type == MSG_HEARTBEAT && len >= 3)
     {
         sequence = data[1] | ((uint16_t)data[2] << 8);
     }
-    else if (msg_type == ESPNOW_MSG_PAIR_REQUEST && len >= 3)
+    else if (msg_type == MSG_PAIR_REQUEST && len >= 3)
     {
         espnow_pair_request_t *req = (espnow_pair_request_t *)data;
         sequence = req->sequence;
     }
-    else if (msg_type == ESPNOW_MSG_ACK && len >= 3)
+    else if (msg_type == MSG_ACK && len >= 3)
     {
         espnow_ack_t *ack = (espnow_ack_t *)data;
         sequence = ack->sequence;
     }
-    else if (msg_type == ESPNOW_MSG_PAIR_RESPONSE && len >= 3)
+    else if (msg_type == MSG_PAIR_RESPONSE && len >= 3)
     {
         espnow_pair_response_t *resp = (espnow_pair_response_t *)data;
         sequence = resp->sequence;
     }
-    else if (msg_type == ESPNOW_MSG_GW_ANNOUNCE && len >= sizeof(espnow_gw_announce_t))
+    else if (msg_type == MSG_GW_ANNOUNCE && len >= sizeof(espnow_gw_announce_t))
     {
         espnow_gw_announce_t *ann = (espnow_gw_announce_t *)data;
         if (!s_gateway_configured || !mac_equal(mac, s_gateway_mac))
@@ -219,14 +219,14 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
     /* NAK se não temos gateway (SPEC_ESPNOW §13.2) */
-    if (msg_type == ESPNOW_MSG_PAIR_REQUEST && len >= sizeof(espnow_pair_request_t))
+    if (msg_type == MSG_PAIR_REQUEST && len >= sizeof(espnow_pair_request_t))
     {
         if (!s_gateway_configured || (millis() - s_last_gateway_comm > GATEWAY_TIMEOUT_MS))
         {
             espnow_pair_request_t *req = (espnow_pair_request_t *)data;
             espnow_nak_t nak;
             memset(&nak, 0, sizeof(nak));
-            nak.msg_type = ESPNOW_MSG_NAK;
+            nak.msg_type = MSG_NAK;
             nak.sequence = req->sequence;
             mac_copy(nak.target_mac, req->sensor_mac);
             nak.reason = NAK_REASON_NO_GATEWAY;
@@ -241,7 +241,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
     }
 
     /* Restart command targeting this repeater */
-    if (msg_type == ESPNOW_MSG_RESTART && len >= sizeof(espnow_restart_t))
+    if (msg_type == MSG_RESTART && len >= sizeof(espnow_restart_t))
     {
         espnow_restart_t *rst = (espnow_restart_t *)data;
         if (mac_equal(rst->target_mac, s_my_mac))
@@ -260,7 +260,7 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
         /* ACK from gateway to THIS repeater proves the uplink (gateway is
            actually receiving our REPEATER_STATUS / forwarded frames). Use it
            for the reachability feedback instead of downlink-only comm. */
-        if (msg_type == ESPNOW_MSG_ACK && len >= sizeof(espnow_ack_t))
+        if (msg_type == MSG_ACK && len >= sizeof(espnow_ack_t))
         {
             espnow_ack_t *ack = (espnow_ack_t *)data;
             uint8_t my_mac[6];
@@ -549,7 +549,7 @@ static bool init_espnow(void)
 
 static void send_gw_discover(void)
 {
-    espnow_gw_discover_t disc = { .msg_type = ESPNOW_MSG_GW_DISCOVER };
+    espnow_gw_discover_t disc = { .msg_type = MSG_GW_DISCOVER };
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     espnow_send_wrapper(broadcast_mac, (uint8_t *)&disc, sizeof(disc), TAG);
     console.printf("[%s] GW_DISCOVER sent\n", TAG);
@@ -564,7 +564,7 @@ static void send_repeater_status(void)
 
     espnow_header_t *hdr = (espnow_header_t *)buf;
     hdr->version = ESPNOW_PROTOCOL_VERSION;
-    hdr->msg_type = ESPNOW_MSG_REPEATER_STATUS;
+    hdr->msg_type = MSG_REPEATER_STATUS;
     hdr->sequence = 0;
     WiFi.macAddress(hdr->sensor_mac);
     hdr->sensor_type = SENSOR_TYPE_REPEATER;
@@ -984,7 +984,7 @@ void loop(void)
             console.printf("[%s] Gateway lost! Notifying clients...\n", TAG);
             espnow_nak_t nak;
             memset(&nak, 0, sizeof(nak));
-            nak.msg_type = ESPNOW_MSG_NAK;
+            nak.msg_type = MSG_NAK;
             nak.sequence = 0;
             memset(nak.target_mac, 0xFF, 6);  /* broadcast */
             nak.reason = NAK_REASON_GATEWAY_LOST;

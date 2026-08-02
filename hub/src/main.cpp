@@ -166,7 +166,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
     int slot = sensor_registry_find_by_mac(frame->sensor_id);
 
     switch (frame->msg_type) {
-        case LORA_MSG_PAIR_REQUEST: {
+        case MSG_PAIR_REQUEST: {
             if (slot < 0) {
                 slot = sensor_registry_find_free_slot();
                 if (slot < 0) return;
@@ -180,7 +180,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             }
             lora_pair_response_t resp;
             memset(&resp, 0, sizeof(resp));
-            resp.msg_type = LORA_MSG_PAIR_RESPONSE;
+            resp.msg_type = MSG_PAIR_RESPONSE;
             resp.sequence = frame->sequence;
             memcpy(resp.sensor_id, frame->sensor_id, 6);
             resp.payload_len = 1;
@@ -188,7 +188,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             s_lora.send((const uint8_t*)&resp, sizeof(resp));
             break;
         }
-        case LORA_MSG_SENSOR_DATA: {
+        case MSG_SENSOR_DATA: {
             if (slot >= 0) {
                 espnow_header_t hdr;
                 memset(&hdr, 0, sizeof(hdr));
@@ -200,7 +200,7 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             }
             break;
         }
-        case LORA_MSG_HEARTBEAT: {
+        case MSG_HEARTBEAT: {
             if (slot >= 0) {
                 virtual_sensor_t *s = sensor_registry_get(slot);
                 if (s) {

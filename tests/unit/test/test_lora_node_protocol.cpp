@@ -33,7 +33,7 @@ void test_node_protocol_sends_pair_request_on_begin() {
 
     TEST_ASSERT(mock.m_last_sent_len > 0);
     lora_frame_t* frame = (lora_frame_t*)mock.m_last_sent;
-    TEST_ASSERT_EQUAL(LORA_MSG_PAIR_REQUEST, frame->msg_type);
+    TEST_ASSERT_EQUAL(MSG_PAIR_REQUEST, frame->msg_type);
 }
 
 void test_node_protocol_sends_heartbeat_when_paired() {
@@ -48,7 +48,7 @@ void test_node_protocol_sends_heartbeat_when_paired() {
 
     lora_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
-    resp.msg_type = LORA_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     resp.assigned_slot = 1;
     memcpy(resp.sensor_id, s_test_mac, 6);
     mock.inject_rx((const uint8_t*)&resp, sizeof(resp), -50);
@@ -59,7 +59,7 @@ void test_node_protocol_sends_heartbeat_when_paired() {
 
     TEST_ASSERT(mock.m_last_sent_len > 0);
     lora_frame_t* frame = (lora_frame_t*)mock.m_last_sent;
-    TEST_ASSERT_EQUAL(LORA_MSG_HEARTBEAT, frame->msg_type);
+    TEST_ASSERT_EQUAL(MSG_HEARTBEAT, frame->msg_type);
 }
 
 void test_node_protocol_pair_response() {
@@ -71,7 +71,7 @@ void test_node_protocol_pair_response() {
 
     lora_pair_response_t resp;
     memset(&resp, 0, sizeof(resp));
-    resp.msg_type = LORA_MSG_PAIR_RESPONSE;
+    resp.msg_type = MSG_PAIR_RESPONSE;
     resp.assigned_slot = 5;
     memcpy(resp.sensor_id, s_test_mac, 6);
     mock.inject_rx((const uint8_t*)&resp, sizeof(resp), -50);
@@ -90,7 +90,7 @@ void test_node_protocol_handles_command() {
 
     lora_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.msg_type = LORA_MSG_COMMAND;
+    cmd.msg_type = MSG_COMMAND;
     cmd.command = 1;
     memcpy(cmd.sensor_id, s_test_mac, 6);
     mock.inject_rx((const uint8_t*)&cmd, sizeof(cmd), -50);

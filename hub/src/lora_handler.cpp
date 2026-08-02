@@ -31,7 +31,7 @@ bool LoraHandler::is_ready() const { return m_radio.is_ready(); }
 bool LoraHandler::send_command(const uint8_t* mac, uint8_t state) {
     lora_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.msg_type = LORA_MSG_COMMAND;
+    cmd.msg_type = MSG_COMMAND;
     cmd.sequence = 0;
     memcpy(cmd.sensor_id, mac, 6);
     cmd.command = state;
@@ -41,7 +41,7 @@ bool LoraHandler::send_command(const uint8_t* mac, uint8_t state) {
 bool LoraHandler::send_restart(const uint8_t* mac) {
     lora_command_t cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.msg_type = LORA_MSG_COMMAND;
+    cmd.msg_type = MSG_COMMAND;
     cmd.sequence = 0;
     memcpy(cmd.sensor_id, mac, 6);
     cmd.command = 0xFF;
