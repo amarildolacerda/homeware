@@ -83,7 +83,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 </div>
 <div class="nav-item" data-section="propriedades" onclick="showSection('propriedades')"><span>📋</span><span>Propriedades</span></div>
 )=====";
-#ifdef HABILITA_PINOS
+#ifdef PINS_ENABLED
 static const char PAGE_PINS_NAV[] PROGMEM = R"=====(
 <div class="nav-item" data-section="pins" onclick="showSection('pins')"><span>🔧</span><span>Pinos</span></div>
 )=====";
@@ -164,7 +164,7 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
 <div class="row"><span class="label">Multi-hubs</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="multihubCheck" onchange="savePins()"> aceitar comando de qualquer hub</label></div>
 )=====";
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
 static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
 <div class="row"><span class="label">Modo repetidor</span><button class="btn" id="repBtn" onclick="toggleRepeater()">-</button></div>
 )=====";
@@ -191,7 +191,7 @@ static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
 </div>
 )=====";
-#ifdef HABILITA_PINOS
+#ifdef PINS_ENABLED
 static const char PAGE_PINS_SEC[] PROGMEM = R"=====(
 <div class="section" id="secPins">
 <h1>Estado dos Pinos</h1>
@@ -317,7 +317,7 @@ async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=
 async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await r.json();let sel=document.getElementById('syncDeviceSelect');let curVal=sel.value;while(sel.options.length>2)sel.remove(2);arr.forEach(function(d){let o=document.createElement('option');o.value=d.id;o.text=d.name||d.id;sel.appendChild(o)});if(curVal!='__manual__'){let match=sel.querySelector('option[value="'+curVal+'"]');if(match)sel.value=curVal}}catch(e){}}
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 )=====";
-#ifdef HABILITA_PINOS
+#ifdef PINS_ENABLED
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
 async function fetchPins(){try{let r=await fetch('/api/pins');let d=await r.json();let list=document.getElementById('pinList');if(!list)return;
 list.innerHTML='';d.pins.forEach(function(p){

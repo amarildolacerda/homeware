@@ -505,7 +505,7 @@ static void init_hardware(void)
     {
         load_relay_state();
     }
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     repeater_init(EEPROM_REPEATER_EN_ADDR);
 #endif
     digitalWrite(s_relay_pin, s_relay_state ? RELAY_ON : !RELAY_ON);
@@ -605,11 +605,25 @@ static void handle_wifi(void)
                 bool ok = s_alexa.begin(&s_server);
                 s_alexa_initialized = ok;
                 console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
-                if (!ok)
+                if (!ok) {
                     console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
+                }
+
+                // Debug extra: verificar se o handler foi registrado
+                console.printf("[%s] Espalexa handleAlexaApiCall disponível: %s\n", TAG,
+                               s_alexa.handleAlexaApiCall("/test","{}") ? "SIM" : "NÃO");
+
+                // Re-registra onNotFound após begin()
+                s_server.onNotFound([]() {
+                    console.printf("[DEBUG] onNotFound chamado para URI: %s\n", s_server.uri().c_str());
+                    if (s_alexa_initialized &&
+                        s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain"))) {
+                        console.printf("[DEBUG] Alexa API call tratada: %s\n", s_server.uri().c_str());
+                        return;
+                    }
+                    s_server.send(404, "text/plain", "Not found");
+                });
             }
-            if (s_alexa_initialized)
-                console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
 #endif
             console.printf("  => Terminal:  'h' comando de ajuda\n");
         }
@@ -694,7 +708,7 @@ static void handle_api_wifi(void)
                 }
             }
 
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
             if (doc.containsKey("repeater_mac"))
             {
                 const char *mac_str = doc["repeater_mac"];
@@ -778,7 +792,7 @@ static void handle_root(void)
         (const char *)FPSTR(PAGE_DASHBOARD),
         (const char *)FPSTR(PAGE_PINS_NAV),
         (const char *)FPSTR(PAGE_DASHBOARD_CONT1),
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         (const char *)FPSTR(PAGE_DASHBOARD_REPEATER_CFG),
 #endif
         (const char *)FPSTR(PAGE_DASHBOARD_CONT3),
@@ -823,7 +837,7 @@ static void handle_api_state(void)
         doc["rx_count"] = s_radio.rx_count();
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
         doc["repeater_active"] = (repeater_get_fwd_count() > 0) || repeater_is_enabled();
         doc["repeater_enabled"] = repeater_is_enabled();
@@ -890,7 +904,7 @@ static void handle_api_relay(void)
     }
 }
 
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
 static void handle_api_repeater(void)
 {
     if (s_server.method() == HTTP_GET)
@@ -933,7 +947,7 @@ static void handle_api_repeater(void)
 }
 #endif
 
-#ifdef HABILITA_PINOS
+#ifdef PINS_ENABLED
 static uint32_t GPIOMUX[17] = {
     0x000, // GPIO0
     0x000, // GPIO1
@@ -1061,7 +1075,7 @@ static void handle_console(char c)
         console.printf("  r    - reset\n");
         console.printf("  s    - status do dispositivo\n");
         console.printf("  p    - resetar par e tentar parear\n");
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         console.printf("  e    - ligar/desligar repeater\n");
         console.printf("  x    - repeater stats\n");
 #endif
@@ -1097,7 +1111,7 @@ static void handle_console(char c)
         console.printf("-------------\n\n");
         break;
 #endif
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     case 'e':
     case 'E':
     {
@@ -1133,7 +1147,7 @@ static void handle_console(char c)
     case 'c':
     case 'C':
         s_on_count = 0;
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         repeater_reset_stats();
 #endif
         console.printf("[%s] Contadores zerados\n", TAG);
@@ -1168,7 +1182,7 @@ static void handle_console(char c)
 #ifdef ALEXA_ENABLED
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
 #endif
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         if (repeater_is_enabled())
         {
             char mac_str[18];
@@ -1608,7 +1622,7 @@ static void on_restart()
 
 static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 {
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     if (repeater_is_enabled() && mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
     {
         repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac,
@@ -1754,12 +1768,13 @@ void setup(void)
     s_server.on("/api/wifi", HTTP_ANY, handle_api_wifi);
     s_server.on("/api/state", handle_api_state);
     s_server.on("/api/relay", handle_api_relay);
-#ifdef HABILITA_REPEATER
+
+#ifdef REPEATER_ENABLED
     s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
 #endif
     s_server.on("/api/pin", HTTP_ANY, []()
                 { handle_api_pin(s_server); });
-#ifdef HABILITA_PINOS
+#ifdef PINS_ENABLED
     s_server.on("/api/pins", HTTP_GET, handle_api_pins);
 #endif
     s_server.on("/api/settings", HTTP_ANY, handle_api_settings);
@@ -1787,12 +1802,24 @@ void setup(void)
     s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
 
+#ifdef ALEXA_ENABLED
+    // onNotFound: delega para Espalexa quando aplicável.
+    // Registrado AQUI e re-registrado após s_alexa.begin() porque
+    // o begin() do Espalexa sobrescreve este handler.
+    s_server.onNotFound([]() {
+        if (s_alexa_initialized &&
+            s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
+            return;
+        s_server.send(404, "text/plain", "Not found");
+    });
+#endif
+
     ota_setup(s_device_id);
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
     /* Check for REPEATER_MAC from config.h */
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     if (strlen(REPEATER_MAC) > 0 && mac_parse(REPEATER_MAC, s_gateway_mac))
     {
         repeater_set_enabled(true);

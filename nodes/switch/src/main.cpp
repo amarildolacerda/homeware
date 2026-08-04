@@ -626,7 +626,7 @@ static void handle_api_state(void)
         doc["rx_count"] = s_radio.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
         doc["on_count"] = s_on_count;
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
         doc["repeater_enabled"] = repeater_is_enabled();
         doc["repeater_fwd"] = repeater_get_fwd_count();
@@ -1156,7 +1156,7 @@ static void handle_api_pulse(void)
     }
 }
 
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
 static void handle_api_repeater(void)
 {
     if (s_server.method() == HTTP_GET) {
@@ -1291,7 +1291,7 @@ void setup(void)
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/pulse", HTTP_ANY, handle_api_pulse);
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
 #endif
     /* s_server.begin() is called by Espalexa internally */
