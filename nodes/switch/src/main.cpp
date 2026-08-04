@@ -300,6 +300,14 @@ static uint8_t get_sensor_payload(uint8_t* buf, uint8_t max_len) {
     uint8_t len = sizeof(pl);
     if (len > max_len) len = max_len;
     memcpy(buf, &pl, len);
+    if (len + 4 <= max_len) {
+        IPAddress ip = WiFi.localIP();
+        buf[len]     = ip[0];
+        buf[len + 1] = ip[1];
+        buf[len + 2] = ip[2];
+        buf[len + 3] = ip[3];
+        len += 4;
+    }
     return len;
 }
 
@@ -626,7 +634,7 @@ static void handle_api_state(void)
         doc["rx_count"] = s_radio.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
         doc["on_count"] = s_on_count;
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
         doc["repeater_enabled"] = repeater_is_enabled();
         doc["repeater_fwd"] = repeater_get_fwd_count();
@@ -1156,7 +1164,7 @@ static void handle_api_pulse(void)
     }
 }
 
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
 static void handle_api_repeater(void)
 {
     if (s_server.method() == HTTP_GET) {
@@ -1291,7 +1299,7 @@ void setup(void)
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/timer/next", handle_api_timer_next);
     s_server.on("/api/pulse", HTTP_ANY, handle_api_pulse);
-#ifdef HABILITA_REPEATER
+#ifdef REPEATER_ENABLED
     s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
 #endif
     /* s_server.begin() is called by Espalexa internally */
