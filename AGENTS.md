@@ -127,17 +127,19 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 4. quando marcar estavel anotar a tag e a data
 
 ### Nodes estáveis (não modificar)
-- `hub` — v1.2.4 (2026-08-04) — ESP-NOW + TCP Hub, WiFi 3-tier (EEPROM→STATIC_WIFI→AP)
-- `nodes/lamp` — v1.2.4 (2026-08-04) — relé ON/OFF com Alexa (Espalexa) + extender ESP-NOW, usa shared WiFi
+- `hub` — v1.2.5 (2026-08-04) — ESP-NOW + TCP Hub, WiFi 3-tier (EEPROM→STATIC_WIFI→AP)
+- `nodes/lamp` — v1.2.5 (2026-08-04) — relé ON/OFF com Alexa (Espalexa) + extender ESP-NOW, usa shared WiFi
+- `nodes/switch` — v1.2.5 (2026-08-04) — relé ON/OFF com Alexa (Espalexa) + ESP-NOW + pulse/timer, LoRa envs prontos
 
 ### Nodes em desenvolvimento
 - `nodes/climate-gas` — sensor DHT22 + MQ-2 ESP-NOW (dashboard Detalhes/OTA/toggles temp+gás, WIFI_NONE_SLEEP)
 - `nodes/presence` — sensor PIR ESP-NOW (broadcast, OTA, /api/restart)
-- `nodes/tcp` — node TCP via WiFi HTTP + UDP discovery
-- `nodes/switch` - relé com suporte a Alexa - atributos exclusivo para on/off
 - `nodes/onoff-lora` — relé LoRa (SX1278 + TTGO LoRa32 V1), dashboard padrão, WiFi não-bloqueante, OTA, console/telnet
 - `nodes/extender` — extensor de alcance ESP-NOW
 - `nodes/rain` — sensor de chuva ESP-NOW
+
+## TODO / Futuro
+- **Hub IP fixo no node TCP**: atualmente o `TcpNodeProtocol` descobre o hub via UDP broadcast (primeiro que responder ganha). Se 2 hubs estiverem na mesma rede, o node registra em um apenas. Solução: campo "Hub IP" no WiFiManager (salvo na EEPROM). Se configurado, o node pula o UDP discover e registra direto no hub configurado. Se não, usa o comportamento atual.
 
 ##Sanitize
 - se algum texto conter vicios de linguagem, corrigir e apresentar o texto corrigido em seguida, não dispensar acentuações, concordância ou vícios na sintática

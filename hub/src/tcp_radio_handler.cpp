@@ -58,7 +58,33 @@ int TcpRadioHandler::init() {
         }
 
         uint8_t mac[6];
-        WiFi.macAddress(mac);
+        const char* mac_str = doc["mac"];
+        bool mac_ok = false;
+        if (mac_str && strlen(mac_str) >= 17) {
+            // Use node's reported MAC
+            int a, b, c, d, e, f;
+            if (sscanf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X", &a, &b, &c, &d, &e, &f) == 6) {
+                mac[0] = (uint8_t)a; mac[1] = (uint8_t)b; mac[2] = (uint8_t)c;
+                mac[3] = (uint8_t)d; mac[4] = (uint8_t)e; mac[5] = (uint8_t)f;
+                mac_ok = true;
+            }
+        }
+        if (!mac_ok) {
+            // Fallback: derive unique pseudo-MAC from client IP to avoid all
+            // TCP nodes sharing the hub's MAC (which causes slot collision).
+            IPAddress client_ip = s_server.client().remoteIP();
+            mac[0] = 0x02;  // locally-administered, unicast
+            mac[1] = 0x00;
+            mac[2] = 0x00;
+            mac[3] = client_ip[0];
+            mac[4] = client_ip[1];
+            mac[5] = client_ip[2] | (client_ip[3] << 4);  // pack IP bytes
+            char fallback_mac[18];
+            snprintf(fallback_mac, sizeof(fallback_mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            console.printf("[tcp] No MAC from node %s, derived pseudo-MAC %s from IP %s\n",
+                           device_id, fallback_mac, client_ip.toString().c_str());
+        }
 
         handle_register(mac, device_id, sensor_type, device_name, fw_version);
 
@@ -231,8 +257,12 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         if (sensor) {
             sensor->online = true;
             sensor->last_seen = millis();
-            // refresh type/mac/radio in place without touching the name
+            // refresh type/mac/radio/name in place
             sensor->type = sensor_type;
+            if (device_name && strlen(device_name) > 0) {
+                strncpy(sensor->name, device_name, sizeof(sensor->name) - 1);
+                sensor->name[sizeof(sensor->name) - 1] = '\0';
+            }
             mac_copy(sensor->mac, mac);
             sensor->radio_type = RADIO_TCP;
             sensor->client_chip = HW_CHIP_UNKNOWN;
@@ -241,34 +271,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         return;
     }
 
-    // 2) Not found by device_id. A hub reboot regenerates bridge_device_id
-    //    (it is not persisted), so the same physical node looks "new". Match
-    //    by the stable MAC instead and re-associate the device_id in place.
-    slot = sensor_registry_find_by_mac(mac);
-    if (slot >= 0) {
-        virtual_sensor_t* sensor = sensor_registry_get(slot);
-        if (sensor) {
-            // Re-associate this slot with the reported device_id (restores the
-            // bridge_device_id so future lookups by device_id succeed).
-            strncpy(sensor->bridge_device_id, device_id, sizeof(sensor->bridge_device_id) - 1);
-            sensor->bridge_device_id[sizeof(sensor->bridge_device_id) - 1] = '\0';
-            sensor->type = sensor_type;
-            mac_copy(sensor->mac, mac);
-            sensor->radio_type = RADIO_TCP;
-            sensor->client_chip = HW_CHIP_UNKNOWN;
-            sensor->paired = true;
-            sensor->online = true;
-            sensor->last_seen = millis();
-            sensor_registry_save();
-            console.printf("[tcp] Re-associated existing slot %d to device_id %s (type %d, fw=%s)\n",
-                           slot, device_id, sensor_type, fw_version ? fw_version : "unknown");
-        }
-        return;
-    }
-
-    // 3) Genuinely new device. sensor_registry_add refuses MAC duplicates, so
-    //    a false return here means a real conflict — bail instead of creating
-    //    a phantom slot (name=""/type=0 → "Sem nome" + "Aguardando dados").
+    // 2) Genuinely new device — find free slot and register.
     slot = sensor_registry_find_free_slot();
     if (slot < 0) {
         console.println("[tcp] No free slots available");
@@ -289,6 +292,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         sensor->paired = true;
         sensor->online = true;
         sensor->last_seen = millis();
+        sensor_registry_save();
     }
 
     console.printf("[tcp] Device %s registered at slot %d (type %d, fw=%s)\n", device_id, slot, sensor_type, fw_version ? fw_version : "unknown");

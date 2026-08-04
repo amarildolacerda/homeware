@@ -18,7 +18,7 @@ bool sensor_registry_init() {
 
 int sensor_registry_find_by_mac(const uint8_t *mac) {
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        if (s_sensors[i].paired && mac_equal(s_sensors[i].mac, mac)) {
+        if (mac_equal(s_sensors[i].mac, mac)) {
             return i;
         }
     }
@@ -260,6 +260,12 @@ bool sensor_registry_save() {
             }
             EEPROM.write(addr + 41, s_sensors[i].client_chip);
             EEPROM.write(addr + 42, s_sensors[i].radio_type);
+            for (int j = 0; j < EEPROM_SENSOR_BRIDGE_ID_SIZE; j++) {
+                if (j < (int)strlen(s_sensors[i].bridge_device_id))
+                    EEPROM.write(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j, s_sensors[i].bridge_device_id[j]);
+                else
+                    EEPROM.write(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j, 0);
+            }
             console.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
         }
     }
@@ -313,10 +319,26 @@ void sensor_registry_load() {
             s_sensors[i].online = false;
             s_sensors[i].client_chip = EEPROM.read(addr + 41);
             s_sensors[i].radio_type = EEPROM.read(addr + 42);
+            // Load bridge_device_id from EEPROM
+            char bid[EEPROM_SENSOR_BRIDGE_ID_SIZE + 1] = {0};
+            int bid_len = 0;
+            for (int j = 0; j < EEPROM_SENSOR_BRIDGE_ID_SIZE; j++) {
+                uint8_t c = EEPROM.read(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j);
+                if (c == 0) break;
+                if (c < 32 || c > 126) break;
+                bid[j] = (char)c;
+                bid_len = j + 1;
+            }
+            bid[bid_len] = 0;
+            if (bid_len > 0) {
+                strncpy(s_sensors[i].bridge_device_id, bid, sizeof(s_sensors[i].bridge_device_id) - 1);
+                s_sensors[i].bridge_device_id[sizeof(s_sensors[i].bridge_device_id) - 1] = '\0';
+            } else {
+                snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
+                         "gw_%02X%02X%02X_%d",
+                          s_sensors[i].mac[3], s_sensors[i].mac[4], s_sensors[i].mac[5], i);
+            }
             memset(&s_sensors[i].state, 0, sizeof(s_sensors[i].state));
-            snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
-                     "gw_%02X%02X%02X_%d",
-                      s_sensors[i].mac[3], s_sensors[i].mac[4], s_sensors[i].mac[5], i);
         }
     }
 }

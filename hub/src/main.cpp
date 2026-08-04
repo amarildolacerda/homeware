@@ -34,6 +34,7 @@ static unsigned long s_last_ntp_retry = 0;
 static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
+static unsigned long s_last_rx_change_ms = 0;
 
 #ifdef ESPNOW_ENABLED
 static EspnowHandler s_espnow;
@@ -297,6 +298,24 @@ void setup() {
 
 void loop() {
     console.loop();
+
+    // Watchdog: restart if no packets received for too long (and sensors are paired)
+    if (sensor_registry_count_paired() > 0) {
+        unsigned long total_rx = s_radio_mgr.total_rx_count();
+        static unsigned long s_prev_rx = 0;
+        if (total_rx != s_prev_rx) {
+            s_prev_rx = total_rx;
+            s_last_rx_change_ms = millis();
+        }
+        if (s_last_rx_change_ms == 0) s_last_rx_change_ms = millis();
+        if (millis() - s_last_rx_change_ms > HUB_RX_WATCHDOG_MS) {
+            console.printf("[%s] No RX for %lus with %d sensors paired, restarting...\n",
+                           TAG, (millis() - s_last_rx_change_ms) / 1000,
+                           sensor_registry_count_paired());
+            delay(100);
+            ESP.restart();
+        }
+    }
     
     if (Serial.available() > 0) {
         handle_console(Serial.read());
