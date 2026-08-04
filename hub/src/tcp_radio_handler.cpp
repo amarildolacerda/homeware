@@ -231,8 +231,12 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         if (sensor) {
             sensor->online = true;
             sensor->last_seen = millis();
-            // refresh type/mac/radio in place without touching the name
+            // refresh type/mac/radio/name in place
             sensor->type = sensor_type;
+            if (device_name && strlen(device_name) > 0) {
+                strncpy(sensor->name, device_name, sizeof(sensor->name) - 1);
+                sensor->name[sizeof(sensor->name) - 1] = '\0';
+            }
             mac_copy(sensor->mac, mac);
             sensor->radio_type = RADIO_TCP;
             sensor->client_chip = HW_CHIP_UNKNOWN;
@@ -252,6 +256,10 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
             // bridge_device_id so future lookups by device_id succeed).
             strncpy(sensor->bridge_device_id, device_id, sizeof(sensor->bridge_device_id) - 1);
             sensor->bridge_device_id[sizeof(sensor->bridge_device_id) - 1] = '\0';
+            if (device_name && strlen(device_name) > 0) {
+                strncpy(sensor->name, device_name, sizeof(sensor->name) - 1);
+                sensor->name[sizeof(sensor->name) - 1] = '\0';
+            }
             sensor->type = sensor_type;
             mac_copy(sensor->mac, mac);
             sensor->radio_type = RADIO_TCP;
