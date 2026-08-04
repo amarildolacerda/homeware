@@ -611,12 +611,12 @@ static void handle_wifi(void)
                 if (!ok)
                     console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
                 // Re-registra onNotFound após begin() do Espalexa
-                s_server.onNotFound([]() {
+                s_server.onNotFound([]()
+                                    {
                     if (s_alexa_initialized &&
                         s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
                         return;
-                    s_server.send(404, "text/plain", "Not found");
-                });
+                    s_server.send(404, "text/plain", "Not found"); });
             }
 #endif
             console.printf("  => Terminal:  'h' comando de ajuda\n");
@@ -1080,12 +1080,17 @@ static void handle_console(char c)
 #endif
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+#ifdef TCP_ENABLED
+        console.printf("  Hub IP: http://%s\n", s_radio.gateway_ip().toString().c_str());
+#else
         if (s_radio.is_paired())
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway: %s (slot %d)\n", mac_str, s_radio.assigned_slot());
+            console.printf("  Hub: %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
+#endif
+
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
         char upbuf[32];
@@ -1161,17 +1166,26 @@ static void handle_console(char c)
 #endif
 
         if (s_radio.has_gateway())
+        {
+#ifdef TCP_ENABLED
+            if (s_radio.is_paired())
+                console.printf("  Hub IP:      http://%s\n", s_radio.gateway_ip().toString().c_str());
+#else
+
             if (s_radio.is_paired())
             {
                 char mac_str[18];
                 mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-                console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
+                console.printf("  Hub:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
             }
             else
             {
 
-                console.printf("  Gateway:     nao pareado\n");
+                console.printf("  Hub:     nao pareado\n");
             }
+
+#endif
+        }
         console.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
@@ -1585,10 +1599,14 @@ static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
     if (len > max_len)
         len = max_len;
     memcpy(buf, &pl, len);
-    if (len + 1 <= max_len)
+    if (len + 4 <= max_len)
     {
-        buf[len] = (uint8_t)WiFi.channel();
-        len++;
+        IPAddress ip = WiFi.localIP();
+        buf[len] = ip[0];
+        buf[len + 1] = ip[1];
+        buf[len + 2] = ip[2];
+        buf[len + 3] = ip[3];
+        len += 4;
     }
     return len;
 }
@@ -1800,12 +1818,12 @@ void setup(void)
 #endif
 
     // onNotFound registrado ANTES de server->begin() (padrão referência)
-    s_server.onNotFound([]() {
+    s_server.onNotFound([]()
+                        {
         if (s_alexa_initialized &&
             s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
             return;
-        s_server.send(404, "text/plain", "Not found");
-    });
+        s_server.send(404, "text/plain", "Not found"); });
 
     // begin() DEPOIS de todas as rotas e onNotFound (padrão referência)
     s_server.begin();

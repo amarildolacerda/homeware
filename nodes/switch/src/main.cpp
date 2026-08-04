@@ -300,6 +300,14 @@ static uint8_t get_sensor_payload(uint8_t* buf, uint8_t max_len) {
     uint8_t len = sizeof(pl);
     if (len > max_len) len = max_len;
     memcpy(buf, &pl, len);
+    if (len + 4 <= max_len) {
+        IPAddress ip = WiFi.localIP();
+        buf[len]     = ip[0];
+        buf[len + 1] = ip[1];
+        buf[len + 2] = ip[2];
+        buf[len + 3] = ip[3];
+        len += 4;
+    }
     return len;
 }
 
