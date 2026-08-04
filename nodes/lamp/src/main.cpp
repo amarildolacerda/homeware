@@ -451,7 +451,10 @@ static void set_relay(bool state)
 
 #ifdef ALEXA_ENABLED
     if (s_alexa_dev)
+    {
         s_alexa_dev->setValue(state ? 255 : 0);
+        s_alexa_dev->setState(state);
+    }
 #endif
 
     save_relay_state();
@@ -605,22 +608,13 @@ static void handle_wifi(void)
                 bool ok = s_alexa.begin(&s_server);
                 s_alexa_initialized = ok;
                 console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
-                if (!ok) {
+                if (!ok)
                     console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
-                }
-
-                // Debug extra: verificar se o handler foi registrado
-                console.printf("[%s] Espalexa handleAlexaApiCall disponível: %s\n", TAG,
-                               s_alexa.handleAlexaApiCall("/test","{}") ? "SIM" : "NÃO");
-
-                // Re-registra onNotFound após begin()
+                // Re-registra onNotFound após begin() do Espalexa
                 s_server.onNotFound([]() {
-                    console.printf("[DEBUG] onNotFound chamado para URI: %s\n", s_server.uri().c_str());
                     if (s_alexa_initialized &&
-                        s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain"))) {
-                        console.printf("[DEBUG] Alexa API call tratada: %s\n", s_server.uri().c_str());
+                        s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
                         return;
-                    }
                     s_server.send(404, "text/plain", "Not found");
                 });
             }
@@ -1756,12 +1750,7 @@ void setup(void)
     s_radio.begin();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
-#ifdef ALEXA_ENABLED
-    s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
-    s_alexa.addDevice(s_alexa_dev);
-#endif
-    s_server.begin();
-
+    // ── Registrar rotas do servidor ──
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
                 { serve_pgm_page(s_server, (const char *)FPSTR(PAGE_DOCS)); });
@@ -1803,16 +1792,23 @@ void setup(void)
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
 
 #ifdef ALEXA_ENABLED
-    // onNotFound: delega para Espalexa quando aplicável.
-    // Registrado AQUI e re-registrado após s_alexa.begin() porque
-    // o begin() do Espalexa sobrescreve este handler.
+    // Device adicionado ANTES de begin (padrão referência)
+    s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
+    s_alexa.addDevice(s_alexa_dev);
+    s_alexa.setDiscoverable(true);
+    // s_alexa.begin() chamado no WiFi connect (precisa de IP para UDP)
+#endif
+
+    // onNotFound registrado ANTES de server->begin() (padrão referência)
     s_server.onNotFound([]() {
         if (s_alexa_initialized &&
             s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
             return;
         s_server.send(404, "text/plain", "Not found");
     });
-#endif
+
+    // begin() DEPOIS de todas as rotas e onNotFound (padrão referência)
+    s_server.begin();
 
     ota_setup(s_device_id);
 
@@ -1968,7 +1964,7 @@ void loop(void)
             digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
     }
-    else if (!s_radio.is_paired() && s_radio.has_gateway()) 
+    else if (!s_radio.is_paired() && s_radio.has_gateway())
     {
         if (now - last_led >= LED_BLINK_GATEWAY_MS)
         {
