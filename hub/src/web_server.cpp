@@ -718,24 +718,14 @@ bool web_server_wifi_setup(bool force_portal) {
     char saved_pass[EEPROM_WIFI_PASS_SIZE];
     bool have_creds = wifi_creds_load(saved_ssid, saved_pass);
 
-#ifdef STATIC_WIFI
-    if (strlen(WIFI_SSID) > 0) {
-        strncpy(saved_ssid, WIFI_SSID, sizeof(saved_ssid) - 1);
-        saved_ssid[sizeof(saved_ssid) - 1] = '\0';
-        strncpy(saved_pass, WIFI_PASS, sizeof(saved_pass) - 1);
-        saved_pass[sizeof(saved_pass) - 1] = '\0';
-        have_creds = true;
-        console.println("[WIFI] Usando credenciais STATIC_WIFI");
-    }
-#endif
-
+    /* --- Step 1: Try saved credentials from EEPROM --- */
     if (!force_portal && have_creds) {
-        console.printf("[WIFI] Connecting to saved (EEPROM): %s\n", saved_ssid);
+        console.printf("[WIFI] Step 1: Connecting to saved (EEPROM): %s\n", saved_ssid);
         WiFi.mode(WIFI_STA);
         apply_wifi_static_ip();
         WiFi.begin(saved_ssid, saved_pass);
         unsigned long t0 = millis();
-        while (millis() - t0 < 45000 && WiFi.status() != WL_CONNECTED) {
+        while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) {
             delay(200);
             yield();
         }
@@ -745,10 +735,33 @@ bool web_server_wifi_setup(bool force_portal) {
             web_server_init();
             return true;
         }
-        console.println("[WIFI] Failed to connect to saved WiFi");
+        console.println("[WIFI] Step 1 failed: saved WiFi");
     }
 
-    console.println("[WIFI] Starting config portal...");
+#ifdef STATIC_WIFI
+    /* --- Step 2: Try STATIC_WIFI hardcoded credentials --- */
+    if (strlen(WIFI_SSID) > 0) {
+        console.printf("[WIFI] Step 2: Trying STATIC_WIFI: %s\n", WIFI_SSID);
+        WiFi.mode(WIFI_STA);
+        apply_wifi_static_ip();
+        WiFi.begin(WIFI_SSID, WIFI_PASS);
+        unsigned long t0 = millis();
+        while (millis() - t0 < 20000 && WiFi.status() != WL_CONNECTED) {
+            delay(200);
+            yield();
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+            console.printf("[WIFI] Connected via STATIC_WIFI! IP: %s\n", WiFi.localIP().toString().c_str());
+            s_wifi_config_mode = false;
+            web_server_init();
+            return true;
+        }
+        console.println("[WIFI] Step 2 failed: STATIC_WIFI");
+    }
+#endif
+
+    /* --- Step 3: Start AP/captive portal --- */
+    console.println("[WIFI] Step 3: Starting config portal...");
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
     captive_portal_start();
@@ -773,10 +786,32 @@ void web_server_maintain_wifi() {
     if (!s_wifi_reconnect_active) {
         if (millis() - last_attempt < 30000) return;
         last_attempt = millis();
-        console.println("[WIFI] Reconnecting...");
-        WiFi.mode(WIFI_STA);
-        apply_wifi_static_ip();
-        WiFi.begin();
+
+        /* Step 1: Try saved EEPROM creds */
+        char saved_ssid[EEPROM_WIFI_SSID_SIZE];
+        char saved_pass[EEPROM_WIFI_PASS_SIZE];
+        bool have_creds = wifi_creds_load(saved_ssid, saved_pass);
+        if (have_creds) {
+            console.printf("[WIFI] Reconnecting (step 1 - EEPROM): %s\n", saved_ssid);
+            WiFi.mode(WIFI_STA);
+            apply_wifi_static_ip();
+            WiFi.begin(saved_ssid, saved_pass);
+        }
+#ifdef STATIC_WIFI
+        else if (strlen(WIFI_SSID) > 0) {
+            /* Step 2: Try STATIC_WIFI */
+            console.printf("[WIFI] Reconnecting (step 2 - STATIC_WIFI): %s\n", WIFI_SSID);
+            WiFi.mode(WIFI_STA);
+            apply_wifi_static_ip();
+            WiFi.begin(WIFI_SSID, WIFI_PASS);
+        }
+#endif
+        else {
+            console.println("[WIFI] Reconnecting (no credentials)");
+            WiFi.mode(WIFI_STA);
+            apply_wifi_static_ip();
+            WiFi.begin();
+        }
         s_wifi_reconnect_active = true;
         s_wifi_reconnect_deadline = millis() + 15000;
     } else if (millis() >= s_wifi_reconnect_deadline) {

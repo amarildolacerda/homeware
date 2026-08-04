@@ -33,7 +33,7 @@ static const char *TAG = "agri-lamp";
 
 static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;
-static unsigned long s_last_reconnect_attempt = 0;
+static unsigned long s_alexa_last_attempt = 0;
 static unsigned long s_last_alexa_activity = 0;
 
 static uint8_t s_gateway_mac[6];
@@ -66,16 +66,11 @@ static bool s_tz_changed = false;
 static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
-static unsigned long s_wifi_config_start_time = 0;
-static bool s_config_portal_active = false;
 static bool s_ota_in_progress = false;
 static uint32_t s_ota_bytes = 0;
 static bool s_led_enabled = true;
 static bool s_multihub = false;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
-static unsigned long s_wifi_connect_start = 0;
-static bool s_wifi_connected = false;
-
 static ESP8266WebServer s_server(DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
 static Espalexa s_alexa;
@@ -529,133 +524,27 @@ static void start_ap(void)
     console.printf("[%s] AP '%s' started, connect to configure WiFi\n", TAG, ssid);
 }
 
-static void hwifi_begin(void)
+static void on_wifi_connected(void)
 {
-    WiFi.mode(WIFI_STA);
-    WiFi.setOutputPower(20.5);
-    s_last_reconnect_attempt = millis();
-
-#ifdef STATIC_WIFI
-    if (strlen(WIFI_SSID) > 0)
-    {
-        console.printf("[%s] WiFi: connecting to %s (static)...\n", TAG, WIFI_SSID);
-        WiFi.begin(WIFI_SSID, WIFI_PASS);
-        s_wifi_connect_start = millis();
-        s_config_portal_active = false;
-        return;
-    }
-    console.printf("[%s] No WiFi SSID configured\n", TAG);
-#endif
-
-    if (WiFi.SSID().length() > 0)
-    {
-        console.printf("[%s] Saved SSID: %s, connecting...\n", TAG, WiFi.SSID().c_str());
-        WiFi.begin();
-        s_wifi_connect_start = millis();
-        s_config_portal_active = false;
-        return;
-    }
-
-    char ssid[EEPROM_SSID_MAX], pass[EEPROM_PASS_MAX];
-    ssid[0] = '\0';
-    pass[0] = '\0';
-    if (load_wifi_credentials(ssid, sizeof(ssid), pass, sizeof(pass)))
-    {
-        console.printf("[%s] EEPROM SSID: %s, connecting...\n", TAG, ssid);
-        WiFi.begin(ssid, pass);
-        s_wifi_connect_start = millis();
-        s_config_portal_active = false;
-        return;
-    }
-
-    console.printf("[%s] No saved WiFi, starting AP config mode\n", TAG);
-    s_config_portal_active = true;
-    s_wifi_config_start_time = millis();
-    start_ap();
-}
-
-static void wifi_reconnect(void)
-{
-    unsigned long now = millis();
-    if (now - s_last_reconnect_attempt < 30000)
-        return;
-    s_last_reconnect_attempt = now;
-    console.printf("[%s] WiFi disconnected. Reconnecting...\n", TAG);
-    WiFi.reconnect();
-}
-
-static void handle_wifi(void)
-{
-    unsigned long now = millis();
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        if (s_config_portal_active)
-        {
-            console.printf("[%s] WiFi connected, stopping AP\n", TAG);
-            WiFi.mode(WIFI_STA);
-            WiFi.softAPdisconnect(true);
-            s_config_portal_active = false;
-        }
-        if (!s_wifi_connected)
-        {
-            s_wifi_connected = true;
-            console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
-            console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
+    console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
+    console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
-            if (!s_alexa_initialized)
-            {
-                bool ok = s_alexa.begin(&s_server);
-                s_alexa_initialized = ok;
-                console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
-                if (!ok)
-                    console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
-                // Re-registra onNotFound após begin() do Espalexa
-                s_server.onNotFound([]()
-                                    {
-                    if (s_alexa_initialized &&
-                        s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
-                        return;
-                    s_server.send(404, "text/plain", "Not found"); });
-            }
+    if (!s_alexa_initialized)
+    {
+        bool ok = s_alexa.begin(&s_server);
+        s_alexa_initialized = ok;
+        console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
+        if (!ok)
+            console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
+        s_server.onNotFound([]()
+                            {
+            if (s_alexa_initialized &&
+                s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
+                return;
+            s_server.send(404, "text/plain", "Not found"); });
+    }
 #endif
-            console.printf("  => Terminal:  'h' comando de ajuda\n");
-        }
-        return;
-    }
-
-    if (s_config_portal_active)
-    {
-        if (now - s_wifi_config_start_time > 600000)
-        {
-            console.printf("[%s] AP config timeout, restarting\n", TAG);
-            ESP.restart();
-        }
-        return;
-    }
-
-    if (s_wifi_connect_start > 0)
-    {
-        if (now - s_wifi_connect_start > 120000)
-        {
-            console.printf("[%s] WiFi connect timeout, starting AP\n", TAG);
-            s_config_portal_active = true;
-            s_wifi_config_start_time = now;
-            start_ap();
-            return;
-        }
-        if (now - s_last_reconnect_attempt >= 30000)
-        {
-            s_last_reconnect_attempt = now;
-            console.printf("[%s] WiFi not connected, retrying...\n", TAG);
-            WiFi.reconnect();
-        }
-    }
-    else
-    {
-        s_wifi_connect_start = now;
-        WiFi.begin();
-    }
+    console.printf("  => Terminal:  'h' comando de ajuda\n");
 }
 
 static void handle_api_wifi(void)
@@ -666,7 +555,7 @@ static void handle_api_wifi(void)
         JsonDocument doc;
         doc["ssid"] = WiFi.SSID();
         doc["configured"] = (WiFi.SSID().length() > 0);
-        doc["ap_active"] = s_config_portal_active;
+        doc["ap_active"] = (mywifi_state() == WIFI_STATE_PORTAL);
         doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
         doc["device_name"] = s_device_name;
         doc["channel"] = mywifi_configured_channel();
@@ -728,8 +617,6 @@ static void handle_api_wifi(void)
             save_wifi_credentials(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
-            s_config_portal_active = false;
-            s_wifi_connect_start = millis();
         }
         else
         {
@@ -777,7 +664,7 @@ static void serve_pgm_sections(ESP8266WebServer &server, const char *const *sect
 
 static void handle_root(void)
 {
-    if (s_config_portal_active)
+    if (mywifi_state() == WIFI_STATE_PORTAL)
     {
         s_server.send(200, "text/html", FPSTR(PAGE_WIFI_CONFIG));
         return;
@@ -1751,7 +1638,7 @@ void setup(void)
 
     WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? s_device_id : s_device_name);
 
-    hwifi_begin();
+    mywifi_begin(false);
 
     uint8_t my_mac[6];
     WiFi.macAddress(my_mac);
@@ -1869,7 +1756,15 @@ void loop(void)
     {
         handle_console(console.telnet_read());
     }
-    handle_wifi();
+    {
+        static wifi_state_t s_prev_wifi_state = WIFI_STATE_DISCONNECTED;
+        mywifi_loop();
+        wifi_state_t cur = mywifi_state();
+        if (cur == WIFI_STATE_CONNECTED && s_prev_wifi_state != WIFI_STATE_CONNECTED) {
+            on_wifi_connected();
+        }
+        s_prev_wifi_state = cur;
+    }
     ota_handle();
 #ifdef ALEXA_ENABLED
     if (s_alexa_initialized)
@@ -1970,7 +1865,7 @@ void loop(void)
     {
         digitalWrite(LED_PIN, LED_OFF);
     }
-    else if (s_config_portal_active)
+    else if (mywifi_state() == WIFI_STATE_PORTAL)
     {
         digitalWrite(LED_PIN, LED_ON);
     }
