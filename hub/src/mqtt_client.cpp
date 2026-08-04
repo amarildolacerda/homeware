@@ -21,9 +21,12 @@ static bool s_mqtt_connected = false;
 static unsigned long s_mqtt_connected_since = 0;
 static unsigned long s_last_reconnect = 0;
 static bool s_should_reconnect = true;
+static unsigned long s_reconnect_interval_ms = 30000;
+static unsigned int s_consecutive_fails = 0;
 
 #define MQTT_TOPIC_PREFIX "homeassistant"
-#define MQTT_RECONNECT_INTERVAL 30000
+#define MQTT_RECONNECT_INITIAL_MS 30000
+#define MQTT_RECONNECT_MAX_MS     300000
 #define GW_MANUFACTURER "ESP-HA Bridge"
 
 static void build_device_info(JsonDocument &doc, const char *name, const char *bridge_id, const char *model) {
@@ -198,6 +201,9 @@ bool mqtt_client_save_config(const char *host, uint16_t port, const char *user, 
     strcpy(s_mqtt_pass, pass);
 
     s_should_reconnect = true;
+    s_reconnect_interval_ms = MQTT_RECONNECT_INITIAL_MS;
+    s_consecutive_fails = 0;
+    s_last_reconnect = 0;
     console.printf("[MQTT] Config saved: %s:%d user='%s'\n", host, port, user);
     return true;
 }
@@ -222,6 +228,8 @@ bool mqtt_client_connect() {
         s_mqtt_connected = true;
         s_mqtt_connected_since = millis();
         s_should_reconnect = false;
+        s_reconnect_interval_ms = MQTT_RECONNECT_INITIAL_MS;
+        s_consecutive_fails = 0;
         log_add("info", "MQTT conectado a %s:%d", s_mqtt_host, s_mqtt_port);
         console.printf("[MQTT] Connected to %s:%d\n", s_mqtt_host, s_mqtt_port);
 
@@ -230,8 +238,18 @@ bool mqtt_client_connect() {
 
         mqtt_client_publish_all();
     } else {
-        log_add("error", "MQTT falhou: rc=%d", s_mqtt.state());
-        console.printf("[MQTT] Connection failed rc=%d\n", s_mqtt.state());
+        s_should_reconnect = false;
+        s_consecutive_fails++;
+        unsigned long new_interval = MQTT_RECONNECT_INITIAL_MS << min(s_consecutive_fails, 5u);
+        if (new_interval > MQTT_RECONNECT_MAX_MS) new_interval = MQTT_RECONNECT_MAX_MS;
+        s_reconnect_interval_ms = new_interval;
+
+        static unsigned long last_fail_log = 0;
+        if (millis() - last_fail_log > 60000) {
+            last_fail_log = millis();
+            log_add("error", "MQTT falhou: rc=%d (retry em %lus)", s_mqtt.state(), s_reconnect_interval_ms / 1000);
+            console.printf("[MQTT] Connection failed rc=%d (next retry in %lus)\n", s_mqtt.state(), s_reconnect_interval_ms / 1000);
+        }
     }
 
     return ok;
@@ -250,7 +268,7 @@ void mqtt_client_loop() {
     if (!s_mqtt.connected()) {
         s_mqtt_connected = false;
         unsigned long now = millis();
-        if (now - s_last_reconnect > MQTT_RECONNECT_INTERVAL || s_should_reconnect) {
+        if (now - s_last_reconnect > s_reconnect_interval_ms) {
             s_last_reconnect = now;
             mqtt_client_connect();
         }

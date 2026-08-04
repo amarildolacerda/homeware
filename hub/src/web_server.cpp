@@ -282,6 +282,7 @@ void web_server_init() {
                 for (int j = 0; j < 6; j++) obj["mac_bytes"].add(s->mac[j]);
                 obj["type"] = s->type;
                 obj["type_name"] = sensor_type_to_string(s->type);
+                obj["radio_type"] = s->radio_type;
                 obj["name"] = s->name;
                 obj["bridge_device_id"] = s->bridge_device_id;
                 obj["sequence"] = s->sequence;

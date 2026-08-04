@@ -102,12 +102,20 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
 }
 
 bool sensor_registry_remove(int slot) {
-    if (slot < 0 || slot >= MAX_VIRTUAL_SENSORS) return false;
-    if (!s_sensors[slot].paired) return false;
+    if (slot < 0 || slot >= MAX_VIRTUAL_SENSORS) {
+        console.printf("[Gateway] Remove slot %d: invalid (max=%d)\n", slot, MAX_VIRTUAL_SENSORS);
+        return false;
+    }
+    if (!s_sensors[slot].paired) {
+        console.printf("[Gateway] Remove slot %d: not paired (name=%s bid=%s)\n",
+                       slot, s_sensors[slot].name, s_sensors[slot].bridge_device_id);
+        return false;
+    }
 
+    console.printf("[Gateway] Removing sensor slot %d: %s (%s)\n",
+                   slot, s_sensors[slot].name, s_sensors[slot].bridge_device_id);
     memset(&s_sensors[slot], 0, sizeof(virtual_sensor_t));
     sensor_registry_save();
-    console.printf("[Gateway] Removed sensor slot %d\n", slot);
     return true;
 }
 

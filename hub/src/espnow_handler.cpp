@@ -104,6 +104,7 @@ void EspnowHandler::loop() {
     }
 
     process_bridge_queue();
+    process_pending_commands();
 
     if (millis() - m_last_heartbeat > HEARTBEAT_INTERVAL_MS) {
         m_last_heartbeat = millis();
@@ -239,7 +240,16 @@ bool EspnowHandler::send_command(const uint8_t *mac, uint8_t state) {
     cmd.command = state;
 
     const uint8_t *dest = dest_for_chip(mac, chip);
-    return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&cmd, sizeof(cmd), "ESP-NOW");
+    int slot = -1;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *vs = sensor_registry_get(i);
+        if (vs && vs->paired && mac_equal(vs->mac, mac)) { slot = i; break; }
+    }
+    // Enqueue for reliable delivery: on/off commands are idempotent, so the
+    // hop-based retry never toggles the relay twice to the same state.
+    enqueue_cmd(dest, mac_equal(dest, s_bcast_addr), slot,
+                (uint8_t*)&cmd, sizeof(cmd));
+    return true;  // command queued for (re)sending; see AGENTS.md rule 18
 }
 
 bool EspnowHandler::send_restart(const uint8_t *mac) {
@@ -258,7 +268,80 @@ bool EspnowHandler::send_restart(const uint8_t *mac) {
     mac_copy(rst.target_mac, mac);
 
     const uint8_t *dest = dest_for_chip(mac, chip);
-    return espnow_send_wrapper((uint8_t*)dest, (uint8_t*)&rst, sizeof(rst), "ESP-NOW");
+    enqueue_cmd(dest, mac_equal(dest, s_bcast_addr), -1,
+                (uint8_t*)&rst, sizeof(rst));
+    return true;
+}
+
+void EspnowHandler::enqueue_cmd(const uint8_t* dest, bool is_bcast, int slot,
+                                const uint8_t* frame, uint8_t len) {
+    if (len > sizeof(PendingCmd::frame) || len == 0) return;
+
+    for (int i = 0; i < PENDING_CMD_MAX; i++) {
+        PendingCmd &pc = m_pending_cmds[i];
+        if (!pc.active) {
+            pc.active = true;
+            mac_copy(pc.dest, dest);
+            pc.is_bcast = is_bcast;
+            pc.slot = (slot < 0) ? 0xFF : (uint8_t)slot;
+            memcpy(pc.frame, frame, len);
+            pc.len = len;
+            pc.hops = 0;
+            pc.created_at = millis();
+            pc.next_retry_ms = pc.created_at;  // dispatch immediately in loop()
+            return;
+        }
+    }
+    // Queue full: drop the oldest pending command to make room.
+    unsigned long oldest = millis();
+    int victim = 0;
+    for (int i = 0; i < PENDING_CMD_MAX; i++) {
+        if (m_pending_cmds[i].created_at < oldest) {
+            oldest = m_pending_cmds[i].created_at;
+            victim = i;
+        }
+    }
+    m_pending_cmds[victim].active = false;
+    console.println("[ESP-NOW] command queue full; dropping oldest pending cmd");
+}
+
+void EspnowHandler::process_pending_commands() {
+    unsigned long now = millis();
+    for (int i = 0; i < PENDING_CMD_MAX; i++) {
+        PendingCmd &pc = m_pending_cmds[i];
+        if (!pc.active) continue;
+
+        unsigned long age = now - pc.created_at;
+        if (age > CMD_TTL_MS) {
+            pc.active = false;
+            char mac_str[18];
+            mac_to_str(pc.dest, mac_str, sizeof(mac_str));
+            console.printf("[ESP-NOW] cmd to %s dropped after %u hops (TTL)\n",
+                           mac_str, pc.hops);
+            continue;
+        }
+
+        if (pc.hops >= CMD_MAX_HOPS) {
+            pc.active = false;
+            char mac_str[18];
+            mac_to_str(pc.dest, mac_str, sizeof(mac_str));
+            console.printf("[ESP-NOW] cmd to %s dropped after %u hops (max)\n",
+                           mac_str, pc.hops);
+            continue;
+        }
+
+        if (now < pc.next_retry_ms) continue;
+
+        pc.hops++;
+        espnow_send_wrapper(pc.dest, pc.frame, pc.len, "ESP-NOW");
+        pc.next_retry_ms = now + CMD_HOP_INTERVAL_MS;
+        if (pc.hops == 1) {
+            char mac_str[18];
+            mac_to_str(pc.dest, mac_str, sizeof(mac_str));
+            console.printf("[ESP-NOW] cmd to %s hop %u/%u\n",
+                           mac_str, pc.hops, CMD_MAX_HOPS);
+        }
+    }
 }
 
 void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {

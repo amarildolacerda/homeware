@@ -457,7 +457,7 @@ static void handle_wifi(void)
             s_wifi_connected = true;
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
-          #ifdef HABILITA_ALEXA
+          #ifdef ALEXA_ENABLED
             if (!s_alexa_initialized)
             {
                 s_alexa.begin(&s_server);
@@ -799,7 +799,7 @@ static void handle_console(char c)
         console.printf("  Up:       %lu s\n", (millis() - s_start_time) / 1000);
         console.printf("----------------\n\n");
         break;
-   #ifdef HABILITA_ALEXA     
+   #ifdef ALEXA_ENABLED     
     case 'a':
     case 'A':
         console.printf("\n--- Alexa ---\n");

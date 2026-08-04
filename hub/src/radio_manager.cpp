@@ -1,6 +1,7 @@
 #include "radio_manager.h"
 #include "sensor_registry.h"
 #include "common_console.h"
+#include "log_buffer.h"
 
 
 void RadioManager::add_radio(uint8_t radio_type, RadioInterface* radio) {
@@ -25,9 +26,16 @@ void RadioManager::loop_all() {
 
 bool RadioManager::send_command(uint8_t slot, uint8_t state) {
     virtual_sensor_t* s = sensor_registry_get(slot);
-    if (!s || !s->paired) return false;
+    if (!s || !s->paired) {
+        log_add("warn", "send_command slot %d: not paired or invalid", slot);
+        return false;
+    }
     RadioInterface* r = get_radio(s->radio_type);
-    if (!r) return false;
+    if (!r) {
+        log_add("warn", "send_command slot %d: no radio for type %d", slot, s->radio_type);
+        return false;
+    }
+    log_add("info", "send_command slot %d: radio_type=%d state=%d", slot, s->radio_type, state);
     return r->send_command(s->mac, state);
 }
 

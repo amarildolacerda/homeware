@@ -4,8 +4,10 @@
 #include "sensor_registry.h"
 #include "config.h"
 #include "common_console.h"
+#include "log_buffer.h"
 #include "web_server.h"
 #include "platform.h"
+#include <uri/UriBraces.h>
 #include <algorithm>
 
 extern MyWebServer s_server;
@@ -121,9 +123,8 @@ int TcpRadioHandler::init() {
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
-    s_server.on("/node/command/", HTTP_GET, [this]() {
-        String uri = s_server.uri();
-        String device_id = uri.substring(uri.lastIndexOf("/") + 1);
+    s_server.on(UriBraces("/node/command/{}"), HTTP_GET, [this]() {
+        String device_id = s_server.pathArg(0);
 
         if (device_id.length() == 0) {
             s_server.send(400, "application/json", "{\"error\":\"missing device_id\"}");
@@ -131,7 +132,7 @@ int TcpRadioHandler::init() {
         }
 
         JsonDocument response;
-        JsonObject resObj = response.as<JsonObject>();
+        JsonObject resObj = response.to<JsonObject>();
         handle_command_get(device_id.c_str(), resObj);
 
         String responseStr;
@@ -198,6 +199,7 @@ bool TcpRadioHandler::send_command(const uint8_t* mac, uint8_t state) {
     m_pending_commands[sensor->bridge_device_id].push_back(cmd);
 
     console.printf("[tcp] Command queued for %s: %s\n", sensor->bridge_device_id, cmd.command.c_str());
+    log_add("info", "[tcp] Command queued for %s: %s (radio_type=%d)", sensor->bridge_device_id, cmd.command.c_str(), sensor->radio_type);
     return true;
 }
 
@@ -220,24 +222,65 @@ bool TcpRadioHandler::send_restart(const uint8_t* mac) {
 }
 
 void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version) {
+    // 1) Already registered (by device_id) → refresh liveness only. Do NOT
+    //    clobber a user-assigned name from the dashboard rename.
     int slot = find_slot_by_device_id(device_id);
     if (slot >= 0) {
         console.printf("[tcp] Device %s already registered at slot %d, fw=%s\n", device_id, slot, fw_version ? fw_version : "unknown");
         virtual_sensor_t* sensor = sensor_registry_get(slot);
         if (sensor) {
-            sensor->last_seen = millis();
             sensor->online = true;
+            sensor->last_seen = millis();
+            // refresh type/mac/radio in place without touching the name
+            sensor->type = sensor_type;
+            mac_copy(sensor->mac, mac);
+            sensor->radio_type = RADIO_TCP;
+            sensor->client_chip = HW_CHIP_UNKNOWN;
+            sensor_registry_save();
         }
         return;
     }
 
+    // 2) Not found by device_id. A hub reboot regenerates bridge_device_id
+    //    (it is not persisted), so the same physical node looks "new". Match
+    //    by the stable MAC instead and re-associate the device_id in place.
+    slot = sensor_registry_find_by_mac(mac);
+    if (slot >= 0) {
+        virtual_sensor_t* sensor = sensor_registry_get(slot);
+        if (sensor) {
+            // Re-associate this slot with the reported device_id (restores the
+            // bridge_device_id so future lookups by device_id succeed).
+            strncpy(sensor->bridge_device_id, device_id, sizeof(sensor->bridge_device_id) - 1);
+            sensor->bridge_device_id[sizeof(sensor->bridge_device_id) - 1] = '\0';
+            sensor->type = sensor_type;
+            mac_copy(sensor->mac, mac);
+            sensor->radio_type = RADIO_TCP;
+            sensor->client_chip = HW_CHIP_UNKNOWN;
+            sensor->paired = true;
+            sensor->online = true;
+            sensor->last_seen = millis();
+            sensor_registry_save();
+            console.printf("[tcp] Re-associated existing slot %d to device_id %s (type %d, fw=%s)\n",
+                           slot, device_id, sensor_type, fw_version ? fw_version : "unknown");
+        }
+        return;
+    }
+
+    // 3) Genuinely new device. sensor_registry_add refuses MAC duplicates, so
+    //    a false return here means a real conflict — bail instead of creating
+    //    a phantom slot (name=""/type=0 → "Sem nome" + "Aguardando dados").
     slot = sensor_registry_find_free_slot();
     if (slot < 0) {
         console.println("[tcp] No free slots available");
         return;
     }
 
-    sensor_registry_add(mac, sensor_type, slot, device_name, HW_CHIP_UNKNOWN, RADIO_TCP);
+    if (!sensor_registry_add(mac, sensor_type, slot, device_name, HW_CHIP_UNKNOWN, RADIO_TCP)) {
+        char mac_str[18];
+        mac_to_str(mac, mac_str, sizeof(mac_str));
+        console.printf("[tcp] sensor_registry_add failed (MAC %s conflict); not creating phantom slot\n", mac_str);
+        return;
+    }
 
     virtual_sensor_t* sensor = sensor_registry_get(slot);
     if (sensor) {
@@ -261,6 +304,24 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
     virtual_sensor_t* sensor = sensor_registry_get(slot);
     if (!sensor) return;
 
+    // Optional metadata (IP, free heap) — the node reports these on each state
+    // POST so the hub can display them. Parse the IP string into bytes.
+    if (state["ip"].is<const char*>()) {
+        const char* ip_str = state["ip"];
+        int a = 0, b = 0, c = 0, d = 0;
+        if (sscanf(ip_str, "%d.%d.%d.%d", &a, &b, &c, &d) == 4 &&
+            a >= 0 && a <= 255 && b >= 0 && b <= 255 &&
+            c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+            sensor->ip[0] = (uint8_t)a;
+            sensor->ip[1] = (uint8_t)b;
+            sensor->ip[2] = (uint8_t)c;
+            sensor->ip[3] = (uint8_t)d;
+        }
+    }
+    if (state["free_heap"].is<uint32_t>()) {
+        sensor->free_heap = state["free_heap"];
+    }
+
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM:
             if (state["temperature"].is<float>()) sensor->state.temp_hum.temperature = state["temperature"];
@@ -271,8 +332,17 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             if (state["alarm"].is<uint8_t>()) sensor->state.gas.alarm = state["alarm"];
             break;
         case SENSOR_TYPE_ONOFF:
-            if (state["state"].is<uint8_t>()) sensor->state.onoff.state = state["state"];
+        case SENSOR_TYPE_LIGHT: {
+            // Accept both numeric (uint8_t) and boolean state, plus the legacy
+            // relay_state field.
+            uint8_t val = 0xFF;
+            if (state["state"].is<uint8_t>()) val = (uint8_t)state["state"];
+            else if (state["state"].is<bool>()) val = state["state"] ? 1 : 0;
+            else if (state["relay_state"].is<uint8_t>()) val = (uint8_t)state["relay_state"];
+            else if (state["relay_state"].is<bool>()) val = state["relay_state"] ? 1 : 0;
+            if (val != 0xFF) sensor->state.onoff.state = val;
             break;
+        }
         default:
             break;
     }
@@ -297,6 +367,7 @@ void TcpRadioHandler::handle_heartbeat(const char* device_id) {
 bool TcpRadioHandler::handle_command_get(const char* device_id, JsonObject& response) {
     auto it = m_pending_commands.find(device_id);
     if (it == m_pending_commands.end() || it->second.empty()) {
+        log_add("info", "[tcp] Command poll: %s -> no pending commands (map_size=%d)", device_id, (int)m_pending_commands.size());
         return false;
     }
 
@@ -306,6 +377,7 @@ bool TcpRadioHandler::handle_command_get(const char* device_id, JsonObject& resp
     response["command"] = cmd.command;
     response["slot"] = cmd.slot;
 
+    log_add("info", "[tcp] Command dispatch: %s -> cmd=%s slot=%d (remaining=%d)", device_id, cmd.command.c_str(), cmd.slot, (int)it->second.size());
     return true;
 }
 
