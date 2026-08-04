@@ -35,6 +35,7 @@
 - Server (Python): servidor HTTP REST + HA + discovery UDP + MQTT Discovery
 - Hub (ESP8266/ESP32): recebe dados dos nodes via ESP-NOW, encaminha ao server via HTTP REST
 - Nodes (ESP8266): sensores/atuadores que se registram no hub via ESP-NOW
+- **Diferenças entre plataformas** (ESP8266 vs ESP32) são tratadas em `shared/src/platform.h` (wrappers `MyWebServer`/`chip_id()`/`espnow_add_peer_wrapper`). Quando algo depende da plataforma, verificar/alterar `platform.h` — não duplicar `#ifdef` espalhado pelo código.
 - Discovery UDP: broadcast porta 5000, service name `"esp-bridge"`
 - // D1-MINI é invertido
 #define LED_ON  LOW   // GPIO2 acende com LOW
@@ -104,6 +105,16 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 32. **Board pinos**: respeitar defines da placa (`pins_arduino.h`). Ex: TTGO LoRa32 V1 `LORA_RST=14` (não 23). Verificar antes de definir.
 33. **ESP32 WiFiManager**: usar `tzapu/WiFiManager @ ^2.0` (não `^0.16`). A v0.x só suporta ESP8266.
 34. **updates**: uptime é static e não muda no dashboard
+35. **ESP-NOW command reliability ("fila com hops")**: o hub deve enfileirar comandos de relé (`MSG_COMMAND`)/`restart` (`MSG_RESTART`) em uma fila de retry de hop até `CMD_MAX_HOPS` (6) — `esp_now_send` no ESP32 aceita o quadro mesmo quando dropado em radio (coexistência, rule 18), então sem retry o comando é perdido para sempre. Reenvio a cada `CMD_HOP_INTERVAL_MS` (250ms), TTL `CMD_TTL_MS` (10s); comandos on/off são idempotentes (`set_relay(command==0x01)`, rule TCP 12) por isso hops repetidos não alternam o relé duas vezes. Implementado em `hub/include/espnow_handler.h` + `hub/src/espnow_handler.cpp` (`enqueue_cmd`/`process_pending_commands`/`loop()`). Sem o `send_cb`, o ESP32 não reporta drop → queue de hops é o mecanismo de confiabilidade.
+36. **Lamp TCP registra como LIGHT**: o `lamp` env `esp8266_tcp` (HTTP + Alexa light entity) deve registrar `SENSOR_TYPE_LIGHT` (9), não `SENSOR_TYPE_ONOFF` (8) — `get_sensor_type()` retorna LIGHT com `-DTCP_ENABLED`, ONOFF caso contrário. Regra aprendida 2026-08-03.
+
+### Nodes TCP (TCP_ENABLED / lamp TCP_RADIO + hub TcpRadioHandler)
+- **ArduinoJson v7 `to<T>()` vs `as<T>()`**: `as<JsonObject>()` em documento null cria JsonObject que descarta silenciosamente assigns. Hub `TcpRadioHandler::handle_command_get` usava `response.as<JsonObject>()` — response sempre era `"null"` (4 bytes). Correção: `response.to<JsonObject>()`. Para verificar chave: `doc.containsKey("key") && !doc["key"].isNull()` ao invés de `doc["key"].is<const char*>()`. Regra aprendida 2026-08-03.
+- **TCP node publica estado periodicamente**: `TcpNodeProtocol::loop()` deve chamar `publish_state()` a cada `m_state_interval_ms` (ajuste de regra 14) e também logo após o registro bem-sucedido, senão o hub nunca aprende o IP do node. O intervalo `m_state_interval_ms` existia mas era ignorado.
+- **Campo de estado on/off**: o node TCP envia `state` (bool) no POST `/node/state`; o hub (`TcpRadioHandler::handle_state`) deve aceitar `state` quanto `relay_state` (bool ou uint8_t) e armazenar `onoff.state`. Não confiar em `is<uint8_t>()` para bools serializados como `true/false`. **O switch `handle_state` DEVE incluir `case SENSOR_TYPE_LIGHT:` junto com `case SENSOR_TYPE_ONOFF:`** — senão nodes LIGHT (tipo 9) nunca atualizam state no hub. Regra aprendida 2026-08-03.
+- **IP do node**: o hub só aprende o IP do node TCP a partir do `ip` enviado em `/node/state` — fazer o `handle_state` fazer parse de `ip` (e `free_heap`) em `virtual_sensor_t`.
+- **on_command semântico**: `on_command(command)` deve `set_relay(command == 0x01)`, não apenas togglear em 0x01 — senão comandos OFF (0x00) do hub são ignorados (botão desligar não age no node).
+- **Todo evento de mudança de estado** (botão físico, timer, API `/api/relay`, Alexa, comando) deve disparar `s_radio.publish_state()` imediatamente (regra 14); o caminho do botão físico no lamp `loop()` não publicava.
 
 ## Regras de AI
 0. economizar tokens com respostas mínimas sem explicações desnecessárias

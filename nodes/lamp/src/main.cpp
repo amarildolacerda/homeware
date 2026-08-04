@@ -1,15 +1,23 @@
 #include <Arduino.h>
 #include "platform.h"
 #include <ArduinoJson.h>
+#include <WiFiUdp.h>
 #include <EEPROM.h>
 #include <LittleFS.h>
 #include <Updater.h>
-#ifdef HABILITA_ALEXA
+
+#ifdef ALEXA_ENABLED
 #include <Espalexa.h>
 #endif
 #include "config.h"
 #include "pages.h"
+#include "common_types.h"
+#include "sensor_type.h"
+
+#ifdef ESPNOW_ENABLED
 #include "espnow_protocol.h"
+#endif
+
 #include "common_console.h"
 #include "common_ota.h"
 #include "common_util.h"
@@ -30,7 +38,8 @@ static unsigned long s_last_alexa_activity = 0;
 
 static uint8_t s_gateway_mac[6];
 
-static bool mac_is_nonzero(const uint8_t *mac) {
+static bool mac_is_nonzero(const uint8_t *mac)
+{
     return mac[0] || mac[1] || mac[2] || mac[3] || mac[4] || mac[5];
 }
 
@@ -68,7 +77,7 @@ static unsigned long s_wifi_connect_start = 0;
 static bool s_wifi_connected = false;
 
 static ESP8266WebServer s_server(DASHBOARD_PORT);
-#ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 static bool s_alexa_initialized = false;
@@ -102,7 +111,8 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define KNOWN_DEVICES_FILE "/known_devices.json"
 #define MAX_KNOWN_DEVICES 16
 
-typedef struct {
+typedef struct
+{
     bool enabled;
     char target_device_id[32];
     char target_device_name[32];
@@ -112,13 +122,16 @@ static sync_config_t s_sync_cfg = {false, "", ""};
 
 static void sync_load(void)
 {
-    if (!LittleFS.exists(SYNC_LITTLEFS_FILE)) return;
+    if (!LittleFS.exists(SYNC_LITTLEFS_FILE))
+        return;
     File f = LittleFS.open(SYNC_LITTLEFS_FILE, "r");
-    if (!f) return;
+    if (!f)
+        return;
     StaticJsonDocument<128> doc;
     DeserializationError err = deserializeJson(doc, f);
     f.close();
-    if (err) return;
+    if (err)
+        return;
     s_sync_cfg.enabled = doc["enabled"] | false;
     const char *tid = doc["target_device_id"] | "";
     strncpy(s_sync_cfg.target_device_id, tid, sizeof(s_sync_cfg.target_device_id) - 1);
@@ -136,10 +149,18 @@ static void devices_load(JsonDocument &doc)
         return;
     }
     File f = LittleFS.open(KNOWN_DEVICES_FILE, "r");
-    if (!f) { doc.to<JsonArray>(); return; }
+    if (!f)
+    {
+        doc.to<JsonArray>();
+        return;
+    }
     DeserializationError err = deserializeJson(doc, f);
     f.close();
-    if (err) { doc.to<JsonArray>(); return; }
+    if (err)
+    {
+        doc.to<JsonArray>();
+        return;
+    }
     JsonArray arr = doc.as<JsonArray>();
     if (arr.size() > 0 && arr[0].is<const char *>())
     {
@@ -181,18 +202,21 @@ static bool device_exists(JsonArray &arr, const char *device_id)
 
 static void devices_add(const char *device_id, const char *device_name)
 {
-    if (!device_id || strlen(device_id) == 0) return;
+    if (!device_id || strlen(device_id) == 0)
+        return;
     JsonDocument doc;
     devices_load(doc);
     JsonArray arr = doc.as<JsonArray>();
-    if (device_exists(arr, device_id)) return;
+    if (device_exists(arr, device_id))
+        return;
     if (arr.size() >= MAX_KNOWN_DEVICES)
         arr.remove(0);
     JsonObject obj = arr.add<JsonObject>();
     obj["id"] = device_id;
     obj["name"] = (device_name && strlen(device_name) > 0) ? device_name : device_id;
     File f = LittleFS.open(KNOWN_DEVICES_FILE, "w");
-    if (!f) return;
+    if (!f)
+        return;
     serializeJson(doc, f);
     f.close();
 }
@@ -204,7 +228,8 @@ static void sync_save(void)
     doc["target_device_id"] = s_sync_cfg.target_device_id;
     doc["target_device_name"] = s_sync_cfg.target_device_name;
     File f = LittleFS.open(SYNC_LITTLEFS_FILE, "w");
-    if (!f) return;
+    if (!f)
+        return;
     serializeJson(doc, f);
     f.close();
 }
@@ -222,6 +247,7 @@ static void save_relay_state(void)
     EEPROM.write(EEPROM_RELAY_STATE_ADDR, s_relay_state ? 1 : 0);
     EEPROM.commit();
     EEPROM.end();
+    console.printf("Saved relay state: %s\n", s_relay_state ? "ON" : "OFF");
 }
 
 static void load_relay_state(void)
@@ -421,6 +447,13 @@ static void set_relay(bool state)
 {
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
+    console.printf("Relay: %s -> %s\n", s_device_name, state ? "ON" : "OFF");
+
+#ifdef ALEXA_ENABLED
+    if (s_alexa_dev)
+        s_alexa_dev->setValue(state ? 255 : 0);
+#endif
+
     save_relay_state();
     if (state)
         s_on_count++;
@@ -433,7 +466,7 @@ static void toggle_relay(void)
     set_relay(!s_relay_state);
 }
 
-#ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
 static void alexa_callback(EspalexaDevice *d)
 {
     bool state = (d->getValue() > 0);
@@ -566,14 +599,17 @@ static void handle_wifi(void)
             s_wifi_connected = true;
             console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
             console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
-#ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
             if (!s_alexa_initialized)
             {
-                s_alexa.begin(&s_server);
-                s_alexa_initialized = true;
-                console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+                bool ok = s_alexa.begin(&s_server);
+                s_alexa_initialized = ok;
+                console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
+                if (!ok)
+                    console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
             }
-            console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
+            if (s_alexa_initialized)
+                console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
 #endif
             console.printf("  => Terminal:  'h' comando de ajuda\n");
         }
@@ -700,8 +736,10 @@ static void serve_pgm_sections(ESP8266WebServer &server, const char *const *sect
 {
     /* Calcular tamanho total */
     size_t total = 0;
-    for (int i = 0; i < count; i++) {
-        if (sections[i]) total += strlen_P(sections[i]);
+    for (int i = 0; i < count; i++)
+    {
+        if (sections[i])
+            total += strlen_P(sections[i]);
     }
 
     WiFiClient cl = server.client();
@@ -711,11 +749,14 @@ static void serve_pgm_sections(ESP8266WebServer &server, const char *const *sect
 
     /* Enviar cada seção em chunks de 256 bytes */
     char buf[256];
-    for (int i = 0; i < count; i++) {
-        if (!sections[i]) continue;
+    for (int i = 0; i < count; i++)
+    {
+        if (!sections[i])
+            continue;
         PGM_P src = sections[i];
         size_t remaining = strlen_P(src);
-        while (remaining > 0) {
+        while (remaining > 0)
+        {
             size_t chunk = remaining > sizeof(buf) ? sizeof(buf) : remaining;
             memcpy_P(buf, src, chunk);
             cl.write((const uint8_t *)buf, chunk);
@@ -744,8 +785,7 @@ static void handle_root(void)
         (const char *)FPSTR(PAGE_PINS_SEC),
         (const char *)FPSTR(PAGE_DASHBOARD_CONT2),
         (const char *)FPSTR(PAGE_SCRIPT_PINS),
-        (const char *)FPSTR(PAGE_DASHBOARD_END)
-    };
+        (const char *)FPSTR(PAGE_DASHBOARD_END)};
     serve_pgm_sections(s_server, sections, sizeof(sections) / sizeof(sections[0]));
 }
 
@@ -769,9 +809,9 @@ static void handle_api_state(void)
         doc["uptime"] = upbuf;
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         doc["slot"] = s_radio.assigned_slot();
-       #ifdef  HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
-        #endif
+#endif
 #ifdef LED_PIN
         doc["led_enabled"] = (s_led_enabled ? "true" : "false");
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
@@ -938,7 +978,8 @@ static void handle_api_pins(void)
             obj["gpio"] = gpio;
             obj["state"] = digitalRead(gpio);
             uint8_t mode = getMode(gpio);
-            obj["mode"] = (mode == OUTPUT) ? "OUT" : (mode == INPUT_PULLUP) ? "IN_PU" : "IN";
+            obj["mode"] = (mode == OUTPUT) ? "OUT" : (mode == INPUT_PULLUP) ? "IN_PU"
+                                                                            : "IN";
         }
         serializeJson(doc, json);
     }
@@ -1026,9 +1067,9 @@ static void handle_console(char c)
 #endif
         console.printf("  c    - zerar contadores\n");
         console.printf("  u    - info OTA\n");
-        #ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
         console.printf("  a    - info Alexa\n");
-        #endif
+#endif
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
         if (s_radio.is_paired())
@@ -1044,7 +1085,7 @@ static void handle_console(char c)
         console.printf("  Up:       %s\n", upbuf);
         console.printf("----------------\n\n");
         break;
-   #ifdef HABILITA_ALEXA     
+#ifdef ALEXA_ENABLED
     case 'a':
     case 'A':
         console.printf("\n--- Alexa ---\n");
@@ -1055,7 +1096,7 @@ static void handle_console(char c)
         console.printf("             Acesse http://%s/espalexa para status\n", WiFi.localIP().toString().c_str());
         console.printf("-------------\n\n");
         break;
-        #endif
+#endif
 #ifdef HABILITA_REPEATER
     case 'e':
     case 'E':
@@ -1111,20 +1152,22 @@ static void handle_console(char c)
         console.printf("  Led:         %s\n", digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
 
-        if (s_radio.is_paired())
-        {
-            char mac_str[18];
-            mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
-            console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
-        }
-        else
-        {
-            console.printf("  Gateway:     nao pareado\n");
-        }
+        if (s_radio.has_gateway())
+            if (s_radio.is_paired())
+            {
+                char mac_str[18];
+                mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
+                console.printf("  Gateway:     %s (slot %d)\n", mac_str, s_radio.assigned_slot());
+            }
+            else
+            {
+
+                console.printf("  Gateway:     nao pareado\n");
+            }
         console.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
-      #ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
         console.printf("  Alexa:       %s (ativo)\n", s_device_name);
-        #endif
+#endif
 #ifdef HABILITA_REPEATER
         if (repeater_is_enabled())
         {
@@ -1189,7 +1232,7 @@ static void handle_api_settings(void)
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 espnow_save_device_name(s_device_name);
-#ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
                 if (s_alexa_dev)
                     s_alexa_dev->setName(s_device_name);
 #endif
@@ -1312,7 +1355,8 @@ static void handle_api_devices(void)
     for (JsonVariant v : doc.as<JsonArray>())
     {
         const char *id = v["id"] | "";
-        if (strcmp(id, s_device_id) == 0) continue;
+        if (strcmp(id, s_device_id) == 0)
+            continue;
         JsonObject obj = arr.add<JsonObject>();
         obj["id"] = id;
         obj["name"] = v["name"] | id;
@@ -1519,61 +1563,122 @@ static void handle_ota_upload(void)
     }
 }
 
-static uint8_t get_sensor_type() {
-    return SENSOR_TYPE_ONOFF;
+static uint8_t get_sensor_type()
+{
+    return SENSOR_TYPE_LIGHT;
 }
 
-static uint8_t get_sensor_payload(uint8_t* buf, uint8_t max_len) {
+static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
+{
     payload_onoff_t pl;
     memset(&pl, 0, sizeof(pl));
     pl.state = s_relay_state ? 1 : 0;
     uint8_t len = sizeof(pl);
-    if (len > max_len) len = max_len;
+    if (len > max_len)
+        len = max_len;
     memcpy(buf, &pl, len);
-    if (len + 1 <= max_len) {
+    if (len + 1 <= max_len)
+    {
         buf[len] = (uint8_t)WiFi.channel();
         len++;
     }
     return len;
 }
 
-static void on_command(uint8_t command) {
+static void on_command(uint8_t command)
+{
     console.printf("[%s] Command received: %d\n", TAG, command);
-    if (command == 0x01) {
-        toggle_relay();
-        if (s_radio.is_paired()) {
-            s_radio.publish_state();
-        }
-    }
+    set_relay(command == 0x01);
+    // if (s_radio.is_paired()) {
+    s_radio.publish_state();
+    //}
 }
 
-static void on_paired(uint8_t slot) {
+static void on_paired(uint8_t slot)
+{
     console.printf("[%s] Paired, slot %d\n", TAG, slot);
 }
 
-static void on_restart() {
+static void on_restart()
+{
     console.printf("[%s] Restart command received\n", TAG);
     delay(100);
     ESP.restart();
 }
 
-static void on_forward(const uint8_t* data, size_t len, const uint8_t* mac) {
+static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
+{
 #ifdef HABILITA_REPEATER
-    if (repeater_is_enabled() && mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac)) {
+    if (repeater_is_enabled() && mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
+    {
         repeater_forward(mac, data, len, s_gateway_mac, s_broadcast_mac,
                          repeater_send_adapter, TAG);
     }
 #endif
 }
 
-static void on_pairing_failed() {
+static void on_pairing_failed()
+{
     console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
-    if (mywifi_try_next_bssid()) {
+    if (mywifi_try_next_bssid())
+    {
         console.printf("[%s] Reconnecting, will retry pairing\n", TAG);
-    } else {
+    }
+    else
+    {
         console.printf("[%s] No other APs found, will retry on current\n", TAG);
     }
 }
+
+#ifdef TCP_ENABLED
+static void tcp_poll_pending_commands()
+{
+    if (!s_radio.is_paired())
+        return;
+    if (WiFi.status() != WL_CONNECTED)
+        return;
+    if (strlen(s_device_id) == 0)
+        return;
+
+    String url = String("http://") + WiFi.gatewayIP().toString() + ":" + String(DASHBOARD_PORT) + "/node/command/" + s_device_id;
+    WiFiClient client;
+    HTTPClient http;
+    if (!http.begin(client, url))
+        return;
+    http.setTimeout(1500);
+    int code = http.GET();
+    if (code != 200)
+    {
+        http.end();
+        return;
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload);
+    if (err)
+        return;
+
+    if (doc["command"].is<const char *>())
+    {
+        const char *cmd = doc["command"];
+        if (strcmp(cmd, "on") == 0)
+        {
+            console.printf("[%s] TCP cmd: ON\n", TAG);
+            set_relay(true);
+            s_radio.publish_state();
+        }
+        else if (strcmp(cmd, "off") == 0)
+        {
+            console.printf("[%s] TCP cmd: OFF\n", TAG);
+            set_relay(false);
+            s_radio.publish_state();
+        }
+    }
+}
+#endif
 
 void setup(void)
 {
@@ -1582,7 +1687,8 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    if (!LittleFS.begin()) {
+    if (!LittleFS.begin())
+    {
         console.printf("[%s] LittleFS mount failed, formatting...\n", TAG);
         LittleFS.format();
         LittleFS.begin();
@@ -1593,9 +1699,12 @@ void setup(void)
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
-    if (timer_load_littlefs()) {
+    if (timer_load_littlefs())
+    {
         console.printf("[%s] timer_load_littlefs: OK\n", TAG);
-    } else {
+    }
+    else
+    {
         console.printf("[%s] timer_load_littlefs: FAIL, migrating EEPROM\n", TAG);
         timer_save();
         timer_save_littlefs();
@@ -1622,7 +1731,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed };
+    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed};
     s_radio.set_pair_interval(ESPNOW_PAIR_INTERVAL_MS);
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
@@ -1633,7 +1742,7 @@ void setup(void)
     s_radio.begin();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
-#ifdef HABILITA_ALEXA
+#ifdef ALEXA_ENABLED
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
 #endif
@@ -1648,7 +1757,8 @@ void setup(void)
 #ifdef HABILITA_REPEATER
     s_server.on("/api/repeater", HTTP_ANY, handle_api_repeater);
 #endif
-    s_server.on("/api/pin", HTTP_ANY, []() { handle_api_pin(s_server); });
+    s_server.on("/api/pin", HTTP_ANY, []()
+                { handle_api_pin(s_server); });
 #ifdef HABILITA_PINOS
     s_server.on("/api/pins", HTTP_GET, handle_api_pins);
 #endif
@@ -1656,7 +1766,8 @@ void setup(void)
     s_server.on("/api/timers", HTTP_ANY, handle_api_timers);
     s_server.on("/api/devices", HTTP_GET, handle_api_devices);
     s_server.on("/api/timer/next", handle_api_timer_next);
-    s_server.on("/api/debug", HTTP_GET, []() {
+    s_server.on("/api/debug", HTTP_GET, []()
+                {
         String json;
         String fs;
         if (LittleFS.exists("/timers.json")) {
@@ -1671,8 +1782,7 @@ void setup(void)
         String ram;
         serializeJson(doc, ram);
         String resp = "{\"littlefs\": " + (fs.length() ? fs : "null") + ", \"ram\": " + ram + "}";
-        s_server.send(200, "application/json", resp);
-    });
+        s_server.send(200, "application/json", resp); });
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
@@ -1720,10 +1830,13 @@ void loop(void)
     }
     handle_wifi();
     ota_handle();
-#ifdef HABILITA_ALEXA
-    if (s_alexa_initialized) {
+#ifdef ALEXA_ENABLED
+    if (s_alexa_initialized)
+    {
         s_alexa.loop();
-    } else {
+    }
+    else
+    {
         s_server.handleClient();
     }
 #else
@@ -1767,7 +1880,8 @@ void loop(void)
     unsigned long now = millis();
 
     s_radio.loop();
-    if (s_radio.is_paired()) {
+    if (s_radio.is_paired())
+    {
         memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
     }
 
@@ -1827,7 +1941,7 @@ void loop(void)
             digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
     }
-    else if (!s_radio.is_paired())
+    else if (!s_radio.is_paired() && s_radio.has_gateway()) 
     {
         if (now - last_led >= LED_BLINK_GATEWAY_MS)
         {

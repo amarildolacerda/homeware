@@ -40,6 +40,34 @@ public:
     static EspnowHandler* s_self;  // accessed from C-linkage callback
 
 private:
+    // Reliable ESP-NOW command delivery ("fila com hops").
+    // ESP-NOW unicast/broadcast frames can be silently dropped (see AGENTS.md
+    // rule 18). Commands are enqueued and re-transmitted for up to CMD_MAX_HOPS
+    // hops (or CMD_TTL_MS), making delivery pseudo-asynchronous and preventing a
+    // single dropped frame from losing the command forever. on/off commands are
+    // idempotent (lamp set_relay(command==1)), so redundant hops are harmless.
+    static const int PENDING_CMD_MAX = 8;
+    static const uint8_t CMD_MAX_HOPS = 6;
+    static const unsigned long CMD_HOP_INTERVAL_MS = 250;
+    static const unsigned long CMD_TTL_MS = 10000;
+
+    struct PendingCmd {
+        bool active = false;
+        uint8_t dest[6];          // ESP-NOW destination (unicast mac or bcast)
+        bool is_bcast = false;
+        uint8_t slot = 0;
+        uint8_t frame[48];        // espnow_command_t (42B) / espnow_restart_t (9B)
+        uint8_t len = 0;
+        uint8_t hops = 0;         // number of sends already attempted
+        unsigned long next_retry_ms = 0;
+        unsigned long created_at = 0;
+    };
+    PendingCmd m_pending_cmds[PENDING_CMD_MAX];
+
+    void enqueue_cmd(const uint8_t* dest, bool is_bcast, int slot,
+                     const uint8_t* frame, uint8_t len);
+    void process_pending_commands();
+
     bool m_pairing_mode = false;
     unsigned long m_pairing_start = 0;
     uint8_t m_gateway_mac[6];
