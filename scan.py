@@ -85,6 +85,13 @@ def identify(ip, port):
             paired = data.get("paired_count", "?")
             online = data.get("online_count", "?")
             mac = data.get("gateway_mac") or data.get("mac") or data.get("sta_mac")
+            
+            # Only treat as gateway if response has meaningful data
+            # (empty {} from nodes with /api/info endpoint should not be gateway)
+            if not gw_id and not mac and paired == "?" and online == "?":
+                # Empty response - not a gateway, fall through to /api/state
+                raise Exception("Empty /api/info response")
+            
             is_gateway = "gateway" in gw_id or "gateway" in str(mac) or mac is not None
             label = "GATEWAY" if is_gateway else "bridge"
             info = f"  [{label}] {ip}:{port}  type=gateway  FW={fw}  platform={platform}  paired={paired} online={online}  id={gw_id}"

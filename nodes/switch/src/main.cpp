@@ -3,8 +3,9 @@
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 #include <ArduinoOTA.h>
-#include <Updater.h>
+#ifdef ALEXA_ENABLED
 #include <Espalexa.h>
+#endif
 #include <sys/time.h>
 #include "config.h"
 #include "pages.h"
@@ -41,9 +42,11 @@ static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 
 static MyWebServer s_server(DASHBOARD_PORT);
+#ifdef ALEXA_ENABLED
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 static bool s_alexa_initialized = false;
+#endif
 
 static NodeRadioType s_radio;
 
@@ -341,6 +344,15 @@ static void set_relay(bool state)
         s_on_count++;
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
+
+#ifdef ALEXA_ENABLED
+    if (s_alexa_dev)
+    {
+        s_alexa_dev->setValue(state ? 255 : 0);
+        s_alexa_dev->setState(state);
+    }
+#endif
+
     save_relay_state();
     if (state && s_pulse_enabled)
         s_pulse_on_time = millis();
@@ -353,6 +365,7 @@ static void toggle_relay(void)
     set_relay(!s_relay_state);
 }
 
+#ifdef ALEXA_ENABLED
 static void alexa_callback(EspalexaDevice *d)
 {
     bool state = (d->getValue() > 0);
@@ -364,6 +377,7 @@ static void alexa_callback(EspalexaDevice *d)
         s_radio.publish_state();
     }
 }
+#endif
 
 static void init_hardware(void)
 {
@@ -408,11 +422,18 @@ static void on_wifi_connected(void)
 #ifdef ALEXA_ENABLED
     if (!s_alexa_initialized)
     {
-        s_alexa.begin(&s_server);
-        s_alexa_initialized = true;
-        console.printf("[%s] Alexa Hue Bridge: %s ready\n", TAG, s_device_name);
+        bool ok = s_alexa.begin(&s_server);
+        s_alexa_initialized = ok;
+        console.printf("[%s] Alexa Hue Bridge: %s (init=%s)\n", TAG, s_device_name, ok ? "OK" : "FAIL");
+        if (!ok)
+            console.printf("[%s] Alexa UDP multicast falhou, Alexa indisponivel\n", TAG);
+        s_server.onNotFound([]()
+                            {
+            if (s_alexa_initialized &&
+                s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
+                return;
+            s_server.send(404, "text/plain", "Not found"); });
     }
-    console.printf("  => Alexa:     \"Alexa, ligue %s\"\n", s_device_name);
 #endif
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 }
@@ -519,7 +540,9 @@ static void handle_api_state(void)
         doc["wifi_channel"] = WiFi.channel();
         doc["uptime_s"] = (millis() - s_start_time) / 1000;
         doc["slot"] = s_radio.assigned_slot();
+#ifdef ALEXA_ENABLED
         doc["alexa_connected"] = (s_last_alexa_activity > 0 && (millis() - s_last_alexa_activity < 600000));
+#endif
 #ifdef LED_PIN
         doc["led_enabled"] = (s_led_enabled ? "true" : "false");
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
@@ -825,8 +848,10 @@ static void handle_api_settings(void)
                 strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                 s_device_name[sizeof(s_device_name) - 1] = '\0';
                 espnow_save_device_name(s_device_name);
+#ifdef ALEXA_ENABLED
                 if (s_alexa_dev)
                     s_alexa_dev->setName(s_device_name);
+#endif
                 console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
                 changed = true;
             }
@@ -1188,9 +1213,11 @@ void setup(void)
     s_radio.load_gateway_mac();
     s_radio.begin();
 
+#ifdef ALEXA_ENABLED
     s_alexa_dev = new EspalexaDevice(s_device_name, alexa_callback, EspalexaDeviceType::onoff);
     s_alexa.addDevice(s_alexa_dev);
     console.printf("[%s] Alexa device created: %s (begin() postponed until WiFi connects)\n", TAG, s_device_name);
+#endif
 
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1286,11 +1313,15 @@ void loop(void)
         s_prev_wifi_state = cur;
     }
     ArduinoOTA.handle();
+#ifdef ALEXA_ENABLED
     if (s_alexa_initialized) {
         s_alexa.loop();
     } else {
         s_server.handleClient();
     }
+#else
+    s_server.handleClient();
+#endif
 
     {
         bool btn = digitalRead(s_button_pin);
