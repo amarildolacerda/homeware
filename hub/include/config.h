@@ -17,6 +17,7 @@
 
 #define TIME_SYNC_INTERVAL_MS 300000
 #define NTP_RETRY_INTERVAL_MS 1800000
+#define HUB_RX_WATCHDOG_MS 300000  // 5 min without any RX → restart
 
 #ifndef MQTT_HOST_DEFAULT
 #define MQTT_HOST_DEFAULT "0.0.0.0"
