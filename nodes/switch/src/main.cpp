@@ -40,7 +40,7 @@ static char s_device_name[32] = DEVICE_NAME;
 static bool s_led_enabled = true;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 
-static ESP8266WebServer s_server(DASHBOARD_PORT);
+static MyWebServer s_server(DASHBOARD_PORT);
 static Espalexa s_alexa;
 static EspalexaDevice *s_alexa_dev = nullptr;
 static bool s_alexa_initialized = false;
@@ -525,7 +525,11 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+#if defined(ARDUINO_ARCH_ESP32)
+        doc["platform"] = "esp32";
+#else
         doc["platform"] = "esp8266";
+#endif
         doc["current_epoch"] = get_synced_epoch();
         doc["pulse_enabled"] = s_pulse_enabled;
         doc["pulse_duration_min"] = s_pulse_duration_min;
