@@ -615,6 +615,9 @@ static void handle_api_wifi(void)
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
             save_wifi_credentials(ssid, pass);
+            /* Persistir tambem no layout do myWiFiManager (shared), que e o que a
+               reconexao le. Sem isso, apos reboot a reconexao nao acha as creds. */
+            mywifi_save_creds(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
         }
