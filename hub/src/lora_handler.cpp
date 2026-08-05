@@ -47,21 +47,5 @@ bool LoraHandler::send_restart(const uint8_t* mac) {
     cmd.command = 0xFF;
     return send((const uint8_t*)&cmd, sizeof(cmd)) == 0;
 }
-void LoraHandler::handle_rx() {
-    int len = LoRa.parsePacket();
-    if (len <= 0 || len > LORA_RX_BUF_SIZE) return;
 
-    int i = 0;
-    while (LoRa.available() && i < LORA_RX_BUF_SIZE) {
-        m_rx_buf[i++] = LoRa.read();
-    }
-    m_rx_len = i;
-
-    int16_t rssi = LoRa.packetRssi();
-
-    if (m_rx_len >= LORA_HEADER_SIZE && m_rx_cb) {
-        m_rx_cb(m_rx_buf, m_rx_len, rssi, m_rx_arg);
-    }
-}
-
-#endif // HABILITA_LORA
+#endif
