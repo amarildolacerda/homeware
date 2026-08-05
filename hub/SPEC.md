@@ -15,7 +15,7 @@
 - `espnow_pair_request_t.device_name`: **32 bytes** (compatível com `s_device_name[32]` dos clients)
 - `virtual_sensor_t.name`: **32 bytes**
 - `pending_pair_t.name`: **32 bytes**
-- EEPROM_SENSOR_SIZE: **48 bytes** por sensor (nome ocupa32 bytes no offset9)
+- EEPROM_SENSOR_SIZE: **58 bytes** por sensor (nome ocupa32 bytes no offset9, bridge_device_id 15 bytes no offset43)
 - Qualquer mudança no tamanho de `device_name` exige atualização simultânea de gateway e todos os clients
 
 

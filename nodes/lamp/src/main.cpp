@@ -20,6 +20,7 @@
 
 #include "common_console.h"
 #include "common_ota.h"
+#include "common_watchdog.h"
 #include "common_util.h"
 #include "common_wifi.h"
 #include "common_espnow.h"
@@ -45,6 +46,11 @@ static bool mac_is_nonzero(const uint8_t *mac)
 
 // Radio strategy — selected at compile time via radio_strategy.h
 static NodeRadioType s_radio;
+
+#ifdef TCP_ENABLED
+// Watchdog de conexao (a prova de flip-flop) — init() no setup()
+static StableWatchdog g_blink_wd;
+#endif
 
 static bool s_relay_state = false;
 static int s_relay_pin = RELAY_PIN;
@@ -1658,6 +1664,10 @@ void setup(void)
     s_radio.begin();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
+#ifdef TCP_ENABLED
+    g_blink_wd.init(WATCHDOG_STABLE_RESET_MS, 300000);
+#endif
+
     // ── Registrar rotas do servidor ──
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1763,7 +1773,8 @@ void loop(void)
         static wifi_state_t s_prev_wifi_state = WIFI_STATE_DISCONNECTED;
         mywifi_loop();
         wifi_state_t cur = mywifi_state();
-        if (cur == WIFI_STATE_CONNECTED && s_prev_wifi_state != WIFI_STATE_CONNECTED) {
+        if (cur == WIFI_STATE_CONNECTED && s_prev_wifi_state != WIFI_STATE_CONNECTED)
+        {
             on_wifi_connected();
         }
         s_prev_wifi_state = cur;
@@ -1829,9 +1840,13 @@ void loop(void)
         if (now - last_timer_check > TIMER_CHECK_INTERVAL_MS)
         {
             last_timer_check = now;
-            if (WiFi.status() == WL_CONNECTED)
+            // Timer deve funcionar mesmo sem WiFi (principal uso é offline).
+            // Única exceção: relógio ainda não carregado — sem epoch não há
+            // como avaliar a hora corrente.
+            unsigned long epoch = get_epoch();
+            if (epoch > 0)
             {
-                int action = timer_check(get_epoch(), s_timezone_offset);
+                int action = timer_check(epoch, s_timezone_offset);
                 if (action >= 0)
                 {
                     apply_timer(action);
@@ -1891,6 +1906,22 @@ void loop(void)
     else
     {
         digitalWrite(LED_PIN, LED_OFF);
+    }
+#endif
+
+#ifdef TCP_ENABLED // obrigatorio trabalhar conectado
+    // Watchdog: TCP node precisa estar conectado. Se ficar em estado
+    // "quebrado" (WiFi perdido / portal / gateway sem parear) por > 5min,
+    // reinicia. A prova de flip-flop: so arma o timer apos 60s saudaveis
+    // continuos (WATCHDOG_STABLE_RESET_MS) — reconexoes breves nao desarmam.
+    bool wd_healthy = (WiFi.status() == WL_CONNECTED)
+                      && (mywifi_state() != WIFI_STATE_PORTAL)
+                      && (s_radio.is_paired() || !s_radio.has_gateway());
+    if (g_blink_wd.check(wd_healthy))
+    {
+        console.printf("[%s] Watchdog blink\n", TAG);
+        delay(100);
+        ESP.restart();
     }
 #endif
 }

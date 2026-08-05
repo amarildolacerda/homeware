@@ -250,7 +250,7 @@ em config/EEPROM** (`pairing_enabled`):
 ### Campo device_name (regra 17)
 - `device_name` tem **32 bytes** (compatível com `s_device_name[32]` dos clients
   e `virtual_sensor_t.name`).
-- `EEPROM_SENSOR_SIZE = 48` bytes por sensor (nome ocupa 32 bytes no offset 9).
+- `EEPROM_SENSOR_SIZE = 58` bytes por sensor (nome ocupa 32 bytes no offset 9, bridge_device_id 15 bytes no offset 43).
 - Qualquer mudança nesse tamanho exige atualização simultânea de gateway e
   todos os clients.
 

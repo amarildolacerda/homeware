@@ -23,6 +23,7 @@
 #include "display_handler.h"
 #endif
 #include "common_console.h"
+#include "common_watchdog.h"
 #include "device_router.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
@@ -35,6 +36,8 @@ static time_t s_ntp_epoch = 0;
 static unsigned long s_last_time_sync = 0;
 static time_t s_browser_epoch = 0;
 static unsigned long s_last_rx_change_ms = 0;
+// Watchdog de RX a prova de flip-flop: init() no setup()
+static StableWatchdog g_hub_rx_wd;
 
 #ifdef ESPNOW_ENABLED
 static EspnowHandler s_espnow;
@@ -241,6 +244,9 @@ void setup() {
     sensor_registry_init();
     mqtt_client_load_config();
     mqtt_client_generate_device_ids();
+    // Watchdog de RX: arma apos 60s saudaveis continuos, reinicia apos 5min
+    // sem dados (arm_from_start=true: hub que nunca recebe tambem reinicia)
+    g_hub_rx_wd.init(WATCHDOG_STABLE_RESET_MS, HUB_RX_WATCHDOG_MS, true);
 
     if (!web_server_wifi_setup(false)) {
         console.printf("[%s] WiFi setup failed, restarting...\n", TAG);
@@ -300,6 +306,8 @@ void loop() {
     console.loop();
 
     // Watchdog: restart if no packets received for too long (and sensors are paired)
+    // A prova de flip-flop: so (re)arma apos 60s saudaveis continuos; um pico
+    // isolado de RX nao desarma o watchdog.
     if (sensor_registry_count_paired() > 0) {
         unsigned long total_rx = s_radio_mgr.total_rx_count();
         static unsigned long s_prev_rx = 0;
@@ -308,7 +316,8 @@ void loop() {
             s_last_rx_change_ms = millis();
         }
         if (s_last_rx_change_ms == 0) s_last_rx_change_ms = millis();
-        if (millis() - s_last_rx_change_ms > HUB_RX_WATCHDOG_MS) {
+        bool rx_healthy = (millis() - s_last_rx_change_ms < HUB_RX_HEALTHY_MS);
+        if (g_hub_rx_wd.check(rx_healthy)) {
             console.printf("[%s] No RX for %lus with %d sensors paired, restarting...\n",
                            TAG, (millis() - s_last_rx_change_ms) / 1000,
                            sensor_registry_count_paired());

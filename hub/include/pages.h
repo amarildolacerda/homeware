@@ -113,6 +113,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:8px}
 .sidebar .logo h1{font-size:1rem;font-weight:700;color:var(--primary)}
 .sidebar .logo span{font-size:0.75rem;color:var(--muted)}
+.sidebar .logo .logo-row{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.signal{display:flex;align-items:flex-end;gap:2px;height:14px}
+.signal .bar{width:3px;border-radius:1px;background:var(--border-strong)}
+.signal .bar:nth-child(1){height:4px}
+.signal .bar:nth-child(2){height:7px}
+.signal .bar:nth-child(3){height:10px}
+.signal .bar:nth-child(4){height:13px}
+.signal .bar.on{background:var(--success)}
 .sidebar nav{flex:1}
 .sidebar nav a{display:flex;align-items:center;gap:10px;padding:12px 20px;color:var(--muted);text-decoration:none;font-size:0.85rem;font-weight:500;transition:all .15s;border-left:3px solid transparent}
 .sidebar nav a:hover{color:var(--text);background:var(--primary-focus)}
@@ -142,7 +150,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){
 .sidebar{width:60px}
-.sidebar .logo h1,.sidebar .logo span,.sidebar nav a span:last-child,.sidebar .footer-nav,.sidebar .nav-group-head .chev,.sidebar .nav-group-head span:not(.icon){display:none}
+.sidebar .logo h1,.sidebar .logo span,.sidebar .logo .signal,.sidebar nav a span:last-child,.sidebar .footer-nav,.sidebar .nav-group-head .chev,.sidebar .nav-group-head span:not(.icon){display:none}
 .sidebar nav a{justify-content:center;padding:14px;border-left:none}
 .sidebar nav a.active{border-left:none;background:var(--primary-focus)}
 .sidebar .nav-group-head{justify-content:center;padding:14px;border-left:none}
@@ -154,6 +162,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 <body>
 <div class="sidebar">
 <div class="logo">
+<div class="logo-row">
+<div class="logo-title">
 )rawliteral"
 #if defined(LORA_ENABLED) && defined(ESPNOW_ENABLED)
 "<h1>LoRa + ESP-NOW</h1><span>Hub</span>"
@@ -163,6 +173,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 "<h1>ESP-NOW</h1><span>Gateway</span>"
 #endif
 R"rawliteral(
+</div>
+<div class="signal" id="hubSignal" title="RSSI: --"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+</div>
 </div>
 <nav>
 <a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
@@ -901,6 +914,19 @@ async function toggleSensor(slot, state) {
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
 
+function updateHubSignal(rssi){
+  var el=document.getElementById('hubSignal');
+  if(!el) return;
+  var bars=el.querySelectorAll('.bar');
+  var level=0;
+  if(rssi>=-40) level=4;
+  else if(rssi>=-60) level=3;
+  else if(rssi>=-70) level=2;
+  else if(rssi>=-80) level=1;
+  for(var i=0;i<bars.length;i++) bars[i].classList.toggle('on', i<level);
+  el.title='RSSI: '+rssi+' dBm';
+}
+
 async function loadData() {
   if (s_overviewLoading) return;
   s_overviewLoading = true;
@@ -913,6 +939,7 @@ async function loadData() {
     document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
     updateFooterClock(info.epoch);
@@ -1013,7 +1040,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 
 <div class="card collapsible" id="card-bridge">
 <div class="card-head" onclick="toggleCard('card-bridge')">
-<h2>Bridge</h2>
+<h2>Hub</h2>
 <div class="summary"><span id="bridge-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
 </div>
 <div class="card-body">
@@ -1124,6 +1151,7 @@ async function loadSettings() {
     document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
     document.getElementById('bridge-sum').textContent = info.ip || '--';
     if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
     updateFooterClock(info.epoch);

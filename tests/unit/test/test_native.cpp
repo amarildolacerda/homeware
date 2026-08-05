@@ -22,6 +22,13 @@ void test_pagemanager_switches_page(void);
 void test_pagemanager_footer(void);
 void test_pagemanager_page_render(void);
 void test_pagemanager_cycles_back(void);
+void test_wd_never_healthy_no_arm_never_fires(void);
+void test_wd_arm_from_start_fires_when_never_healthy(void);
+void test_wd_arm_from_start_not_fire_before_restart(void);
+void test_wd_healthy_arms_and_never_fires(void);
+void test_wd_flipflop_does_not_disarm(void);
+void test_wd_healthy_then_broken_fires(void);
+void test_wd_reset_disarms(void);
 
 void setUp(void) {
     fake_millis_set(0);
@@ -51,6 +58,13 @@ int main(int argc, char** argv) {
     RUN_TEST(test_pagemanager_footer);
     RUN_TEST(test_pagemanager_page_render);
     RUN_TEST(test_pagemanager_cycles_back);
+    RUN_TEST(test_wd_never_healthy_no_arm_never_fires);
+    RUN_TEST(test_wd_arm_from_start_fires_when_never_healthy);
+    RUN_TEST(test_wd_arm_from_start_not_fire_before_restart);
+    RUN_TEST(test_wd_healthy_arms_and_never_fires);
+    RUN_TEST(test_wd_flipflop_does_not_disarm);
+    RUN_TEST(test_wd_healthy_then_broken_fires);
+    RUN_TEST(test_wd_reset_disarms);
     UNITY_END();
     return 0;
 }
