@@ -20,10 +20,12 @@ Data: 2026-08-05 · Branch: dev
   - Enfileira o `PendingCommand` (polling) como hoje — fallback garantido.
   - Se `sensor->ip` for conhecido (algum byte != 0), enfileira também um `PushCommand { device_id, ip[4], state, created_at }` em `m_push_queue`.
 - `loop()` passa a chamar `process_push_queue()` (não-bloqueante — regra 15):
-  - Para cada push dentro de `TCP_COMMAND_TTL_MS`:
+  - **Máximo 1 tentativa HTTP por ciclo de loop** (`break` após o primeiro push tentado) para limitar bloqueio do loop.
+  - **Retry rate-limited**: cada push só é tentado de novo após `TCP_PUSH_RETRY_INTERVAL_MS` (1000ms, define local no `.cpp` — não tocar shared).
+  - Para cada push tentado dentro de `TCP_COMMAND_TTL_MS`:
     - Monta URL `http://{ip}:{TCP_HTTP_PORT}/api/relay` e faz `POST` com corpo `{"state":true|false}` via `HTTPClient` (timeout curto, ex. 800ms).
     - **HTTP 200** → remove o `PendingCommand` de fallback mais antigo (front) da fila daquele `device_id` (FIFO alinhado ao push) + remove o push da fila. Log de sucesso.
-    - **Falha/timeout/erro** → mantém o push (retry a cada ciclo até TTL); o polling segue como fallback.
+    - **Falha/timeout/erro** → mantém o push (retry após intervalo); o polling segue como fallback.
   - Pushes expirados (TTL) são removidos.
 - Idempotência: `set_relay(bool)` no lamp torna dupla entrega inofensiva (regra TCP: `on_command` seta, não alterna).
 
@@ -35,6 +37,7 @@ struct PushCommand {
     uint8_t ip[4];
     uint8_t state;
     unsigned long created_at;
+    unsigned long last_attempt_ms;  // 0 = nunca tentado
 };
 std::vector<PushCommand> m_push_queue;
 ```
