@@ -1040,7 +1040,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 
 <div class="card collapsible" id="card-bridge">
 <div class="card-head" onclick="toggleCard('card-bridge')">
-<h2>Bridge</h2>
+<h2>Hub</h2>
 <div class="summary"><span id="bridge-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
 </div>
 <div class="card-body">
