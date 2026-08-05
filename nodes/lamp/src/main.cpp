@@ -1763,7 +1763,8 @@ void loop(void)
         static wifi_state_t s_prev_wifi_state = WIFI_STATE_DISCONNECTED;
         mywifi_loop();
         wifi_state_t cur = mywifi_state();
-        if (cur == WIFI_STATE_CONNECTED && s_prev_wifi_state != WIFI_STATE_CONNECTED) {
+        if (cur == WIFI_STATE_CONNECTED && s_prev_wifi_state != WIFI_STATE_CONNECTED)
+        {
             on_wifi_connected();
         }
         s_prev_wifi_state = cur;
@@ -1829,9 +1830,13 @@ void loop(void)
         if (now - last_timer_check > TIMER_CHECK_INTERVAL_MS)
         {
             last_timer_check = now;
-            if (WiFi.status() == WL_CONNECTED)
+            // Timer deve funcionar mesmo sem WiFi (principal uso é offline).
+            // Única exceção: relógio ainda não carregado — sem epoch não há
+            // como avaliar a hora corrente.
+            unsigned long epoch = get_epoch();
+            if (epoch > 0)
             {
-                int action = timer_check(get_epoch(), s_timezone_offset);
+                int action = timer_check(epoch, s_timezone_offset);
                 if (action >= 0)
                 {
                     apply_timer(action);
@@ -1891,6 +1896,27 @@ void loop(void)
     else
     {
         digitalWrite(LED_PIN, LED_OFF);
+    }
+#endif
+
+    // Watchdog: TCP node precisa estar conectado. Se ficar em estado
+    // "quebrado" (WiFi perdido / portal / gateway sem parear) por > 5min, reinicia.
+    bool in_wd_active = (WiFi.status() != WL_CONNECTED)
+                        || (mywifi_state() == WIFI_STATE_PORTAL)
+                        || (!s_radio.is_paired() && s_radio.has_gateway());
+
+    static unsigned long watchdog_last_blink = 0;
+    if (!in_wd_active)
+    {
+        watchdog_last_blink = now;
+    }
+
+#ifdef TCP_ENABLED // obrigatorio trabalhar conectado
+    if (watchdog_last_blink > 0 && now - watchdog_last_blink > 300000)
+    {
+        console.printf("[%s] Watchdog blink\n", TAG);
+        delay(100);
+        ESP.restart();
     }
 #endif
 }
