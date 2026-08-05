@@ -20,6 +20,7 @@
 
 #include "common_console.h"
 #include "common_ota.h"
+#include "common_watchdog.h"
 #include "common_util.h"
 #include "common_wifi.h"
 #include "common_espnow.h"
@@ -45,6 +46,11 @@ static bool mac_is_nonzero(const uint8_t *mac)
 
 // Radio strategy — selected at compile time via radio_strategy.h
 static NodeRadioType s_radio;
+
+#ifdef TCP_ENABLED
+// Watchdog de conexao (a prova de flip-flop) — init() no setup()
+static StableWatchdog g_blink_wd;
+#endif
 
 static bool s_relay_state = false;
 static int s_relay_pin = RELAY_PIN;
@@ -1658,6 +1664,10 @@ void setup(void)
     s_radio.begin();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
+#ifdef TCP_ENABLED
+    g_blink_wd.init(WATCHDOG_STABLE_RESET_MS, 300000);
+#endif
+
     // ── Registrar rotas do servidor ──
     s_server.on("/", handle_root);
     s_server.on("/docs", []()
@@ -1899,20 +1909,15 @@ void loop(void)
     }
 #endif
 
-    // Watchdog: TCP node precisa estar conectado. Se ficar em estado
-    // "quebrado" (WiFi perdido / portal / gateway sem parear) por > 5min, reinicia.
-    bool in_wd_active = (WiFi.status() != WL_CONNECTED)
-                        || (mywifi_state() == WIFI_STATE_PORTAL)
-                        || (!s_radio.is_paired() && s_radio.has_gateway());
-
-    static unsigned long watchdog_last_blink = 0;
-    if (!in_wd_active)
-    {
-        watchdog_last_blink = now;
-    }
-
 #ifdef TCP_ENABLED // obrigatorio trabalhar conectado
-    if (watchdog_last_blink > 0 && now - watchdog_last_blink > 300000)
+    // Watchdog: TCP node precisa estar conectado. Se ficar em estado
+    // "quebrado" (WiFi perdido / portal / gateway sem parear) por > 5min,
+    // reinicia. A prova de flip-flop: so arma o timer apos 60s saudaveis
+    // continuos (WATCHDOG_STABLE_RESET_MS) — reconexoes breves nao desarmam.
+    bool wd_healthy = (WiFi.status() == WL_CONNECTED)
+                      && (mywifi_state() != WIFI_STATE_PORTAL)
+                      && (s_radio.is_paired() || !s_radio.has_gateway());
+    if (g_blink_wd.check(wd_healthy))
     {
         console.printf("[%s] Watchdog blink\n", TAG);
         delay(100);

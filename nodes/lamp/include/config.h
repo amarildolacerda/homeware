@@ -69,6 +69,12 @@
 #define LED_BLINK_GATEWAY_MS 500
 #endif
 
+// Watchdog do blink: só reseta o timer após período estável saudável,
+// para não ser derrotado por flip-flop de WiFi (reconexões breves).
+#ifndef WATCHDOG_STABLE_RESET_MS
+#define WATCHDOG_STABLE_RESET_MS 60000
+#endif
+
 #ifndef DASHBOARD_PORT
 #define DASHBOARD_PORT 80
 #endif

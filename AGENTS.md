@@ -6,13 +6,13 @@
 - `hub` - hub ESP-NOW que recebe dados dos nodes e encaminha ao server via HTTP
 
 ## Branches
-- `main` — estável, usado nos dispositivos em produção
+- `main` — estável, usado nos dispositivos em produção; nunca commitar diretamente nele
 - `dev` — desenvolvimento
-- atualização do "dev" para "main" só pode ser feito se solicitado ou pegar autorização
-- antes de passar o dev para main gerar um branch do main_vx.x.x
-- quando gerar uma nova tag (ex: v0.0.17) tornar a versão a mesma da tag em todos os servers (Python) e nodes (FW_VERSION)
-- procurar por .git_token a ser usado com git
-- **NÃO fazer push para `dev` automaticamente**: commitar localmente no dev durante o trabalho, mas só dar `push` para `origin/dev` quando o usuário confirmar que a implementação está concluída/refinada. Aguardar o sinal do usuário antes de subir.
+- A atualização do `dev` para `main` só pode ser feita se solicitada ou com autorização.
+- Antes de passar o `dev` para `main`, gerar um branch `main_vx.x.x`.
+- Quando gerar uma tag (ex: v0.0.17), tornar a versão a mesma da tag em todos os servers (Python) e nodes (FW_VERSION).
+- Procurar por `.git_token` para usar com git.
+- **NÃO fazer push para `dev` automaticamente**: commitar localmente no `dev` durante o trabalho, mas só dar `push` para `origin/dev` quando o usuário confirmar que a implementação está concluída/refinada. Aguardar o sinal do usuário antes de subir.
 
 ## Ambiente
 
@@ -53,17 +53,17 @@
 
 ## Desenvolvimento
 - Alterações de código devem ser feitas apenas no branch `dev`. Verifique com `git branch --show-current` antes de começar.
-- `main` é estável e usado em produção — nunca commitar diretamente em `main`, os commits devem ser feito no dev
-- Quando o dev passa para produção (main), fazer uma tag, fazer um merge do dev para o main, ficando o main no mesmo ponto do dev, criar um branch <main_xxx>
+- A política de branches (dev→main, tags, push) está descrita na seção **Branches** acima.
 
-- os dashboards devem ter uma url /docs para listar a api <swagger like>, se for um device manter enxuto para nao comprometer memoria - atualizar quando alteracoes na url forem implementadas/alteradas
-- o dashboard precisa ser responsivo e tratar o loop para nao congelar a carga do browser
-- dashboards de nodes devem usar layout compacto com seção "Detalhes" collapsível (expandir ao clicar), mostrando apenas o controle principal + badge estado por padrão
-- os arquivos fontes devem tentar organização separados por responsabilidade, tentar otimizar uso de memoria / PROGMEM nos ESP, deixando o main mais limpo, usar config.h para mapear configurações
+- os dashboards devem ter uma URL `/docs` para listar a API (estilo Swagger); se for um device, manter enxuto para não comprometer a memória — atualizar quando a URL for alterada
+- o dashboard precisa ser responsivo e tratar o loop para não congelar a carga do browser
+- dashboards de nodes devem usar layout compacto com seção "Detalhes" colapsável (expandir ao clicar), mostrando apenas o controle principal + badge de estado por padrão
+- os arquivos-fonte devem ser organizados por responsabilidade, otimizando o uso de memória / PROGMEM nos ESP, deixando o `main` mais limpo e usando `config.h` para mapear configurações
 - mostrar no dashboard a versão (FW_VERSION)
-- checar tests unitários para novas implementações para garantir que as regras não estejam quebradas, se uma regra não existir test unitário então crie um para garantir o futuro. Se uma implementação altera um test que passou a ter novas caracteristicas/regras mude o test. Se uma implementação quebra uma regra, incluir como parte da decisão para implementação;
-- quando conseguir resolver um problema, erro ou mudança de especificação - registrar a nova regra para aprendizado e reaproveitamento nas proximas sessões
-- cuidado com chamadas repetitivas a api, reaproveitar quando for possivel
+- checar tests unitários para novas implementações para garantir que as regras não estejam quebradas; se uma regra não tiver test unitário, criar um para garantir o futuro. Se uma implementação altera um test que passou a ter novas características/regras, mudar o test. Se uma implementação quebra uma regra, incluir isso como parte da decisão de implementação;
+- para decidir se uma implementação é de uso shared ou individual, verificar se há reaproveitamento em várias implementações (nodes); se for reaproveitada, implementar no shared; caso contrário, é individual (não compartilhada);
+- quando conseguir resolver um problema, erro ou mudança de especificação, registrar a nova regra para aprendizado e reaproveitamento nas próximas sessões
+- cuidado com chamadas repetitivas à API, reaproveitar quando for possível
 - **Código compartilhado**: `shared/` é um **submodule** (`homeware_shared.git`) e é a fonte única de código cross-platform (regra 17 estendida). Estrutura de lib PlatformIO: `library.json` na raiz + **todo o código (`.h` e `.cpp`) em `src/`**. Contém: `espnow_protocol.h`, `myWiFiManager.h/.cpp`, `shared_config.h`, `platform.h` (wrappers `MyWebServer`/`chip_id()`/`espnow_add_peer_wrapper`), `common_console.*` (telnet), `common_ota.*` (ArduinoOTA), `common_util.*` (`uptime_to_str`), `common_wifi.*` (delegators p/ myWiFiManager), `timer.*` (agendamento parametrizado). Hub e nodes DEVEM consumir via `lib_extra_dirs` (hub: `../shared`; nodes: `../../shared`) e NÃO manter cópias divergentes nem usar `-I` manual ou scripts de cópia. Qualquer mudança de struct/protocolo/WiFiManager/common vale para todos os devices e deve ser feita uma única vez no submodule `shared/` (commitar e pushar o submodule, depois bump no homeware). **Ao commitar/pushar o submodule `shared/`, usar SEMPRE o branch `dev` (nunca `main`) — o shared também segue a política de dev→main do homeware.**
 
 ### Novos Nodes
@@ -86,7 +86,7 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 14. Qualquer mudança de estado no node deve disparar feedback imediato ao hub (setar `s_last_espnow_send = 0`)
 15. **Loop non-blocking**: `loop()` não pode conter `delay()` bloqueante. Usar máquina de estados com timestamps (`millis()`) para ESP-NOW sends, ACK wait, retries, pareamento, heartbeat e LED. Aplica-se a hub e todos os nodes.
 16. **Páginas web PROGMEM**: páginas HTML grandes (>10KB) via `FPSTR` + `send()` estouram heap no ESP8266 porque alocam String RAM. `send_P()` e `sendContent_P()` também falham se o buffer TCP encher (`write()` retorna 0). Para páginas grandes, escrever response manualmente via `WiFiClient` em chunks pequenos (256 bytes) com `yield()` entre chunks. Alternativa: manter páginas enxutas (<8KB) para usar `send_P()` sem risco.
-17. **device_name[32]**: `espnow_pair_request_t.device_name` usa32 bytes (compatível com `s_device_name[32]` dos nodes). `virtual_sensor_t.name` e `pending_pair_t.name` também32. EEPROM_SENSOR_SIZE=58 (nome ocupa32 bytes no offset9, bridge_device_id 15 bytes no offset43). Qualquer mudança nesse campo exige atualização simultânea de hub e todos os nodes.
+17. **device_name[32]**: `espnow_pair_request_t.device_name` usa 32 bytes (compatível com `s_device_name[32]` dos nodes). `virtual_sensor_t.name` e `pending_pair_t.name` também 32. EEPROM_SENSOR_SIZE=58 (nome ocupa 32 bytes no offset 9, bridge_device_id 15 bytes no offset 43). Qualquer mudança nesse campo exige atualização simultânea de hub e todos os nodes.
 18. **ESP-NOW broadcast vs unicast (MESMO AP)**: Dois modos existem — unicast (MAC específico) e broadcast (`FF:FF:FF:FF:FF:FF`). **ESP8266↔ESP8266 (homogêneo): unicast funciona bem nos dois sentidos** (o extender envia unicast para seus nodes peers) e é preferível para ACKs/comandos direcionados; broadcast também funciona. **Misto ESP32↔ESP8266**: validado com QuickESPNow (qgw ESP32 + qnode ESP8266, mesmo AP): **ESP8266→ESP32 unicast FALHA** (drop silencioso por coexistência rádio); **ESP32→ESP8266 unicast FUNCIONA**; **broadcast funciona nos dois sentidos**. Conclusão: **quem envia é ESP8266 e quem recebe é ESP32 → BROADCAST obrigatório** (ex: node ESP8266 → hub ESP32: dados, heartbeat, PAIR_REQUEST); **ESP8266→ESP8266 ou ESP32→ESP8266 → unicast OK**. O fallback "unicast→broadcast se `esp_now_send` der erro" é insuficiente: no ESP32 nativo o `esp_now_send` retorna 0 (enfileirado OK) mesmo quando o frame é dropado, então o fallback nunca dispara — escolher o modo ANTES do envio pelo par (tx_chip, rx_chip). Pré-requisito: todos no MESMO canal do AP do hub (node em extender com canal diferente quebra qualquer ESP-NOW). `test_espnow` (teste isolado) funcionou SÓ porque ambos estavam `WiFi.disconnect()` (sem AP) + role COMBO + canal explícito. **Bancada confirmada (2026-07-19, teste `tests/espnow_unicast_test/` gw32 ESP32 COM4 + node ESP8266 COM5, AP `kcasa` ch=4): node ESP8266 enviou alternando unicast/broadcast; BROADCAST `status=0` (OK), UNICAST `status=1` (FALHA no send-callback) — prova empírica da quebra do unicast ESP8266→ESP32 COM AP. Sem AP (STA disconnect) o mesmo unicast dava `status=0` e o gw32 recebia (`unicast=3`). Conclusão reforçada: em produção (hub no AP) node ESP8266→hub ESP32 DEVE usar broadcast; unicast só ESP32→ESP8266 ou ESP8266→ESP8266.
 19. **MAC alt do ESP-NOW**: ESP-NOW usa um MAC diferente do WiFi (bit 1 do byte 0 invertido, `mac[0] ^= 0x02`). Ex: `.41` WiFi `3C:71:BF:2C:A0:79` → ESP-NOW `3E:71:BF:2C:A0:79`; hub `B4:E6:..` → `B6:E6:..`. Para enviar unicast PARA um ESP8266, usar o MAC alt (derivar do WiFi MAC). Quem recebe PAIR_RESPONSE aprende o MAC alt do hub pela source do frame. `espnow_send_command` (hub) recebe o WiFi MAC do registry → derivar o alt MAC antes de enviar.
 
@@ -105,20 +105,21 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 31. **EEPROM layout**: usar `EEPROM_SIZE` do shared (512). `EEPROM_RELAY_STATE` deve ficar em offset >=200 para não conflitar com shared (que usa 0-127 para WiFi/name).
 32. **Board pinos**: respeitar defines da placa (`pins_arduino.h`). Ex: TTGO LoRa32 V1 `LORA_RST=14` (não 23). Verificar antes de definir.
 33. **ESP32 WiFiManager**: usar `tzapu/WiFiManager @ ^2.0` (não `^0.16`). A v0.x só suporta ESP8266.
-34. **updates**: uptime é static e não muda no dashboard
+34. **updates**: uptime é estático e não muda no dashboard
 35. **ESP-NOW command reliability ("fila com hops")**: o hub deve enfileirar comandos de relé (`MSG_COMMAND`)/`restart` (`MSG_RESTART`) em uma fila de retry de hop até `CMD_MAX_HOPS` (6) — `esp_now_send` no ESP32 aceita o quadro mesmo quando dropado em radio (coexistência, rule 18), então sem retry o comando é perdido para sempre. Reenvio a cada `CMD_HOP_INTERVAL_MS` (250ms), TTL `CMD_TTL_MS` (10s); comandos on/off são idempotentes (`set_relay(command==0x01)`, rule TCP 12) por isso hops repetidos não alternam o relé duas vezes. Implementado em `hub/include/espnow_handler.h` + `hub/src/espnow_handler.cpp` (`enqueue_cmd`/`process_pending_commands`/`loop()`). Sem o `send_cb`, o ESP32 não reporta drop → queue de hops é o mecanismo de confiabilidade.
 36. **Lamp TCP registra como LIGHT**: o `lamp` env `esp8266_tcp` (HTTP + Alexa light entity) deve registrar `SENSOR_TYPE_LIGHT` (9), não `SENSOR_TYPE_ONOFF` (8) — `get_sensor_type()` retorna LIGHT com `-DTCP_ENABLED`, ONOFF caso contrário. Regra aprendida 2026-08-03.
-37. **Aleixa/Espalexa onNotFound**: o ESP8266WebServer perde o `onNotFound` quando `server->begin()` é chamado duas vezes (uma no setup, outra no `Espalexa::begin()`). Solução: re-registrar `onNotFound` imediatamente após `s_alexa.begin()` no WiFi connect. O handler deve chamar `s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain"))` e retornar 404 se não for chamada Alexa. Sem isso, POST `/api` (devicetype) e GET `/api/<user>/lights` retornam 404 e o Alexa não consegue completar o discovery/pairing. Regra aprendida 2026-08-04.
-38. **Aleixa/Espalexa device type**: nodes relay (lamp, switch) com Alexa devem registrar `EspalexaDeviceType::onoff` (não `dimmable`). Usar `SENSOR_TYPE_ONOFF` no get_sensor_type(). Regra aprendida 2026-08-04.
+37. **Alexa/Espalexa onNotFound**: o ESP8266WebServer perde o `onNotFound` quando `server->begin()` é chamado duas vezes (uma no setup, outra no `Espalexa::begin()`). Solução: re-registrar `onNotFound` imediatamente após `s_alexa.begin()` no WiFi connect. O handler deve chamar `s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain"))` e retornar 404 se não for chamada Alexa. Sem isso, POST `/api` (devicetype) e GET `/api/<user>/lights` retornam 404 e o Alexa não consegue completar o discovery/pairing. Regra aprendida 2026-08-04.
+38. **Alexa/Espalexa device type**: nodes relay (lamp, switch) com Alexa devem registrar `EspalexaDeviceType::onoff` (não `dimmable`). Usar `SENSOR_TYPE_ONOFF` no get_sensor_type(). Regra aprendida 2026-08-04.
 39. **Padronização de flags -D**: usar padrão `FEATURE_ENABLED` em inglês. `HABILITA_REPEATER` → `REPEATER_ENABLED`, `HABILITA_PINOS` → `PINS_ENABLED`. Regra aprendida 2026-08-04.
 40. **Timer (agendamento) funciona offline**: `timer_check` deve rodar mesmo sem WiFi (principal uso é offline — ligar/desligar relé em horários sem conectividade). Única exceção: quando o relógio ainda não foi carregado (`get_epoch() == 0` / `s_synced_epoch == 0`) — sem epoch não há como avaliar a hora corrente. Não condicionar `timer_check` a `WiFi.status() == WL_CONNECTED`. Regra aprendida 2026-08-05.
 41. **Watchdog de blink: recomputar estado a cada loop, não usar latch `static`**: um `static bool in_wd_active = !(WiFi.status()==WL_CONNECTED)` inicializa UMA vez (no boot, WiFi normalmente ainda não conectou → inicia `true`) e, se só for setado para `true` (nunca volta a `false`), desabilita o watchdog (`watchdog_last_blink` fica 0 → condição `> 0` nunca satisfeita) ou o deixa disparar para sempre. Recomputar o estado ativo a cada `loop()` a partir do estado atual (WiFi perdido / portal / gateway sem parear). Regra aprendida 2026-08-05.
 42. **TCP hub watchdog só renova em contato real**: `m_last_hub_contact_ms` deve ser atualizado apenas quando `send_to_hub()` retorna sucesso (HTTP 200). Se atualizado incondicionalmente após o envio, o watchdog de hub (`TCP_HUB_WATCHDOG_MS`) nunca dispara mesmo com o hub inacessível — o node fica piscando (gateway blink, `is_paired()`=`m_registered`) e nunca reinicia. Regra aprendida 2026-08-05.
+43. **Watchdog estável (`StableWatchdog`)**: usar a classe `StableWatchdog` do shared (`common_watchdog.h`) para watchdogs à prova de flip-flop — o timer de restart só é (re)armado após `stable_reset_ms` contínuos e saudáveis; reconexões breves não desarmam. API: `init(stable_reset_ms, restart_ms, arm_from_start)`, `check(healthy)` no `loop()`, `reset()`. `arm_from_start=true` faz um device que nunca fica saudável reiniciar mesmo assim (auto-recuperação). Usado no lamp (blink watchdog) e no `TcpNodeProtocol` (WiFi watchdog). Regra aprendida 2026-08-05.
 
 ### Nodes TCP (TCP_ENABLED / lamp TCP_RADIO + hub TcpRadioHandler)
-- **ArduinoJson v7 `to<T>()` vs `as<T>()`**: `as<JsonObject>()` em documento null cria JsonObject que descarta silenciosamente assigns. Hub `TcpRadioHandler::handle_command_get` usava `response.as<JsonObject>()` — response sempre era `"null"` (4 bytes). Correção: `response.to<JsonObject>()`. Para verificar chave: `doc.containsKey("key") && !doc["key"].isNull()` ao invés de `doc["key"].is<const char*>()`. Regra aprendida 2026-08-03.
+- **ArduinoJson v7 `to<T>()` vs `as<T>()`**: `as<JsonObject>()` em documento null cria JsonObject que descarta silenciosamente assigns. Hub `TcpRadioHandler::handle_command_get` usava `response.as<JsonObject>()` — response sempre era `"null"` (4 bytes). Correção: `response.to<JsonObject>()`. Para verificar chave: `doc.containsKey("key") && !doc["key"].isNull()` em vez de `doc["key"].is<const char*>()`. Regra aprendida 2026-08-03.
 - **TCP node publica estado periodicamente**: `TcpNodeProtocol::loop()` deve chamar `publish_state()` a cada `m_state_interval_ms` (ajuste de regra 14) e também logo após o registro bem-sucedido, senão o hub nunca aprende o IP do node. O intervalo `m_state_interval_ms` existia mas era ignorado.
-- **Campo de estado on/off**: o node TCP envia `state` (bool) no POST `/node/state`; o hub (`TcpRadioHandler::handle_state`) deve aceitar `state` quanto `relay_state` (bool ou uint8_t) e armazenar `onoff.state`. Não confiar em `is<uint8_t>()` para bools serializados como `true/false`. **O switch `handle_state` DEVE incluir `case SENSOR_TYPE_LIGHT:` junto com `case SENSOR_TYPE_ONOFF:`** — senão nodes LIGHT (tipo 9) nunca atualizam state no hub. Regra aprendida 2026-08-03.
+- **Campo de estado on/off**: o node TCP envia `state` (bool) no POST `/node/state`; o hub (`TcpRadioHandler::handle_state`) deve aceitar tanto `state` quanto `relay_state` (bool ou uint8_t) e armazenar `onoff.state`. Não confiar em `is<uint8_t>()` para bools serializados como `true/false`. **O switch `handle_state` DEVE incluir `case SENSOR_TYPE_LIGHT:` junto com `case SENSOR_TYPE_ONOFF:`** — senão nodes LIGHT (tipo 9) nunca atualizam state no hub. Regra aprendida 2026-08-03.
 - **IP do node**: o hub só aprende o IP do node TCP a partir do `ip` enviado em `/node/state` — fazer o `handle_state` fazer parse de `ip` (e `free_heap`) em `virtual_sensor_t`.
 - **on_command semântico**: `on_command(command)` deve `set_relay(command == 0x01)`, não apenas togglear em 0x01 — senão comandos OFF (0x00) do hub são ignorados (botão desligar não age no node).
 - **Todo evento de mudança de estado** (botão físico, timer, API `/api/relay`, Alexa, comando) deve disparar `s_radio.publish_state()` imediatamente (regra 14); o caminho do botão físico no lamp `loop()` não publicava.
@@ -128,7 +129,7 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 1. manter skills enxutas
 2. economizar tokens simplificando a comunicação
 3. manter uma comunicação objetiva sem rodeios
-4. quando marcar estavel anotar a tag e a data
+4. quando marcar estável, anotar a tag e a data
 
 ### Nodes estáveis (não modificar)
 - `hub` — v1.2.5 (2026-08-04) — ESP-NOW + TCP Hub, WiFi 3-tier (EEPROM→STATIC_WIFI→AP)
@@ -145,5 +146,5 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 ## TODO / Futuro
 - **Hub IP fixo no node TCP**: atualmente o `TcpNodeProtocol` descobre o hub via UDP broadcast (primeiro que responder ganha). Se 2 hubs estiverem na mesma rede, o node registra em um apenas. Solução: campo "Hub IP" no WiFiManager (salvo na EEPROM). Se configurado, o node pula o UDP discover e registra direto no hub configurado. Se não, usa o comportamento atual.
 
-##Sanitize
-- se algum texto conter vicios de linguagem, corrigir e apresentar o texto corrigido em seguida, não dispensar acentuações, concordância ou vícios na sintática
+## Sanitize
+- se algum texto contiver vícios de linguagem, corrigir e apresentar o texto corrigido em seguida; não dispensar acentuações, concordância ou vícios sintáticos
