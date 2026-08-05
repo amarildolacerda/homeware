@@ -22,7 +22,7 @@ Data: 2026-08-05 · Branch: dev
 - `loop()` passa a chamar `process_push_queue()` (não-bloqueante — regra 15):
   - Para cada push dentro de `TCP_COMMAND_TTL_MS`:
     - Monta URL `http://{ip}:{TCP_HTTP_PORT}/api/relay` e faz `POST` com corpo `{"state":true|false}` via `HTTPClient` (timeout curto, ex. 800ms).
-    - **HTTP 200** → remove o `PendingCommand` de fallback daquele `device_id` + remove o push da fila. Log de sucesso.
+    - **HTTP 200** → remove o `PendingCommand` de fallback mais antigo (front) da fila daquele `device_id` (FIFO alinhado ao push) + remove o push da fila. Log de sucesso.
     - **Falha/timeout/erro** → mantém o push (retry a cada ciclo até TTL); o polling segue como fallback.
   - Pushes expirados (TTL) são removidos.
 - Idempotência: `set_relay(bool)` no lamp torna dupla entrega inofensiva (regra TCP: `on_command` seta, não alterna).
