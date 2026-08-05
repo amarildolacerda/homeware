@@ -80,7 +80,9 @@ function Discover-Devices {
         exit 1
     }
     Write-Host "Descobrindo dispositivos via scan.py..." -ForegroundColor Cyan
-    $raw = & py $scanPy --json 2>&1
+    # Windows usa o launcher "py"; Linux usa "python3"
+    $py = if ($IsWindows -or $env:OS -eq "Windows_NT") { "py" } else { "python3" }
+    $raw = & $py $scanPy --json 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Error "scan.py falhou: $raw"
         exit 1
@@ -105,7 +107,7 @@ function Update-DeviceType {
     $pendentes = if ($Force) { $Devices } else {
         $Devices | Where-Object {
             $need = Compare-Version -LocalVer $localVer -DeviceVer $_.fw_version
-            if (-not $need) { Write-Host "  [SKIP] $($_.ip): ja atualizado ($($_.fw_version))" -ForegroundColor Green }
+            if (-not $need) { Write-Host "  [SKIP] $($_.ip): ja atualizado ($($_.fw_version)) - ($($_.name))" -ForegroundColor Green }
             $need
         }
     }
