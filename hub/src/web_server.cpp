@@ -242,6 +242,7 @@ void web_server_init() {
         doc["ip"] = WiFi.localIP().toString();
         doc["wifi_channel"] = WiFi.channel();
         doc["wifi_ssid"] = WiFi.SSID();
+        doc["wifi_rssi"] = WiFi.RSSI();
         {
             int wmode = WIFI_MODE_DHCP;
             char wip[EEPROM_WIFI_IP_SIZE], wgw[EEPROM_WIFI_GW_SIZE];
