@@ -18,6 +18,14 @@ struct PendingCommand {
     unsigned long created_at;
 };
 
+struct PushCommand {
+    String device_id;
+    uint8_t ip[4];
+    uint8_t state;
+    unsigned long created_at;
+    unsigned long last_attempt_ms;  // 0 = nunca tentado
+};
+
 class TcpRadioHandler : public RadioInterface {
 public:
     TcpRadioHandler();
@@ -61,9 +69,12 @@ private:
 
     WiFiUDP m_udp;
     std::map<std::string, std::vector<PendingCommand>> m_pending_commands;
+    std::vector<PushCommand> m_push_queue;
 
     void handle_udp_discover();
     void cleanup_expired_commands();
+    void process_push_queue();
+    void remove_pending_command(const std::string& device_id);
     int find_slot_by_device_id(const char* device_id);
 };
 
