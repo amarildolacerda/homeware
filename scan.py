@@ -97,7 +97,7 @@ def identify(ip, port):
             info = f"  [{label}] {ip}:{port}  type=gateway  FW={fw}  platform={platform}  paired={paired} online={online}  id={gw_id}"
             if mac: info += f"  MAC={mac}"
             if title: info += f"  title=\"{title}\""
-            return (info, mac, "gateway", fw, ip, platform)
+            return (info, mac, "gateway", fw, ip, platform, gw_id)
         except:
             if attempt == 0:
                 time.sleep(1)
@@ -120,7 +120,7 @@ def identify(ip, port):
             if relay is not None: info += f"  relay={'ON' if relay else 'OFF'}"
             info += f"  gw={gw_con}"
             if title and title != dev_name: info += f"  title=\"{title}\""
-            return (info, None, dtype, fw, ip, platform)
+            return (info, None, dtype, fw, ip, platform, dev_name)
         except:
             if attempt == 0:
                 time.sleep(1)
@@ -131,7 +131,7 @@ def identify(ip, port):
     if title:
         info = f"  [HTTP] {ip}:{port}  title=\"{title}\""
         if mac: info += f"  MAC={mac}"
-        return (info, mac, "unknown", None, ip, "")
+        return (info, mac, "unknown", None, ip, "", title)
     return None
 
 def main():
@@ -182,11 +182,11 @@ def main():
         for future in as_completed(futures):
             result = future.result()
             if result:
-                info, mac, dtype, fw, ip, platform = result
+                info, mac, dtype, fw, ip, platform, name = result
                 if not args.json:
                     print(info)
                 else:
-                    devices.append({"ip": ip, "port": args.port, "type": dtype, "fw_version": fw, "platform": platform})
+                    devices.append({"ip": ip, "port": args.port, "type": dtype, "fw_version": fw, "platform": platform, "name": name})
                 if mac and not found_gateway_mac:
                     found_gateway_mac = mac
 
