@@ -12,4 +12,7 @@ void web_server_handle_client();
 bool web_server_wifi_setup(bool force_portal);
 void web_server_maintain_wifi();
 
+int op_mode_load();
+void op_mode_save(int mode);
+
 #endif

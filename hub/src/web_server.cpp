@@ -147,6 +147,30 @@ static void pairing_config_save(bool enabled) {
     EEPROM.end();
 }
 
+int op_mode_load() {
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_OP_MODE_OFFSET);
+    EEPROM.end();
+    if (val <= OP_MODE_HYBRID) return val;
+    // Invalid: write default
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_OP_MODE_OFFSET, OP_MODE_DEFAULT);
+    EEPROM.commit();
+    EEPROM.end();
+    return OP_MODE_DEFAULT;
+}
+
+void op_mode_save(int mode) {
+    if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) mode = OP_MODE_DEFAULT;
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_OP_MODE_OFFSET, mode);
+    EEPROM.commit();
+    EEPROM.end();
+    console.printf("[MODE] Modo de operacao salvo: %d (%s)\n", mode,
+        mode == OP_MODE_TERMINAL ? "Terminal" :
+        mode == OP_MODE_AP ? "Ponto de Acesso" : "Hibrido");
+}
+
 static void serve_pgm_page(const char* page) {
     size_t total = strlen_P(page);
     WiFiClient cl = s_server.client();
