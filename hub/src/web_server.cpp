@@ -740,14 +740,57 @@ void web_server_handle_client() {
 }
 
 bool web_server_wifi_setup(bool force_portal) {
+    int op_mode = op_mode_load();
+    console.printf("[WIFI] Operation mode: %d (%s)\n", op_mode,
+        op_mode == OP_MODE_TERMINAL ? "Terminal" :
+        op_mode == OP_MODE_AP ? "AP" : "Hibrido");
+
+    /* --- Force portal always opens captive portal --- */
+    if (force_portal) {
+        console.println("[WIFI] Forcing config portal...");
+        s_wifi_config_mode = true;
+        s_wifi_config_start = millis();
+        captive_portal_start();
+        web_server_init();
+        captive_portal_run();
+        s_wifi_config_mode = false;
+        return false;
+    }
+
+    /* --- Mode 1: Pure AP --- */
+    if (op_mode == OP_MODE_AP) {
+        char dev_name[32];
+        snprintf(dev_name, sizeof(dev_name), "%s", get_gateway_device_id());
+        console.printf("[WIFI] Starting operational AP: %s ch=%d\n", dev_name, AP_CHANNEL);
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(dev_name, AP_PASS, AP_CHANNEL);
+        console.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+        s_wifi_config_mode = false;
+        web_server_init();
+        return true;
+    }
+
+    /* --- Mode 2: Hybrid (AP + STA) --- */
+    if (op_mode == OP_MODE_HYBRID) {
+        char dev_name[32];
+        snprintf(dev_name, sizeof(dev_name), "%s", get_gateway_device_id());
+        console.printf("[WIFI] Starting hybrid AP: %s ch=%d\n", dev_name, AP_CHANNEL);
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAP(dev_name, AP_PASS, AP_CHANNEL);
+        console.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+        // Fall through to STA connect below
+    }
+
+    /* --- Mode 0 (Terminal) and Mode 2 (Hybrid STA part): try STA --- */
     char saved_ssid[EEPROM_WIFI_SSID_SIZE];
     char saved_pass[EEPROM_WIFI_PASS_SIZE];
     bool have_creds = wifi_creds_load(saved_ssid, saved_pass);
 
     /* --- Step 1: Try saved credentials from EEPROM --- */
-    if (!force_portal && have_creds) {
+    if (have_creds) {
         console.printf("[WIFI] Step 1: Connecting to saved (EEPROM): %s\n", saved_ssid);
-        WiFi.mode(WIFI_STA);
+        if (op_mode == OP_MODE_TERMINAL) WiFi.mode(WIFI_STA);
+        // In hybrid, WIFI_AP_STA is already set
         apply_wifi_static_ip();
         WiFi.begin(saved_ssid, saved_pass);
         unsigned long t0 = millis();
@@ -768,7 +811,7 @@ bool web_server_wifi_setup(bool force_portal) {
     /* --- Step 2: Try STATIC_WIFI hardcoded credentials --- */
     if (strlen(WIFI_SSID) > 0) {
         console.printf("[WIFI] Step 2: Trying STATIC_WIFI: %s\n", WIFI_SSID);
-        WiFi.mode(WIFI_STA);
+        if (op_mode == OP_MODE_TERMINAL) WiFi.mode(WIFI_STA);
         apply_wifi_static_ip();
         WiFi.begin(WIFI_SSID, WIFI_PASS);
         unsigned long t0 = millis();
@@ -786,14 +829,21 @@ bool web_server_wifi_setup(bool force_portal) {
     }
 #endif
 
-    /* --- Step 3: Start AP/captive portal --- */
-    console.println("[WIFI] Step 3: Starting config portal...");
+    /* --- Hybrid: STA failed, but AP is already running --- */
+    if (op_mode == OP_MODE_HYBRID) {
+        console.println("[WIFI] Hybrid: STA connect failed, AP remains active");
+        s_wifi_config_mode = false;
+        web_server_init();
+        return true;  // AP is running, don't restart
+    }
+
+    /* --- Terminal: no STA → start captive portal --- */
+    console.println("[WIFI] Starting config portal...");
     s_wifi_config_mode = true;
     s_wifi_config_start = millis();
     captive_portal_start();
     web_server_init();
     captive_portal_run();
-    // captive_portal_run() only returns after ESP.restart(); this is a fallback:
     s_wifi_config_mode = false;
     return false;
 }
