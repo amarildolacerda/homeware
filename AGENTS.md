@@ -62,6 +62,11 @@
 - mostrar no dashboard a versão (FW_VERSION)
 - checar tests unitários para novas implementações para garantir que as regras não estejam quebradas; se uma regra não tiver test unitário, criar um para garantir o futuro. Se uma implementação altera um test que passou a ter novas características/regras, mudar o test. Se uma implementação quebra uma regra, incluir isso como parte da decisão de implementação;
 - para decidir se uma implementação é de uso shared ou individual, verificar se há reaproveitamento em várias implementações (nodes); se for reaproveitada, implementar no shared; caso contrário, é individual (não compartilhada);
+- adotar paradigma clean e fugir de acoplamentos;
+- separar types que são compartilhados para evitar acoplamentos, locais que são especialidades locais;
+- separar defines compartilhados e locais o que são somente de uso local;
+- evitar variáveis globais, preferir classes;
+- para implementações (strategy) preferir interfaces a serem herdadas (ex: RadioInterface);
 - quando conseguir resolver um problema, erro ou mudança de especificação, registrar a nova regra para aprendizado e reaproveitamento nas próximas sessões
 - cuidado com chamadas repetitivas à API, reaproveitar quando for possível
 - **Código compartilhado**: `shared/` é um **submodule** (`homeware_shared.git`) e é a fonte única de código cross-platform (regra 17 estendida). Estrutura de lib PlatformIO: `library.json` na raiz + **todo o código (`.h` e `.cpp`) em `src/`**. Contém: `espnow_protocol.h`, `myWiFiManager.h/.cpp`, `shared_config.h`, `platform.h` (wrappers `MyWebServer`/`chip_id()`/`espnow_add_peer_wrapper`), `common_console.*` (telnet), `common_ota.*` (ArduinoOTA), `common_util.*` (`uptime_to_str`), `common_wifi.*` (delegators p/ myWiFiManager), `timer.*` (agendamento parametrizado). Hub e nodes DEVEM consumir via `lib_extra_dirs` (hub: `../shared`; nodes: `../../shared`) e NÃO manter cópias divergentes nem usar `-I` manual ou scripts de cópia. Qualquer mudança de struct/protocolo/WiFiManager/common vale para todos os devices e deve ser feita uma única vez no submodule `shared/` (commitar e pushar o submodule, depois bump no homeware). **Ao commitar/pushar o submodule `shared/`, usar SEMPRE o branch `dev` (nunca `main`) — o shared também segue a política de dev→main do homeware.**

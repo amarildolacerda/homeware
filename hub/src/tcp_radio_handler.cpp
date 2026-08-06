@@ -66,9 +66,16 @@ int TcpRadioHandler::init() {
         const char* mac_str = doc["mac"];
         bool mac_ok = false;
         if (mac_str && strlen(mac_str) >= 17) {
-            // Use node's reported MAC
+            // Use node's reported MAC. mac_to_str() (shared) uses '-' separators,
+            // so normalize to ':' before parsing (older nodes may send either).
+            char norm[18];
+            size_t n = strlen(mac_str);
+            if (n >= sizeof(norm)) n = sizeof(norm) - 1;
+            memcpy(norm, mac_str, n);
+            norm[n] = '\0';
+            for (char *p = norm; *p; p++) if (*p == '-') *p = ':';
             int a, b, c, d, e, f;
-            if (sscanf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X", &a, &b, &c, &d, &e, &f) == 6) {
+            if (sscanf(norm, "%02X:%02X:%02X:%02X:%02X:%02X", &a, &b, &c, &d, &e, &f) == 6) {
                 mac[0] = (uint8_t)a; mac[1] = (uint8_t)b; mac[2] = (uint8_t)c;
                 mac[3] = (uint8_t)d; mac[4] = (uint8_t)e; mac[5] = (uint8_t)f;
                 mac_ok = true;
@@ -91,7 +98,9 @@ int TcpRadioHandler::init() {
                            device_id, fallback_mac, client_ip.toString().c_str());
         }
 
-        handle_register(mac, device_id, sensor_type, device_name, fw_version);
+        uint8_t client_chip = doc["client_chip"] | HW_CHIP_UNKNOWN;
+
+        handle_register(mac, device_id, sensor_type, device_name, fw_version, client_chip);
 
         int slot = find_slot_by_device_id(device_id);
 
@@ -266,7 +275,7 @@ bool TcpRadioHandler::send_restart(const uint8_t* mac) {
     return true;
 }
 
-void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version) {
+void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version, uint8_t client_chip) {
     // 1) Already registered (by device_id) → refresh liveness only. Do NOT
     //    clobber a user-assigned name from the dashboard rename.
     int slot = find_slot_by_device_id(device_id);
@@ -284,7 +293,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
             }
             mac_copy(sensor->mac, mac);
             sensor->radio_type = RADIO_TCP;
-            sensor->client_chip = HW_CHIP_UNKNOWN;
+            sensor->client_chip = client_chip;
             sensor_registry_save();
         }
         return;
@@ -297,7 +306,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         return;
     }
 
-    if (!sensor_registry_add(mac, sensor_type, slot, device_name, HW_CHIP_UNKNOWN, RADIO_TCP)) {
+    if (!sensor_registry_add(mac, sensor_type, slot, device_name, client_chip, RADIO_TCP)) {
         char mac_str[18];
         mac_to_str(mac, mac_str, sizeof(mac_str));
         console.printf("[tcp] sensor_registry_add failed (MAC %s conflict); not creating phantom slot\n", mac_str);

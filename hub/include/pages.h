@@ -344,6 +344,18 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function radioName(r) {
+  if (r === 0) return 'ESP-NOW';
+  if (r === 1) return 'LoRa';
+  if (r === 2) return 'TCP';
+  return '--';
+}
+function chipName(c) {
+  if (c === 0) return 'ESP8266';
+  if (c === 1) return 'ESP32';
+  return '--';
+}
+
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     document.querySelectorAll('.modal.show').forEach(function(m) { m.classList.remove('show'); });
@@ -841,6 +853,8 @@ function showPropsModal(slot) {
     '<div class="props-section"><div class="props-section-title">Dispositivo</div>'+
     '<div class="row"><span class="label">Sensores</span><span class="value">'+s_sensors.length+'/'+(s_info.max_sensors||'--')+'</span></div>'+
     (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
+    '<div class="row"><span class="label">Rádio</span><span class="value">'+radioName(s.radio_type)+'</span></div>'+
+    '<div class="row"><span class="label">Chip</span><span class="value">'+chipName(s.client_chip)+'</span></div>'+
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+

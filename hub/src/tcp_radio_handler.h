@@ -52,7 +52,7 @@ public:
     bool send_command(const uint8_t* mac, uint8_t state) override;
     bool send_restart(const uint8_t* mac) override;
 
-    void handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version);
+    void handle_register(const uint8_t* mac, const char* device_id, uint8_t sensor_type, const char* device_name, const char* fw_version, uint8_t client_chip = 0xFF);
     void handle_state(const char* device_id, JsonObject& state);
     void handle_heartbeat(const char* device_id);
     bool handle_command_get(const char* device_id, JsonObject& response);

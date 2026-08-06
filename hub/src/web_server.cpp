@@ -284,6 +284,7 @@ void web_server_init() {
                 obj["type"] = s->type;
                 obj["type_name"] = sensor_type_to_string(s->type);
                 obj["radio_type"] = s->radio_type;
+                obj["client_chip"] = s->client_chip;
                 obj["name"] = s->name;
                 obj["bridge_device_id"] = s->bridge_device_id;
                 obj["sequence"] = s->sequence;
