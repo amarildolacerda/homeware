@@ -65,6 +65,8 @@ void print_help() {
     console.println("  b    - Publicar todos os sensores via MQTT");
     console.println("  s    - Status do gateway");
     console.println("  w    - Forçar portal WiFi");
+    console.printf("  m    - Modo de operacao (atual: %d)\n", op_mode_load());
+    console.println("  m 0  - Terminal | m 1 - AP | m 2 - Hibrido");
     console.println("================\n");
 }
 
@@ -131,6 +133,11 @@ void handle_console(char c) {
             console.printf("WiFi: http://%s ch=%d (RSSI: %d dBm)\n",
                           WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "desconectado",
                           WiFi.channel(), WiFi.RSSI());
+            {
+                int op = op_mode_load();
+                console.printf("Modo: %d (%s)\n", op,
+                    op == 0 ? "Terminal" : op == 1 ? "AP" : "Hibrido");
+            }
             console.printf("Pareamento: %s\n", s_radio_mgr.any_pairing_active() ? "ATIVO" : "inativo");
             console.printf("========================\n\n");
             break;
@@ -141,6 +148,37 @@ void handle_console(char c) {
             console.println("Forçando portal WiFi...");
             web_server_wifi_setup(true);
             break;
+
+        case 'm':
+        case 'M': {
+            int cur = op_mode_load();
+            int next = -1;
+            if (Serial.available() > 0) {
+                char nc = Serial.peek();
+                if (nc >= '0' && nc <= '2') {
+                    next = nc - '0';
+                    Serial.read();
+                }
+            }
+            if (next >= 0) {
+                if (next == cur) {
+                    console.printf("Modo ja e %d (%s)\n", cur,
+                        cur == 0 ? "Terminal" : cur == 1 ? "AP" : "Hibrido");
+                } else {
+                    op_mode_save(next);
+                    console.printf("Modo alterado: %d -> %d (%s). Reiniciando...\n",
+                        cur, next,
+                        next == 0 ? "Terminal" : next == 1 ? "AP" : "Hibrido");
+                    delay(300);
+                    ESP.restart();
+                }
+            } else {
+                console.printf("Modo atual: %d (%s)\n", cur,
+                    cur == 0 ? "Terminal" : cur == 1 ? "AP" : "Hibrido");
+                console.println("  m 0 - Terminal | m 1 - AP | m 2 - Hibrido");
+            }
+            break;
+        }
     }
 }
 
@@ -248,6 +286,9 @@ void setup() {
     // sem dados (arm_from_start=true: hub que nunca recebe tambem reinicia)
     g_hub_rx_wd.init(WATCHDOG_STABLE_RESET_MS, HUB_RX_WATCHDOG_MS, true);
 
+    console.printf("  Mode: %d (%s)\n", op_mode_load(),
+        op_mode_load() == 0 ? "Terminal" : op_mode_load() == 1 ? "AP" : "Hibrido");
+
     if (!web_server_wifi_setup(false)) {
         console.printf("[%s] WiFi setup failed, restarting...\n", TAG);
         delay(5000);
@@ -293,7 +334,11 @@ void setup() {
     configTime(0, 0, "162.159.200.123", "216.239.35.0");
     console.printf("[%s] NTP: 162.159.200.123 (cloudflare), non-blocking sync\n", TAG);
     
-    mqtt_client_connect();
+    if (op_mode_load() != OP_MODE_AP) {
+        mqtt_client_connect();
+    } else {
+        console.println("[MQTT] Desabilitado no modo AP");
+    }
     
     console.printf("============================================\n");
     console.printf("  Pronto! 'h' para ajuda\n");
@@ -305,10 +350,11 @@ void setup() {
 void loop() {
     console.loop();
 
-    // Watchdog: restart if no packets received for too long (and sensors are paired)
+    // Watchdog: only in Terminal and Hybrid (with STA connected)
     // A prova de flip-flop: so (re)arma apos 60s saudaveis continuos; um pico
     // isolado de RX nao desarma o watchdog.
-    if (sensor_registry_count_paired() > 0) {
+    int cur_op_mode = op_mode_load();
+    if (cur_op_mode != OP_MODE_AP && sensor_registry_count_paired() > 0) {
         unsigned long total_rx = s_radio_mgr.total_rx_count();
         static unsigned long s_prev_rx = 0;
         if (total_rx != s_prev_rx) {
@@ -361,7 +407,9 @@ void loop() {
 #if defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_loop();
 #endif
-    mqtt_client_loop();
+    if (op_mode_load() != OP_MODE_AP) {
+        mqtt_client_loop();
+    }
 
     /* LED pisca durante o modo de pareamento */
     {
