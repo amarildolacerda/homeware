@@ -129,39 +129,58 @@ static void apply_wifi_static_ip() {
 
 #define PAIRING_ENABLED_DEFAULT false
 
+// Cached pairing config — read once from EEPROM at boot
+static int s_pairing_enabled = -1;  // -1 = not loaded yet
+
 static bool pairing_config_load() {
+    if (s_pairing_enabled >= 0) return s_pairing_enabled == 1;
     EEPROM.begin(EEPROM_SIZE);
     uint8_t val = EEPROM.read(EEPROM_PAIRING_EN_OFFSET);
-    if (val == 1) { EEPROM.end(); return true; }
-    if (val == 0) { EEPROM.end(); return false; }
+    if (val == 1) { EEPROM.end(); s_pairing_enabled = 1; return true; }
+    if (val == 0) { EEPROM.end(); s_pairing_enabled = 0; return false; }
     EEPROM.write(EEPROM_PAIRING_EN_OFFSET, 0);
     EEPROM.commit();
     EEPROM.end();
+    s_pairing_enabled = 0;
     return false;
 }
 
 static void pairing_config_save(bool enabled) {
+    s_pairing_enabled = enabled ? 1 : 0;
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.write(EEPROM_PAIRING_EN_OFFSET, enabled ? 1 : 0);
     EEPROM.commit();
     EEPROM.end();
 }
 
+// Cached operation mode — read once from EEPROM at boot, never re-read in loop.
+// Avoids excessive EEPROM.begin()/end()/commit() calls that wear out NVS flash.
+static int s_op_mode = -1;  // -1 = not loaded yet
+
 int op_mode_load() {
+    if (s_op_mode >= 0) return s_op_mode;
     EEPROM.begin(EEPROM_SIZE);
     uint8_t val = EEPROM.read(EEPROM_OP_MODE_OFFSET);
     EEPROM.end();
-    if (val <= OP_MODE_HYBRID) return val;
-    // Invalid: write default
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_OP_MODE_OFFSET, OP_MODE_DEFAULT);
-    EEPROM.commit();
-    EEPROM.end();
-    return OP_MODE_DEFAULT;
+    if (val <= OP_MODE_HYBRID) {
+        s_op_mode = val;
+    } else {
+        // Invalid: write default
+        s_op_mode = OP_MODE_DEFAULT;
+        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.write(EEPROM_OP_MODE_OFFSET, (uint8_t)s_op_mode);
+        EEPROM.commit();
+        EEPROM.end();
+    }
+    console.printf("[MODE] Modo de operacao: %d (%s)\n", s_op_mode,
+        s_op_mode == OP_MODE_TERMINAL ? "Terminal" :
+        s_op_mode == OP_MODE_AP ? "AP" : "Hibrido");
+    return s_op_mode;
 }
 
 void op_mode_save(int mode) {
     if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) mode = OP_MODE_DEFAULT;
+    s_op_mode = mode;  // update cache
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.write(EEPROM_OP_MODE_OFFSET, mode);
     EEPROM.commit();
