@@ -59,9 +59,20 @@
 #define EEPROM_WIFI_DNS_SIZE 16
 
 #define EEPROM_PAIRING_EN_OFFSET (EEPROM_WIFI_DNS_OFFSET + EEPROM_WIFI_DNS_SIZE)
-#define EEPROM_SIZE (EEPROM_PAIRING_EN_OFFSET + 1)
+#define EEPROM_OP_MODE_OFFSET (EEPROM_PAIRING_EN_OFFSET + 1)
+#define EEPROM_SIZE (EEPROM_OP_MODE_OFFSET + 1)
 
 #define WIFI_CONFIG_PORTAL_SSID "ESPNOW_Gateway_Setup"
 #define WIFI_CONFIG_PORTAL_PASS "password123"
+
+// Operation modes
+#define OP_MODE_TERMINAL 0
+#define OP_MODE_AP       1
+#define OP_MODE_HYBRID   2
+#define OP_MODE_DEFAULT  OP_MODE_TERMINAL
+
+// Operational AP config (modes 1 and 2)
+#define AP_CHANNEL 1
+#define AP_PASS    "password123"
 
 #endif
