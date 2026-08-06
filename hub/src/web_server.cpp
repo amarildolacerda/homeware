@@ -254,6 +254,7 @@ void web_server_init() {
         doc["gateway_mac"] = mac_str;
         doc["gateway_id"] = get_gateway_device_id();
         doc["fw_version"] = FW_VERSION;
+        doc["op_mode"] = op_mode_load();
 #if defined(ARDUINO_ARCH_ESP32)
         doc["platform"] = "esp32";
 #else
@@ -571,6 +572,37 @@ void web_server_init() {
         bool enabled = doc["enabled"];
         pairing_config_save(enabled);
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    s_server.on("/api/config/mode", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["mode"] = op_mode_load();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    });
+
+    s_server.on("/api/config/mode", HTTP_POST, []() {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        if (err || !doc.containsKey("mode")) {
+            s_server.send(400, "application/json", "{\"error\":\"mode required\"}");
+            return;
+        }
+        int mode = doc["mode"];
+        if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) {
+            s_server.send(400, "application/json", "{\"error\":\"invalid mode (0-2)\"}");
+            return;
+        }
+        int cur = op_mode_load();
+        if (mode == cur) {
+            s_server.send(200, "application/json", "{\"status\":\"no change\"}");
+            return;
+        }
+        op_mode_save(mode);
+        s_server.send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
+        delay(300);
+        ESP.restart();
     });
     
     s_server.on("/api/restart", HTTP_POST, []() {
