@@ -849,6 +849,9 @@ bool web_server_wifi_setup(bool force_portal) {
 }
 
 void web_server_maintain_wifi() {
+    int op_mode = op_mode_load();
+    if (op_mode == OP_MODE_AP) return;  // Pure AP: no STA reconnect
+
     if (WiFi.status() == WL_CONNECTED) {
         if (s_wifi_reconnect_active) {
             s_wifi_reconnect_active = false;
