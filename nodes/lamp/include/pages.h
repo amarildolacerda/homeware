@@ -49,8 +49,8 @@ h1{font-size:1.1rem;color:var(--primary);margin-bottom:12px;text-align:center}
 .label{color:var(--muted-subtle);font-size:.82rem}
 .value{font-weight:600;font-size:.82rem;color:var(--text)}
 .value.green{color:var(--success)}
-input[type=text],input[type=number]{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;outline:none;width:100%}
-input[type=text]:focus,input[type=number]:focus{border-color:var(--primary)}
+input[type=text],input[type=password],input[type=number]{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;outline:none;width:100%}
+input[type=text]:focus,input[type=password]:focus,input[type=number]:focus{border-color:var(--primary)}
 select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.82rem;outline:none}
 .btn{padding:6px 14px;border-radius:8px;border:1px solid var(--primary);background:var(--surface);color:var(--primary);font-size:.82rem;font-weight:500;cursor:pointer}
 .btn:active{transform:scale(.97)}
