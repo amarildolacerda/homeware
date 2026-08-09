@@ -16,7 +16,29 @@ Comunica com o hub existente via LoRa usando o protocolo `lora_frame_t` (mesmo f
 
 ### Módulo Seeed Grove LoRa
 
-O módulo vem com ATMega168 que precisa ser regravado com o firmware `lora_bridge` (raw SPI pass-through).
+O módulo vem com ATMega168 de fábrica que precisa ser **regravado** com o firmware `lora_bridge`.
+
+#### Por que regravar?
+
+O firmware de fábrica usa a biblioteca **RadioHead** (`RH_RF95`), que adiciona overhead ao pacote:
+
+```
+Fábrica (RadioHead):  [preamble][sync][header 4B][payload][CRC]
+Esperado pelo hub:     [lora_frame_t cru — msg_type + sequence + sensor_id + ...]
+```
+
+Quando o Arduino Nano envia `MSG_PAIR_REQUEST` (0x02) via RadioHead, os primeiros bytes no ar são header do RadioHead, não o `msg_type`. O hub recebe via `Sandeepmistry/LoRa` (raw SPI) e interpreta esses bytes como `lora_frame_t` → `msg_type` errado → frame descartado.
+
+**Exemplo:**
+```
+Node envia:      [0x02][0x01 0x00][AA BB CC DD EE FF]...  ← lora_frame_t correto
+RadioHead envia: [0x00][0xFF][0x01][0x02][0x02]...        ← header RadioHead + payload
+                       ↑ hub vê 0x00 como msg_type → descarta
+```
+
+**Solução escolhida:** reescrever o ATMega168 para **raw SPI pass-through** — recebe bytes via UART, repassa cru ao SX1276 via SPI, sem overhead. São ~30 linhas de C que configuram o SX1276 diretamente via registradores.
+
+**Alternativa descartada:** usar RadioHead no Arduino Nano e adaptar o hub para parserar o header RadioHead — frágil, depende de versão da lib, mistura de abstrações.
 
 **Gravação via ISP:**
 ```bash
