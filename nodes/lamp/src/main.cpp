@@ -530,9 +530,17 @@ static void start_ap(void)
     console.printf("[%s] AP '%s' started, connect to configure WiFi\n", TAG, ssid);
 }
 
+static bool s_radio_initialized = false;
+
 static void on_wifi_connected(void)
 {
     console.printf("[%s] WiFi connected: %s\n", TAG, WiFi.localIP().toString().c_str());
+    if (!s_radio_initialized)
+    {
+        s_radio.begin();
+        s_radio_initialized = true;
+        console.printf("[%s] ESP-NOW initialized on ch %d\n", TAG, WiFi.channel());
+    }
     console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
     if (!s_alexa_initialized)
@@ -1686,7 +1694,6 @@ void setup(void)
     s_radio.set_device_id(s_device_id);
 #endif
     s_radio.load_gateway_mac();
-    s_radio.begin();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
 #ifdef TCP_ENABLED
