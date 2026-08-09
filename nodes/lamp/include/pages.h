@@ -328,7 +328,7 @@ let div=document.createElement('div');div.className='row';div.innerHTML='<span c
 async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){if(rb)rb.textContent='ERRO'}}
 async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await r.json();let sel=document.getElementById('syncDeviceSelect');let curVal=sel.value;while(sel.options.length>2)sel.remove(2);arr.forEach(function(d){let o=document.createElement('option');o.value=d.id;o.text=d.name||d.id;sel.appendChild(o)});if(curVal!='__manual__'){let match=sel.querySelector('option[value="'+curVal+'"]');if(match)sel.value=curVal}}catch(e){}}
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
-async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){st.textContent=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';st.className='value'+(d.status==='connected'?' green':'')}if(d.ssid)document.getElementById('wifiSsid').value=d.ssid;if(d.password)document.getElementById('wifiPass').value=d.password;if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){let txt=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';if(d.rssi!==undefined)txt+=' | RSSI: '+d.rssi+' dBm';st.textContent=txt;st.className='value'+(d.status==='connected'?' green':'')}if(d.ssid)document.getElementById('wifiSsid').value=d.ssid;if(d.password)document.getElementById('wifiPass').value=d.password;if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
 function showWifiMsg(t,c){let m=document.getElementById('wifiMsg');if(!m)return;m.textContent=t;m.className='';m.style.display='block';m.style.background=c==='ok'?'#dcfce7':'#fef2f2';m.style.color=c==='ok'?'var(--success)':'var(--danger)';setTimeout(function(){m.style.display='none'},3000)}
 )=====";
 #ifdef PINS_ENABLED
@@ -339,7 +339,7 @@ let div=document.createElement('div');div.className='row';
 div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
 list.appendChild(div)})}catch(e){}}
 setInterval(function(){fetchState();if(currentSection==='pins')fetchPins()},3000);
-fetchState();fetchSettings();fetchTimers();loadDevices();if(currentSection==='pins')fetchPins();
+fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();if(currentSection==='pins')fetchPins();
 )=====";
 #else
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
@@ -386,6 +386,8 @@ h1{color:var(--primary);font-size:1.2rem;margin-bottom:16px}
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timers</span></div><div class="desc">Lista timers</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/timers</span></div><div class="desc">Atualiza timer</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timer/next</span></div><div class="desc">Próximo timer</div></div>
+<div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/repeater</span></div><div class="desc">Status do repeater</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/repeater</span></div><div class="desc">Ativa/desativa repeater</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div><div class="desc">Reinicia</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/ota</span></div><div class="desc">OTA</div></div>
 </body>
@@ -436,7 +438,7 @@ input:focus{border-color:var(--primary)}
 <div id="msg" class="msg" style="display:none"></div>
 </div>
 <script>
-async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
 function showMsg(t,c){let m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
 function loading(v){document.getElementById('submitBtn').style.opacity=v?0.5:1;document.getElementById('submitBtn').disabled=v}
 async function submitForm(){let ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}
