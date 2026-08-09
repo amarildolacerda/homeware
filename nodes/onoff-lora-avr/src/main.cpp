@@ -3,7 +3,6 @@
 #include <avr/pgmspace.h>
 #include "../include/config.h"
 #include "../include/lora_avr.h"
-#include "lora_avr.h"
 
 // ── State ──
 static bool s_relay = false;

@@ -1,4 +1,5 @@
-#include "lora_avr.h"
+#include "../include/lora_avr.h"
+#include "../include/config.h"
 #include <SoftwareSerial.h>
 
 static SoftwareSerial s_lora_serial(LORA_RX_PIN, LORA_TX_PIN);
