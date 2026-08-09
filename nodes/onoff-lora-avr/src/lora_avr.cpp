@@ -1,11 +1,11 @@
 #include "../include/lora_avr.h"
 #include "../include/config.h"
+#include "../include/lora_uart_driver.h"
 #include <SoftwareSerial.h>
-#include <RH_RF95.h>
 
-// ── RadioHead on SoftwareSerial ──
+// ── UART transport for Seeed Grove LoRa (factory firmware) ──
 static SoftwareSerial s_lora_serial(LORA_RX_PIN, LORA_TX_PIN);
-static RH_RF95 s_rf95(s_lora_serial);
+static LoraUartDriver s_radio(s_lora_serial);
 
 static uint8_t s_my_mac[6];
 static char s_device_name[16];
@@ -43,26 +43,16 @@ void lora_init(const uint8_t *my_mac, const char *device_name) {
     strncpy(s_device_name, device_name, sizeof(s_device_name) - 1);
     s_device_name[sizeof(s_device_name) - 1] = '\0';
 
-    s_lora_serial.begin(LORA_BAUD);
-    delay(100);
-
-    if (!s_rf95.init()) {
-        Serial.println("RadioHead init failed");
+    if (!s_radio.init(LORA_FREQ, LORA_SF, 125000, LORA_CR, LORA_TX_POWER)) {
+        Serial.println("LoRa init failed");
         return;
     }
 
-    s_rf95.setFrequency(LORA_FREQ);
-    s_rf95.setTxPower(LORA_TX_POWER, false);
-    s_rf95.setSpreadingFactor(LORA_SF);
-    s_rf95.setSignalBandwidth(125000);
-    s_rf95.setCodingRate4(LORA_CR);
-
-    Serial.println("LoRa (RadioHead) initialized");
+    Serial.println("LoRa initialized (raw UART bridge)");
 }
 
 bool lora_send_frame(const uint8_t *data, uint8_t len) {
-    if (!s_rf95.send((uint8_t *)data, len)) return false;
-    if (!s_rf95.waitPacketSent(3000)) return false;
+    if (!s_radio.send(data, len)) return false;
     s_tx_count++;
     return true;
 }
@@ -95,14 +85,14 @@ void lora_set_command_callback(lora_command_callback_t cb) {
 }
 
 void lora_loop() {
-    if (!s_rf95.available()) return;
+    uint8_t buf[255];
+    uint8_t len = 0;
+    int8_t rssi = 0;
 
-    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-    uint8_t len = sizeof(buf);
-    if (!s_rf95.recv(buf, &len)) return;
+    if (!s_radio.recv(buf, &len, &rssi)) return;
     if (len < LORA_HEADER_SIZE) return;
 
-    s_last_rssi = s_rf95.lastRssi();
+    s_last_rssi = rssi;
     s_rx_count++;
 
     const lora_frame_t *frame = (const lora_frame_t *)buf;

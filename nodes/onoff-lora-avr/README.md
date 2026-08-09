@@ -1,8 +1,8 @@
 # Arduino Nano LoRa Switch (ON/OFF)
 
 Node relay para Arduino Nano (ATmega328P) com módulo Seeed Studio Grove LoRa 868MHz.
-Comunica com o hub existente via LoRa usando RadioHead (`RH_RF95`) via SoftwareSerial.
-O módulo Seeed opera com firmware de fábrica — sem necessidade de reflash.
+Comunica com o hub existente via LoRa usando driver UART direto (sem RadioHead).
+O módulo Seeed opera com firmware de fábrica (ATMega168 bridge SPI) — sem necessidade de reflash.
 
 ## Hardware
 
@@ -17,7 +17,7 @@ O módulo Seeed opera com firmware de fábrica — sem necessidade de reflash.
 
 ### Módulo Seeed Grove LoRa
 
-O módulo já vem com firmware RadioHead de fábrica. O Arduino Nano usa a mesma biblioteca (`RH_RF95`) — funciona direto, sem reflash.
+O módulo já vem com firmware de fábrica (bridge SPI via ATMega168). O Arduino Nano se comunica via UART enviando comandos 'W'/'R' para leitura/escrita direta dos registradores SX1276 — sem RadioHead, sem header extra.
 
 **Pinagem Grove → Arduino Nano:**
 | Grove Pin | Arduino Nano |
@@ -47,13 +47,12 @@ O módulo já vem com firmware RadioHead de fábrica. O Arduino Nano usa a mesma
 
 ## Protocolo LoRa
 
-O node envia `lora_frame_t` encapsulado em pacote RadioHead (header de 4 bytes: TO, FROM, ID, FLAGS).
-
-O hub detecta automaticamente o header RadioHead e o remove antes de processar `lora_frame_t`.
+O node envia `lora_frame_t` cru (sem header adicional) via bridge SPI do módulo Seeed.
+O hub também envia `lora_frame_t` cru — protocolo idêntico em ambas as pontas.
 
 ```
-No ar:  [TO=FF][FROM=00][ID=01][FLAGS=00][lora_frame_t...]
-Hub:    detecta header → remove 4 bytes → processa lora_frame_t normalmente
+TX: [lora_frame_t] → bridge SPI → SX1276 → LoRa
+RX: SX1276 → bridge SPI → [lora_frame_t] cru
 ```
 
 ### Mensagens enviadas
@@ -110,7 +109,6 @@ O hub encaminha o estado do relé para Home Assistant via MQTT.
 - Hub com LoRa habilitado (`LORA_ENABLED` na config)
 - Módulo LoRa no hub sintonizado em 868MHz
 - Parâmetros idênticos: SF10, BW125kHz, CR 4/7, Sync Word 0x12
-- Hub com detecção de header RadioHead (já implementado)
 
 ## EEPROM Layout
 
@@ -124,8 +122,8 @@ O hub encaminha o estado do relé para Home Assistant via MQTT.
 
 | Recurso | Valor |
 |---------|-------|
-| RAM | ~900 / 2048 bytes (44%) |
-| Flash | ~12KB / 30KB (40%) |
+| RAM | ~923 / 2048 bytes (45%) |
+| Flash | ~9KB / 30KB (29%) |
 | Platform | ATmega328P (Arduino Nano) |
 | Framework | Arduino |
-| LoRa lib | RadioHead (`RH_RF95`) |
+| LoRa lib | Nenhuma (driver UART direto via bridge SPI) |

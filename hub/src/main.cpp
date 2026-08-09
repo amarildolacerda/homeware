@@ -202,18 +202,6 @@ static void lora_process_bridge_queue(void) {
 }
 
 static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg) {
-    // Strip RadioHead header (4 bytes: TO, FROM, ID, FLAGS) if present.
-    // RadioHead packets start with TO address (0x00-0xFF), FROM (0xFF=broadcast),
-    // then ID and FLAGS — none of which are valid lora_frame_t msg_type values
-    // (0x01-0x0D). Detect by checking first byte is a small address value.
-    if (len >= LORA_HEADER_SIZE + 4) {
-        uint8_t rh_to = data[0];
-        uint8_t rh_from = data[1];
-        if (rh_from == 0xFF && rh_to <= 0xFD) {
-            data += 4;
-            len -= 4;
-        }
-    }
     if (len < LORA_HEADER_SIZE) return;
     const lora_frame_t* frame = (const lora_frame_t*)data;
 
