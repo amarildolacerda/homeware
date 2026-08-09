@@ -63,23 +63,6 @@ typedef struct {
 #define LORA_HEADER_SIZE   11
 #define LORA_MAX_PAYLOAD   200
 
-// ── UART Protocol for ATMega168 Bridge ──
-// TX: 'T' + len_hi + len_lo + [data...]
-// RX enable: 'R'
-// Status: '?' → 'T'(ready), 'B'(busy)
-// Response: 'D' + len_hi + len_lo + [data...] (received packet)
-//           'T' (TX complete)
-//           'E' (error)
-
-#define BRIDGE_CMD_TX      'T'
-#define BRIDGE_CMD_RX_EN   'R'
-#define BRIDGE_CMD_STATUS  '?'
-#define BRIDGE_RSP_TX_OK   'T'
-#define BRIDGE_RSP_DATA    'D'
-#define BRIDGE_RSP_ERROR   'E'
-#define BRIDGE_RSP_READY   'T'
-#define BRIDGE_RSP_BUSY    'B'
-
 // ── LoRa API ──
 
 void lora_init(const uint8_t *my_mac, const char *device_name);

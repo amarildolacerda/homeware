@@ -1,7 +1,8 @@
 # Arduino Nano LoRa Switch (ON/OFF)
 
 Node relay para Arduino Nano (ATmega328P) com módulo Seeed Studio Grove LoRa 868MHz.
-Comunica com o hub existente via LoRa usando o protocolo `lora_frame_t` (mesmo formato dos nodes ESP32).
+Comunica com o hub existente via LoRa usando RadioHead (`RH_RF95`) via SoftwareSerial.
+O módulo Seeed opera com firmware de fábrica — sem necessidade de reflash.
 
 ## Hardware
 
@@ -16,35 +17,7 @@ Comunica com o hub existente via LoRa usando o protocolo `lora_frame_t` (mesmo f
 
 ### Módulo Seeed Grove LoRa
 
-O módulo vem com ATMega168 de fábrica que precisa ser **regravado** com o firmware `lora_bridge`.
-
-#### Por que regravar?
-
-O firmware de fábrica usa a biblioteca **RadioHead** (`RH_RF95`), que adiciona overhead ao pacote:
-
-```
-Fábrica (RadioHead):  [preamble][sync][header 4B][payload][CRC]
-Esperado pelo hub:     [lora_frame_t cru — msg_type + sequence + sensor_id + ...]
-```
-
-Quando o Arduino Nano envia `MSG_PAIR_REQUEST` (0x02) via RadioHead, os primeiros bytes no ar são header do RadioHead, não o `msg_type`. O hub recebe via `Sandeepmistry/LoRa` (raw SPI) e interpreta esses bytes como `lora_frame_t` → `msg_type` errado → frame descartado.
-
-**Exemplo:**
-```
-Node envia:      [0x02][0x01 0x00][AA BB CC DD EE FF]...  ← lora_frame_t correto
-RadioHead envia: [0x00][0xFF][0x01][0x02][0x02]...        ← header RadioHead + payload
-                       ↑ hub vê 0x00 como msg_type → descarta
-```
-
-**Solução escolhida:** reescrever o ATMega168 para **raw SPI pass-through** — recebe bytes via UART, repassa cru ao SX1276 via SPI, sem overhead. São ~30 linhas de C que configuram o SX1276 diretamente via registradores.
-
-**Alternativa descartada:** usar RadioHead no Arduino Nano e adaptar o hub para parserar o header RadioHead — frágil, depende de versão da lib, mistura de abstrações.
-
-**Gravação via ISP:**
-```bash
-# Usando Arduino Nano como ISP, ou gravador USBASP
-# Carregar firmware/lora_bridge/lora_bridge.ino via IDE Arduino
-```
+O módulo já vem com firmware RadioHead de fábrica. O Arduino Nano usa a mesma biblioteca (`RH_RF95`) — funciona direto, sem reflash.
 
 **Pinagem Grove → Arduino Nano:**
 | Grove Pin | Arduino Nano |
@@ -74,7 +47,14 @@ RadioHead envia: [0x00][0xFF][0x01][0x02][0x02]...        ← header RadioHead +
 
 ## Protocolo LoRa
 
-Usa o mesmo `lora_frame_t` do hub — plug-and-play com o sensor registry existente.
+O node envia `lora_frame_t` encapsulado em pacote RadioHead (header de 4 bytes: TO, FROM, ID, FLAGS).
+
+O hub detecta automaticamente o header RadioHead e o remove antes de processar `lora_frame_t`.
+
+```
+No ar:  [TO=FF][FROM=00][ID=01][FLAGS=00][lora_frame_t...]
+Hub:    detecta header → remove 4 bytes → processa lora_frame_t normalmente
+```
 
 ### Mensagens enviadas
 
@@ -95,20 +75,6 @@ Usa o mesmo `lora_frame_t` do hub — plug-and-play com o sensor registry existe
 ### Device ID
 
 `avr_<signature>` — 3 bytes da signature do ATmega328P (único por chip).
-
-## Firmware ATMega168 (módulo Seeed)
-
-O firmware `firmware/lora_bridge/lora_bridge.ino` transforma o ATMega168 em bridge SPI raw:
-
-- Recebe bytes via UART (do Arduino Nano)
-- Repassa ao SX1276 via SPI (sem overhead RadioHead)
-- Configuração idêntica ao hub: 868MHz, SF10, BW125kHz, CR 4/7
-
-**UART Protocol:**
-- `T` + len_hi + len_lo + [data] → TX packet
-- `R` → Habilitar RX contínuo
-- `?` → Status
-- Resposta: `D` + len + [data] (RX) ou `T` (TX OK) ou `E` (erro)
 
 ## Build
 
@@ -144,6 +110,7 @@ O hub encaminha o estado do relé para Home Assistant via MQTT.
 - Hub com LoRa habilitado (`LORA_ENABLED` na config)
 - Módulo LoRa no hub sintonizado em 868MHz
 - Parâmetros idênticos: SF10, BW125kHz, CR 4/7, Sync Word 0x12
+- Hub com detecção de header RadioHead (já implementado)
 
 ## EEPROM Layout
 
@@ -157,8 +124,8 @@ O hub encaminha o estado do relé para Home Assistant via MQTT.
 
 | Recurso | Valor |
 |---------|-------|
-| RAM | 865 / 2048 bytes (42%) |
-| Flash | 8174 / 30720 bytes (27%) |
+| RAM | ~900 / 2048 bytes (44%) |
+| Flash | ~12KB / 30KB (40%) |
 | Platform | ATmega328P (Arduino Nano) |
 | Framework | Arduino |
-| LoRa lib | Nenhuma (raw SPI) |
+| LoRa lib | RadioHead (`RH_RF95`) |

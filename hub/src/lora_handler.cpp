@@ -4,6 +4,11 @@
 #include "lora_config.h"
 #include <string.h>
 
+// ── RadioHead header prepended to all outgoing packets ──
+// AVR nodes use RH_RF95 which expects: [TO][FROM][ID][FLAGS] before payload
+#define RH_HEADER_SIZE 4
+static const uint8_t s_rh_header[RH_HEADER_SIZE] = {0xFF, 0x00, 0x01, 0x00}; // TO=broadcast, FROM=hub, ID=1, FLAGS=0
+
 LoraHandler::LoraHandler()
     : m_radio([]{
         LoraSpiConfig cfg;
@@ -24,9 +29,17 @@ LoraHandler::LoraHandler()
 {}
 
 int LoraHandler::init() { return m_radio.init(); }
-int LoraHandler::send(const uint8_t* data, size_t len) { return m_radio.send(data, len); }
 void LoraHandler::loop() { m_radio.loop(); }
 bool LoraHandler::is_ready() const { return m_radio.is_ready(); }
+
+// Send with RadioHead header prepended (for AVR nodes compatibility)
+int LoraHandler::send(const uint8_t* data, size_t len) {
+    uint8_t buf[RH_HEADER_SIZE + LORA_MAX_PAYLOAD];
+    if (len > LORA_MAX_PAYLOAD) return -1;
+    memcpy(buf, s_rh_header, RH_HEADER_SIZE);
+    memcpy(buf + RH_HEADER_SIZE, data, len);
+    return m_radio.send(buf, RH_HEADER_SIZE + len);
+}
 
 bool LoraHandler::send_command(const uint8_t* mac, uint8_t state) {
     lora_command_t cmd;

@@ -1,8 +1,11 @@
 #include "../include/lora_avr.h"
 #include "../include/config.h"
 #include <SoftwareSerial.h>
+#include <RH_RF95.h>
 
+// ── RadioHead on SoftwareSerial ──
 static SoftwareSerial s_lora_serial(LORA_RX_PIN, LORA_TX_PIN);
+static RH_RF95 s_rf95(s_lora_serial);
 
 static uint8_t s_my_mac[6];
 static char s_device_name[16];
@@ -14,23 +17,6 @@ static uint32_t s_rx_count = 0;
 static uint32_t s_tx_count = 0;
 
 static lora_command_callback_t s_command_cb = nullptr;
-
-// ── Bridge UART Protocol ──
-
-static void bridge_send_tx(const uint8_t *data, uint8_t len) {
-    s_lora_serial.write(BRIDGE_CMD_TX);
-    s_lora_serial.write((len >> 8) & 0xFF);
-    s_lora_serial.write(len & 0xFF);
-    s_lora_serial.write(data, len);
-}
-
-static void bridge_send_rx_enable() {
-    s_lora_serial.write(BRIDGE_CMD_RX_EN);
-}
-
-static void bridge_send_status() {
-    s_lora_serial.write(BRIDGE_CMD_STATUS);
-}
 
 // ── Frame Builders ──
 
@@ -60,38 +46,25 @@ void lora_init(const uint8_t *my_mac, const char *device_name) {
     s_lora_serial.begin(LORA_BAUD);
     delay(100);
 
-    bridge_send_rx_enable();
-    delay(50);
+    if (!s_rf95.init()) {
+        Serial.println("RadioHead init failed");
+        return;
+    }
+
+    s_rf95.setFrequency(LORA_FREQ);
+    s_rf95.setTxPower(LORA_TX_POWER, false);
+    s_rf95.setSpreadingFactor(LORA_SF);
+    s_rf95.setSignalBandwidth(125000);
+    s_rf95.setCodingRate4(LORA_CR);
+
+    Serial.println("LoRa (RadioHead) initialized");
 }
 
 bool lora_send_frame(const uint8_t *data, uint8_t len) {
-    unsigned long start = millis();
-    bridge_send_status();
-    while (millis() - start < 100) {
-        if (s_lora_serial.available()) {
-            uint8_t rsp = s_lora_serial.read();
-            if (rsp == BRIDGE_RSP_READY) break;
-            if (rsp == BRIDGE_RSP_BUSY) {
-                delay(10);
-                bridge_send_status();
-            }
-        }
-    }
-
-    bridge_send_tx(data, len);
-
-    start = millis();
-    while (millis() - start < 3000) {
-        if (s_lora_serial.available()) {
-            uint8_t rsp = s_lora_serial.read();
-            if (rsp == BRIDGE_RSP_TX_OK) {
-                s_tx_count++;
-                return true;
-            }
-            if (rsp == BRIDGE_RSP_ERROR) return false;
-        }
-    }
-    return false;
+    if (!s_rf95.send((uint8_t *)data, len)) return false;
+    if (!s_rf95.waitPacketSent(3000)) return false;
+    s_tx_count++;
+    return true;
 }
 
 bool lora_send_pair_request(uint8_t sensor_type) {
@@ -122,58 +95,39 @@ void lora_set_command_callback(lora_command_callback_t cb) {
 }
 
 void lora_loop() {
-    while (s_lora_serial.available()) {
-        uint8_t rsp = s_lora_serial.read();
+    if (!s_rf95.available()) return;
 
-        if (rsp == BRIDGE_RSP_DATA) {
-            while (!s_lora_serial.available());
-            uint8_t len_hi = s_lora_serial.read();
-            while (!s_lora_serial.available());
-            uint8_t len_lo = s_lora_serial.read();
-            uint16_t len = ((uint16_t)len_hi << 8) | len_lo;
-            if (len > 255) len = 255;
+    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+    uint8_t len = sizeof(buf);
+    if (!s_rf95.recv(buf, &len)) return;
+    if (len < LORA_HEADER_SIZE) return;
 
-            uint8_t buf[255];
-            uint16_t idx = 0;
-            unsigned long timeout = millis();
-            while (idx < len && millis() - timeout < 1000) {
-                if (s_lora_serial.available()) {
-                    buf[idx++] = s_lora_serial.read();
-                    timeout = millis();
-                }
+    s_last_rssi = s_rf95.lastRssi();
+    s_rx_count++;
+
+    const lora_frame_t *frame = (const lora_frame_t *)buf;
+    if (memcmp(frame->sensor_id, s_my_mac, 6) != 0) return;
+
+    switch (frame->msg_type) {
+        case MSG_PAIR_RESPONSE: {
+            if (frame->payload_len >= 1) {
+                const lora_pair_response_t *resp = (const lora_pair_response_t *)buf;
+                s_slot = resp->assigned_slot;
+                s_paired = true;
             }
-
-            if (idx < LORA_HEADER_SIZE) return;
-
-            const lora_frame_t *frame = (const lora_frame_t *)buf;
-            s_last_rssi = frame->rssi;
-            s_rx_count++;
-
-            if (memcmp(frame->sensor_id, s_my_mac, 6) != 0) return;
-
-            switch (frame->msg_type) {
-                case MSG_PAIR_RESPONSE: {
-                    if (frame->payload_len >= 1) {
-                        const lora_pair_response_t *resp = (const lora_pair_response_t *)buf;
-                        s_slot = resp->assigned_slot;
-                        s_paired = true;
-                    }
-                    break;
-                }
-
-                case MSG_COMMAND: {
-                    if (frame->payload_len >= 1 && s_command_cb) {
-                        const lora_command_t *cmd = (const lora_command_t *)buf;
-                        s_command_cb(s_slot, cmd->command);
-                    }
-                    break;
-                }
-
-                case MSG_NAK: {
-                    break;
-                }
-            }
+            break;
         }
+
+        case MSG_COMMAND: {
+            if (frame->payload_len >= 1 && s_command_cb) {
+                const lora_command_t *cmd = (const lora_command_t *)buf;
+                s_command_cb(s_slot, cmd->command);
+            }
+            break;
+        }
+
+        case MSG_NAK:
+            break;
     }
 }
 
