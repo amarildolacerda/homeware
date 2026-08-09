@@ -434,8 +434,13 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                 queue_bridge_state(slot);
             } else {
                 if (slot >= 0) {
-                    sensor_registry_get(slot)->last_seen = millis();
-                    sensor_registry_get(slot)->online = true;
+                    virtual_sensor_t *s = sensor_registry_get(slot);
+                    s->last_seen = millis();
+                    s->online = true;
+                    // Extract node IP from heartbeat
+                    if (hdr->ip[0] != 0 || hdr->ip[1] != 0 || hdr->ip[2] != 0 || hdr->ip[3] != 0) {
+                        memcpy(s->ip, hdr->ip, 4);
+                    }
                     send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
                 }
             }

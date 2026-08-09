@@ -357,7 +357,7 @@ input:focus{border-color:var(--primary)}
 <div id="msg" class="msg" style="display:none"></div>
 </div>
 <script>
-async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
 function showMsg(t,c){let m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
 function loading(v){document.getElementById('submitBtn').style.opacity=v?0.5:1;document.getElementById('submitBtn').disabled=v}
 async function submitForm(){let ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}

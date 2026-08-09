@@ -129,6 +129,10 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
     s->last_rssi = header->rssi;
     s->last_seen = millis();
     s->online = true;
+    // Extract node IP from ESP-NOW header (v2+)
+    if (header->ip[0] != 0 || header->ip[1] != 0 || header->ip[2] != 0 || header->ip[3] != 0) {
+        memcpy(s->ip, header->ip, 4);
+    }
 
     switch (s->type) {
         case SENSOR_TYPE_TEMP_HUM: {

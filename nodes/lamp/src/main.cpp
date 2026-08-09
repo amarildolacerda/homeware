@@ -559,17 +559,22 @@ static void handle_api_wifi(void)
     {
         String json;
         JsonDocument doc;
-        doc["ssid"] = WiFi.SSID();
-        doc["configured"] = (WiFi.SSID().length() > 0);
-        doc["ap_active"] = (mywifi_state() == WIFI_STATE_PORTAL);
-        doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
-        doc["device_name"] = s_device_name;
-        doc["channel"] = mywifi_configured_channel();
-        doc["wifi_channel"] = WiFi.channel();
-        // Read saved password from EEPROM (same layout as shared)
+        // Read configured SSID from EEPROM (not the currently connected one)
         {
-            char pass_buf[64];
+            char ssid_buf[EEPROM_WIFI_SSID_SIZE];
             EEPROM.begin(EEPROM_SIZE);
+            int pos = 0;
+            for (int i = 0; i < EEPROM_WIFI_SSID_SIZE - 1; i++) {
+                uint8_t c = EEPROM.read(EEPROM_WIFI_SSID_OFFSET + i);
+                if (c == 0) break;
+                if (c < 32 || c > 126) break;
+                ssid_buf[pos++] = (char)c;
+            }
+            ssid_buf[pos] = '\0';
+            doc["ssid"] = ssid_buf;
+            doc["configured"] = (pos > 0);
+            // Read saved password from EEPROM
+            char pass_buf[64];
             for (int i = 0; i < (int)sizeof(pass_buf) - 1; i++) {
                 uint8_t c = EEPROM.read(EEPROM_WIFI_PASS_OFFSET + i);
                 pass_buf[i] = (c >= 32 && c <= 126) ? (char)c : '\0';
@@ -579,6 +584,13 @@ static void handle_api_wifi(void)
             doc["password"] = pass_buf;
             EEPROM.end();
         }
+        doc["ap_active"] = (mywifi_state() == WIFI_STATE_PORTAL);
+        doc["status"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
+        doc["wifi_connected"] = (WiFi.status() == WL_CONNECTED) ? WiFi.SSID() : "";
+        doc["device_name"] = s_device_name;
+        doc["channel"] = mywifi_configured_channel();
+        doc["wifi_channel"] = WiFi.channel();
+        doc["rssi"] = WiFi.RSSI();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
