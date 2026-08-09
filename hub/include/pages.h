@@ -671,7 +671,7 @@ function buildSensorCard(s) {
       renderState(s)+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'+
-      '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'há '+fmtUptime(s.last_seen) : '')+'</span>'+
+      '<span style="font-size:0.7rem;color:var(--muted-subtle)">'+(s.last_seen>=0 ? 'há '+fmtUptime(s.last_seen) : '__:__')+'</span>'+
       '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
         '<span class="star'+(isFav(s.slot)?' on':'')+'" onclick="event.stopPropagation();toggleFav('+s.slot+')">'+(isFav(s.slot)?'&#x2605;':'&#x2606;')+'</span>'+
         '<span class="badge '+(s.online?'online':'offline')+'">'+(s.online?'Online':'Offline')+'</span>'+
@@ -858,7 +858,7 @@ function showPropsModal(slot) {
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
-    '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'&mdash;')+'</span></div>'+
+    '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'__:__')+'</span></div>'+
     '<div class="row"><span class="label">Sequência</span><span class="value">'+s.sequence+'</span></div>'+
     (s.free_heap!==undefined && s.free_heap>0 ? '<div class="row"><span class="label">Mem. Livre</span><span class="value">'+fmtBytes(s.free_heap)+'</span></div>' : '')+
     '</div>';

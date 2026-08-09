@@ -335,7 +335,7 @@ void web_server_init() {
                 obj["battery_pct"] = s->battery_pct;
                 obj["last_rssi"] = s->last_rssi;
                 obj["free_heap"] = s->free_heap;
-                obj["last_seen"] = (s->online && s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;
+                obj["last_seen"] = (s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;
                 obj["online"] = s->online;
                 obj["paired"] = s->paired;
                 if (s->ip[0] || s->ip[1] || s->ip[2] || s->ip[3]) {
