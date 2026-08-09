@@ -170,7 +170,6 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">Senha</span><input type="password" id="wifiPass" maxlength="63" style="width:160px" placeholder="Senha WiFi"></div>
 <div class="row"><span class="label">Canal</span><input type="number" id="wifiChannel" min="0" max="13" style="width:60px" placeholder="auto"></div>
 <div style="font-size:.68rem;color:var(--muted-subtle);margin-top:2px">0 = automático</div>
-<div style="text-align:center;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveWifi()">Conectar</button></div>
 <div id="wifiMsg" style="display:none;margin-top:6px;padding:6px;border-radius:8px;font-size:.78rem;text-align:center"></div>
 </div>
 )=====";
@@ -259,7 +258,10 @@ async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch(
 async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();footerEl.textContent=d.status==='pairing'?'Pareando...':'Falha ao parear'}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value),multihub:!!document.getElementById('multihubCheck').checked};if(nm)body.device_name=nm;
-try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
+try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+let ssid=document.getElementById('wifiSsid').value.trim();let pass=document.getElementById('wifiPass').value;let ch=parseInt(document.getElementById('wifiChannel').value)||0;
+if(ssid){let wb={ssid:ssid,password:pass};if(ch>=0&&ch<=13)wb.channel=ch;let wr=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wb)});let wd=await wr.json();if(wd.status==='ok'){showWifiMsg('Conectando a '+ssid+'...','ok');setTimeout(function(){fetchWifi()},3000)}else{showWifiMsg('Erro: '+(wd.error||''),'err')}}
+fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
   const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';badge.className='badge '+(on?'on':'off');
   rxVal.textContent=d.rx_count||0;
@@ -328,7 +330,6 @@ async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){st.textContent=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';st.className='value'+(d.status==='connected'?' green':'')}let ch=document.getElementById('wifiChannel');if(ch&&d.channel!==undefined)ch.value=d.channel}catch(e){}}
 function showWifiMsg(t,c){let m=document.getElementById('wifiMsg');if(!m)return;m.textContent=t;m.className='';m.style.display='block';m.style.background=c==='ok'?'#dcfce7':'#fef2f2';m.style.color=c==='ok'?'var(--success)':'var(--danger)';setTimeout(function(){m.style.display='none'},3000)}
-async function saveWifi(){let ssid=document.getElementById('wifiSsid').value.trim();let pass=document.getElementById('wifiPass').value;let ch=parseInt(document.getElementById('wifiChannel').value)||0;if(!ssid){showWifiMsg('Informe o SSID','err');return}let body={ssid:ssid,password:pass};if(ch>=0&&ch<=13)body.channel=ch;try{let r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();if(d.status==='ok'){showWifiMsg('Conectando...','ok');setTimeout(function(){fetchWifi()},3000)}else{showWifiMsg('Erro: '+(d.error||''),'err')}}catch(e){showWifiMsg('Erro: '+e.message,'err')}}
 )=====";
 #ifdef PINS_ENABLED
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
