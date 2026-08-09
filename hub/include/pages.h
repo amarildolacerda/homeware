@@ -101,6 +101,10 @@ const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 "<title>LoRa + ESP-NOW Hub</title>"
 #elif defined(LORA_ENABLED)
 "<title>LoRa Hub</title>"
+#elif defined(TCP_ENABLED) && !defined(ESPNOW_ENABLED)
+"<title>TCP Hub</title>"
+#elif defined(TCP_ENABLED) && defined(ESPNOW_ENABLED)
+"<title>TCP + ESP-NOW Hub</title>"
 #else
 "<title>ESP-NOW Gateway</title>"
 #endif
