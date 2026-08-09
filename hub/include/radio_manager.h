@@ -28,6 +28,9 @@ public:
 
     RadioInterface* get_radio(uint8_t radio_type) const;
 
+    int get_count() const { return m_count; }
+    uint8_t get_type(int idx) const { return idx < m_count ? m_entries[idx].type : 0; }
+
 private:
     struct RadioEntry {
         uint8_t type;

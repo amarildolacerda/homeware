@@ -33,10 +33,12 @@ EspnowHandler::EspnowHandler() {
 int EspnowHandler::init() {
     s_self = this;
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.macAddress(m_gateway_mac);
 
     if (esp_now_init() != 0) {
         console.println("[ESP-NOW] Init failed");
+        log_add("error", "ESP-NOW init failed");
         return -1;
     }
 
@@ -46,12 +48,14 @@ int EspnowHandler::init() {
     esp_now_register_recv_cb(espnow_recv_cb);
 
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    espnow_add_peer_wrapper(broadcast_mac, WiFi.channel());
-
+    int ch = WiFi.channel();
     char mac_str[18];
     mac_to_str(m_gateway_mac, mac_str, sizeof(mac_str));
-    console.printf("[ESP-NOW] Initialized, MAC: %s WiFi ch=%d\n",
-                  mac_str, WiFi.channel());
+    bool peer_ok = espnow_add_peer_wrapper(broadcast_mac, ch);
+    console.printf("[ESP-NOW] Initialized, MAC: %s WiFi ch=%d, bcast peer=%s\n",
+                  mac_str, ch, peer_ok ? "OK" : "FAIL");
+    log_add("info", "[ESP-NOW] init OK mac=%s ch=%d bcast_peer=%s",
+            mac_str, ch, peer_ok ? "OK" : "FAIL");
     return 0;
 }
 

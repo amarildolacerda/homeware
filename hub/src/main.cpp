@@ -324,12 +324,14 @@ void setup() {
     s_radio_mgr.add_radio(RADIO_TCP, &s_tcp);
     console.println("TCP provisioned");
 #endif
+    log_buffer_init();
+    log_add("info", "m_count=%d types=%d,%d", s_radio_mgr.get_count(),
+            s_radio_mgr.get_type(0), s_radio_mgr.get_type(1));
     s_radio_mgr.init_all();
 #if defined(DISPLAY_ENABLED) || defined(DISPLAY_TTGO) || defined(DISPLAY_HELTEC)
     display_handler_init();
 #endif
     s_radio_mgr.all_announce();
-    log_buffer_init();
     
     configTime(0, 0, "162.159.200.123", "216.239.35.0");
     console.printf("[%s] NTP: 162.159.200.123 (cloudflare), non-blocking sync\n", TAG);

@@ -13,8 +13,9 @@ void RadioManager::add_radio(uint8_t radio_type, RadioInterface* radio) {
 
 void RadioManager::init_all() {
     for (int i = 0; i < m_count; i++) {
-        m_entries[i].radio->init();
-        console.printf("[radio] Radio %d initialized\n", m_entries[i].type);
+        int ret = m_entries[i].radio->init();
+        console.printf("[radio] Radio %d initialized (ret=%d)\n", m_entries[i].type, ret);
+        log_add("info", "Radio %d init ret=%d", m_entries[i].type, ret);
     }
 }
 

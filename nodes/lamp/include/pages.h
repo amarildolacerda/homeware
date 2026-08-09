@@ -15,8 +15,16 @@ static const char PAGE_DASHBOARD[] PROGMEM = R"=====(
 body{font-family:-apple-system,system-ui,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
 .sidebar{position:fixed;left:0;top:0;width:var(--sidebar-w);height:100%;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10}
 .sidebar-top{padding:16px 16px 8px;border-bottom:1px solid var(--border)}
+.sidebar-top .dev-row{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
 .sidebar-top .dev-name{font-size:.85rem;font-weight:600;color:var(--primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sidebar-top .dev-id{font-size:.65rem;color:var(--muted-subtle);margin-top:2px}
+.signal{display:flex;align-items:flex-end;gap:2px;height:14px}
+.signal .bar{width:3px;border-radius:1px;background:var(--border)}
+.signal .bar:nth-child(1){height:4px}
+.signal .bar:nth-child(2){height:7px}
+.signal .bar:nth-child(3){height:10px}
+.signal .bar:nth-child(4){height:13px}
+.signal .bar.on{background:var(--success)}
 .nav{flex:1;padding:8px 0;overflow-y:auto}
 .nav-item{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;font-size:.82rem;color:var(--muted);border-left:3px solid transparent;user-select:none}
 .nav-item:hover{color:var(--text);background:var(--surface-2)}
@@ -69,8 +77,13 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <body>
 <div class="sidebar">
 <div class="sidebar-top">
+<div class="dev-row">
+<div style="flex:1;min-width:0">
 <div class="dev-name" id="sbName">Lâmpada</div>
 <div class="dev-id" id="sbId">-</div>
+</div>
+<div class="signal" id="nodeSignal" title="RSSI: --"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+</div>
 </div>
 <div class="nav">
 <div class="nav-item active" data-section="home" onclick="showSection('home')"><span>🏠</span><span>Home</span></div>
@@ -281,6 +294,7 @@ document.getElementById('sbName').textContent=name;
 document.getElementById('sbId').textContent=d.device_id||'';
 const ve=document.getElementById('sbVersion');if(ve&&d.fw_version)ve.textContent=d.fw_version;
 const sip=document.getElementById('sbIp');if(sip){sip.textContent=d.ip&&d.ip!=='0.0.0.0'?d.ip:'-'}
+if(d.rssi!==undefined)updateSignal(d.rssi);
 footerEl.textContent=d.device_id+(d.last_send_s?' Último envio: '+d.last_send_s+'s ago':'');
 fbDot.className='fb-dot'+(d.gateway_connected?' online':' offline');
 fbGateway.textContent=d.gateway_connected?'Online':'Offline';
@@ -288,6 +302,18 @@ fbUptime.textContent=uptimeStr;
 fbTime.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 fetchRepeater(d);
 }catch(e){footerEl.textContent='Erro: '+e.message}}
+function updateSignal(rssi){
+  var el=document.getElementById('nodeSignal');
+  if(!el) return;
+  var bars=el.querySelectorAll('.bar');
+  var level=0;
+  if(rssi>=-40) level=4;
+  else if(rssi>=-60) level=3;
+  else if(rssi>=-70) level=2;
+  else if(rssi>=-80) level=1;
+  for(var i=0;i<bars.length;i++) bars[i].classList.toggle('on', i<level);
+  el.title='RSSI: '+rssi+' dBm';
+}
 async function fetchSettings(){try{let r=await fetch('/api/settings');let d=await r.json();
 document.getElementById('deviceNameInput').value=d.device_name;
 document.getElementById('ledEnabledCheck').checked=d.led_enabled;
