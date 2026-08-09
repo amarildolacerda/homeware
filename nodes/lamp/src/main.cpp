@@ -566,6 +566,19 @@ static void handle_api_wifi(void)
         doc["device_name"] = s_device_name;
         doc["channel"] = mywifi_configured_channel();
         doc["wifi_channel"] = WiFi.channel();
+        // Read saved password from EEPROM (same layout as shared)
+        {
+            char pass_buf[64];
+            EEPROM.begin(EEPROM_SIZE);
+            for (int i = 0; i < (int)sizeof(pass_buf) - 1; i++) {
+                uint8_t c = EEPROM.read(EEPROM_WIFI_PASS_OFFSET + i);
+                pass_buf[i] = (c >= 32 && c <= 126) ? (char)c : '\0';
+                if (c == 0) { pass_buf[i] = '\0'; break; }
+            }
+            pass_buf[sizeof(pass_buf) - 1] = '\0';
+            doc["password"] = pass_buf;
+            EEPROM.end();
+        }
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
