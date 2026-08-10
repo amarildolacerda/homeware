@@ -16,6 +16,7 @@
 #include "common_web.h"
 #include "common_repeater.h"
 #include "common_wifi.h"
+#include "common_util.h"
 #include "timer.h"
 #include <LittleFS.h>
 
@@ -35,7 +36,6 @@ static unsigned long s_button_last_ms = 0;
 static unsigned long s_start_time = 0;
 static uint32_t s_on_count = 0;
 
-static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
 static bool s_led_enabled = true;
@@ -534,7 +534,7 @@ static void handle_api_state(void)
         doc["state"] = s_relay_state;
         doc["button"] = (digitalRead(s_button_pin) == LOW);
         doc["battery"] = s_battery;
-        doc["device_id"] = s_device_id;
+        doc["device_id"] = getDeviceId();
         doc["device_name"] = s_device_name;
         doc["gateway_connected"] = s_radio.is_paired();
         doc["paired"] = s_radio.is_paired();
@@ -674,12 +674,12 @@ static void handle_console(char c)
     case 'u':
     case 'U':
         console.printf("\n--- OTA ---\n");
-        console.printf("  Hostname: %s.local\n", s_device_id);
+        console.printf("  Hostname: %s.local\n", getDeviceId());
         console.printf("  Port:     8266 (ArduinoOTA)\n");
         console.printf("  PlatformIO CLI:\n");
-        console.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
+        console.printf("    pio run -t upload --upload-port %s.local\n", getDeviceId());
         console.printf("  espota.py:\n");
-        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
+        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", getDeviceId());
         console.printf("-------------\n\n");
         break;
     case 'p':
@@ -765,7 +765,7 @@ static void handle_console(char c)
     {
         unsigned long up = (millis() - s_start_time) / 1000;
         console.printf("\n--- Status ---\n");
-        console.printf("  Dispositivo: %s\n", s_device_id);
+        console.printf("  Dispositivo: %s\n", getDeviceId());
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  OnOff:       %s\n", s_relay_state ? "LIGADO" : "DESLIGADO");
         console.printf("  Bateria:     %d %%\n", s_battery);
@@ -1190,15 +1190,14 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    uint32_t id = chip_id();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
+    getDeviceId(); // initializes device ID from chip_id()
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
 
     console.printf("\n");
     console.printf("============================================\n");
     console.printf("  AgriSense Switch " FW_VERSION "\n");
-    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n");
 
@@ -1240,7 +1239,7 @@ void setup(void)
 #endif
     /* s_server.begin() is called by Espalexa internally */
 
-    ArduinoOTA.setHostname(s_device_id);
+    ArduinoOTA.setHostname(getDeviceId());
     ArduinoOTA.onStart([]()
                        { console.printf("[%s] OTA update start\n", TAG); });
     ArduinoOTA.onEnd([]()
@@ -1250,7 +1249,7 @@ void setup(void)
     ArduinoOTA.onError([](ota_error_t error)
                        { console.printf("[%s] OTA error: %d\n", TAG, error); });
     ArduinoOTA.begin();
-    console.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
+    console.printf("[%s] OTA ready: %s.local\n", TAG, getDeviceId());
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 

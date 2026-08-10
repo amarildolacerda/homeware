@@ -110,7 +110,6 @@ static unsigned long s_synced_epoch = 0;
 static unsigned long s_sync_millis = 0;
 static bool s_tz_changed = false;
 
-static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
 static bool s_ota_in_progress = false;
@@ -701,7 +700,7 @@ static void handle_api_state(void)
         doc["state"] = s_relay_state;
         doc["button"] = (digitalRead(s_button_pin) == LOW);
         doc["battery"] = s_battery;
-        doc["device_id"] = s_device_id;
+        doc["device_id"] = getDeviceId();
         doc["device_name"] = s_device_name;
         doc["gateway_connected"] = s_radio.is_paired();
         doc["paired"] = s_radio.is_paired();
@@ -938,12 +937,12 @@ static void handle_console(char c)
     case 'u':
     case 'U':
         console.printf("\n--- OTA ---\n");
-        console.printf("  Hostname: %s.local\n", s_device_id);
+        console.printf("  Hostname: %s.local\n", getDeviceId());
         console.printf("  Port:     8266 (ArduinoOTA)\n");
         console.printf("  PlatformIO CLI:\n");
-        console.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
+        console.printf("    pio run -t upload --upload-port %s.local\n", getDeviceId());
         console.printf("  espota.py:\n");
-        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
+        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", getDeviceId());
         console.printf("-------------\n\n");
         break;
     case 'p':
@@ -1055,7 +1054,7 @@ static void handle_console(char c)
     {
         unsigned long up = (millis() - s_start_time) / 1000;
         console.printf("\n--- Status ---\n");
-        console.printf("  Dispositivo: %s\n", s_device_id);
+        console.printf("  Dispositivo: %s\n", getDeviceId());
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Lampada:     %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
         console.printf("  Bateria:     %d %%\n", s_battery);
@@ -1314,7 +1313,7 @@ static void handle_api_devices(void)
     for (JsonVariant v : doc.as<JsonArray>())
     {
         const char *id = v["id"] | "";
-        if (strcmp(id, s_device_id) == 0)
+        if (strcmp(id, getDeviceId()) == 0)
             continue;
         JsonObject obj = arr.add<JsonObject>();
         obj["id"] = id;
@@ -1600,10 +1599,10 @@ static void tcp_poll_pending_commands()
         return;
     if (WiFi.status() != WL_CONNECTED)
         return;
-    if (strlen(s_device_id) == 0)
+    if (strlen(getDeviceId()) == 0)
         return;
 
-    String url = String("http://") + WiFi.gatewayIP().toString() + ":" + String(DASHBOARD_PORT) + "/node/command/" + s_device_id;
+    String url = String("http://") + WiFi.gatewayIP().toString() + ":" + String(DASHBOARD_PORT) + "/node/command/" + getDeviceId();
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, url))
@@ -1657,8 +1656,7 @@ void setup(void)
         LittleFS.begin();
     }
 
-    uint32_t id = chip_id();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
+    getDeviceId(); // initializes device ID from chip_id()
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
@@ -1678,7 +1676,7 @@ void setup(void)
     console.printf("\n");
     console.printf("============================================\n");
     console.printf("  AgriSense Lamp " FW_VERSION "\n");
-    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n");
 
@@ -1686,7 +1684,7 @@ void setup(void)
     init_hardware();
     console.printf("============================================\n");
 
-    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? s_device_id : s_device_name);
+    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? getDeviceId() : s_device_name);
 
     int op_mode = op_mode_load();
     console.printf("[%s] Operation mode: %d (%s)\n", TAG, op_mode,
@@ -1714,7 +1712,7 @@ void setup(void)
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
 #ifdef TCP_ENABLED
-    s_radio.set_device_id(s_device_id);
+    s_radio.set_device_id(getDeviceId());
 #endif
     s_radio.load_gateway_mac();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
@@ -1822,7 +1820,7 @@ void setup(void)
     // begin() DEPOIS de todas as rotas e onNotFound (padrão referência)
     s_server.begin();
 
-    ota_setup(s_device_id);
+    ota_setup(getDeviceId());
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 

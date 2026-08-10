@@ -12,6 +12,7 @@
 #include "common_console.h"
 #include "common_espnow.h"
 #include "common_wifi.h"
+#include "common_util.h"
 #include "common_web.h"
 
 static const char *TAG = "agri-presence";
@@ -23,7 +24,6 @@ static unsigned long s_last_motion_time = 0;
 static int s_battery = 100;
 static unsigned long s_start_time = 0;
 
-static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
 static bool s_wifi_configuration_mode = false;
@@ -223,7 +223,7 @@ static void handle_api_state(void)
         JsonDocument doc;
         doc["motion_state"] = s_motion_state;
         doc["battery"] = s_battery;
-        doc["device_id"] = s_device_id;
+        doc["device_id"] = getDeviceId();
         doc["device_name"] = s_device_name;
         doc["fw_version"] = FW_VERSION;
         doc["platform"] = "esp8266";
@@ -272,12 +272,12 @@ static void handle_serial(char c)
     case 'u':
     case 'U':
         console.printf("\n--- OTA ---\n");
-        console.printf("  Hostname: %s.local\n", s_device_id);
+        console.printf("  Hostname: %s.local\n", getDeviceId());
         console.printf("  Port:     8266 (ArduinoOTA)\n");
         console.printf("  PlatformIO CLI:\n");
-        console.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
+        console.printf("    pio run -t upload --upload-port %s.local\n", getDeviceId());
         console.printf("  espota.py:\n");
-        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
+        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", getDeviceId());
         console.printf("-------------\n\n");
         break;
     case 'p':
@@ -316,7 +316,7 @@ static void handle_serial(char c)
     {
         unsigned long up = (millis() - s_start_time) / 1000;
         console.printf("\n--- Status ---\n");
-        console.printf("  Dispositivo: %s\n", s_device_id);
+        console.printf("  Dispositivo: %s\n", getDeviceId());
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Motion:      %s\n", s_motion_state ? "SIM" : "NAO");
         console.printf("  Bateria:     %d %%\n", s_battery);
@@ -392,15 +392,14 @@ void setup(void)
     console.begin();
     s_start_time = millis();
 
-    uint32_t id = chip_id();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
+    getDeviceId(); // initializes device ID from chip_id()
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
 
     console.printf("\n");
     console.printf("============================================\n");
     console.printf("  AgriSense Presence " FW_VERSION "\n");
-    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n");
 
@@ -436,7 +435,7 @@ void setup(void)
     });
     s_server.begin();
 
-    ArduinoOTA.setHostname(s_device_id);
+    ArduinoOTA.setHostname(getDeviceId());
     ArduinoOTA.onStart([]() { console.printf("[%s] OTA update start\n", TAG); });
     ArduinoOTA.onEnd([]() { console.printf("[%s] OTA update end\n", TAG); });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
@@ -446,7 +445,7 @@ void setup(void)
         console.printf("[%s] OTA error: %d\n", TAG, error);
     });
     ArduinoOTA.begin();
-    console.printf("[%s] OTA ready: %s.local\n", TAG, s_device_id);
+    console.printf("[%s] OTA ready: %s.local\n", TAG, getDeviceId());
 
     console.printf("\n  => Browser: http://%s\n", WiFi.localIP().toString().c_str());
     console.printf("  => Terminal: 'h' comando de ajuda\n");

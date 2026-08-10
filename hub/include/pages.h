@@ -1083,16 +1083,14 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <div class="summary"><span id="mode-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
 </div>
 <div class="card-body">
-<div class="row"><span class="label">Modo atual</span><span class="value" id="s-mode-label">--</span></div>
-<div style="margin:12px 0">
-<div class="toggle-row">
-<button type="button" class="seg" id="seg-terminal" onclick="setOpMode(0)">Terminal</button>
-<button type="button" class="seg" id="seg-ap" onclick="setOpMode(1)">AP</button>
-<button type="button" class="seg" id="seg-hybrid" onclick="setOpMode(2)">Híbrido</button>
-</div>
-</div>
-<div class="row" style="font-size:0.75rem;color:var(--muted-subtle)"><span>Terminal = STA | AP = Ponto de Acesso | Híbrido = STA + AP</span></div>
-<button class="btn btn-primary" id="btn-save-mode" onclick="saveOpMode()" style="margin-top:8px;width:100%" disabled>Salvar e Reiniciar</button>
+<div class="row"><span class="label">Modo</span>
+<select id="opModeSelect" onchange="saveOpMode()" style="max-width:160px">
+<option value="0">Terminal (STA)</option>
+<option value="1">AP</option>
+<option value="2">Híbrido (AP+STA)</option>
+</select></div>
+<div style="font-size:.72rem;color:var(--muted-subtle);margin-top:6px">Terminal = STA | AP = Ponto de Acesso | Híbrido = STA + AP</div>
+<div id="modeMsg" style="display:none;margin-top:6px;padding:6px;border-radius:8px;font-size:.78rem;text-align:center"></div>
 </div>
 </div>
 
@@ -1180,34 +1178,28 @@ function setWifiMode(mode) {
 }
 
 var s_currentMode = -1;
-var s_selectedMode = -1;
 
 function setOpMode(mode) {
-  s_selectedMode = mode;
-  document.getElementById('seg-terminal').classList.toggle('active', mode === 0);
-  document.getElementById('seg-ap').classList.toggle('active', mode === 1);
-  document.getElementById('seg-hybrid').classList.toggle('active', mode === 2);
-  document.getElementById('btn-save-mode').disabled = (mode === s_currentMode);
+  document.getElementById('opModeSelect').value = mode;
 }
 
 async function loadOpMode() {
   try {
     var data = await api('/api/config/mode');
     s_currentMode = data.mode;
-    s_selectedMode = data.mode;
     var labels = ['Terminal', 'AP', 'Híbrido'];
-    document.getElementById('s-mode-label').textContent = labels[data.mode] || '--';
+    document.getElementById('opModeSelect').value = data.mode;
     document.getElementById('mode-sum').textContent = labels[data.mode] || '--';
     document.getElementById('mode-sum').className = 'badge badge-info';
-    setOpMode(data.mode);
   } catch(e) {}
 }
 
 async function saveOpMode() {
-  if (s_selectedMode < 0 || s_selectedMode === s_currentMode) return;
+  var mode = parseInt(document.getElementById('opModeSelect').value);
+  if (mode === s_currentMode) return;
   if (!confirm('Reiniciar para aplicar o novo modo?')) return;
   try {
-    await api('/api/config/mode', {method:'POST', body:JSON.stringify({mode:s_selectedMode})});
+    await api('/api/config/mode', {method:'POST', body:JSON.stringify({mode:mode})});
     showToast('Modo alterado, reiniciando...');
     setTimeout(function() { window.location.reload(); }, 3000);
   } catch(e) { showToast('Erro: '+e.message, true); }
