@@ -159,6 +159,11 @@ void handle_console(char c) {
                     next = nc - '0';
                     Serial.read();
                 }
+            } else if (console.telnet_available() > 0) {
+                char nc = console.telnet_read();
+                if (nc >= '0' && nc <= '2') {
+                    next = nc - '0';
+                }
             }
             if (next >= 0) {
                 if (next == cur) {

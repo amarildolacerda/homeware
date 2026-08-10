@@ -71,6 +71,15 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 .timer-add{display:flex;gap:4px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .section{display:none}
 .section.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
+.card.collapsible{padding:0;overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;user-select:none}
+.card-head h2{font-size:.9rem;font-weight:600;color:var(--primary);margin:0}
+.card-head .summary{display:flex;align-items:center;gap:8px;flex:1;margin-left:10px;justify-content:flex-end;text-align:right}
+.chev{transition:transform .2s;color:var(--muted);font-size:.9rem}
+.card.collapsed .chev{transform:rotate(-90deg)}
+.card-body{padding:0 16px 16px}
+.card.collapsed .card-body{display:none}
 @media(max-width:600px){.sidebar{width:48px}.sidebar-top .dev-name,.sidebar-top .dev-id,.sidebar-bottom{display:none}.nav-item{justify-content:center;padding:10px 4px}.nav-item span{display:none}.nav-item span:first-child{display:inline;font-size:1.1rem}.nav-sub{display:none}.main{margin-left:48px}.stats-header{padding:5px 10px}.content{padding:12px}.footer-bar{padding:6px 12px;font-size:.7rem;gap:8px}}
 </style>
 </head>
@@ -169,6 +178,13 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 </div>
 <div class="section" id="secConfig">
 <h1>Configuração</h1>
+
+<div class="card collapsible collapsed" id="card-device">
+<div class="card-head" onclick="toggleCard('card-device')">
+<h2>Dispositivo</h2>
+<div class="summary"><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
 <div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
 <div class="row"><span class="label">GPIO relé</span><select id="relayPinSelect"></select></div>
 <div class="row"><span class="label">GPIO botão</span><select id="buttonPinSelect"></select></div>
@@ -176,14 +192,28 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">Estado ao Iniciar</span><select id="startupModeSelect" onchange="savePins()">
 <option value="0">OFF</option><option value="1">ON</option><option value="2">Último</option></select></div>
 <div class="row"><span class="label">Multi-hubs</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="multihubCheck" onchange="savePins()"> aceitar comando de qualquer hub</label></div>
-<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
-<div style="font-size:.82rem;font-weight:600;color:var(--primary);margin-bottom:6px">Rede WiFi</div>
+</div>
+</div>
+
+<div class="card collapsible collapsed" id="card-wifi">
+<div class="card-head" onclick="toggleCard('card-wifi')">
+<h2>WiFi</h2>
+<div class="summary"><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
+<div class="row"><span class="label">Modo</span>
+<select id="opModeSelect" onchange="saveOpMode()" style="max-width:140px">
+<option value="0">Terminal (STA)</option>
+<option value="1">AP</option>
+<option value="2">Híbrido (AP+STA)</option>
+</select></div>
 <div class="row"><span class="label">Status</span><span class="value" id="wifiStatus">-</span></div>
 <div class="row"><span class="label">SSID</span><input type="text" id="wifiSsid" maxlength="32" style="width:160px" placeholder="Nome da rede"></div>
 <div class="row"><span class="label">Senha</span><input type="password" id="wifiPass" maxlength="63" style="width:160px" placeholder="Senha WiFi"></div>
 <div class="row"><span class="label">Canal</span><input type="number" id="wifiChannel" min="0" max="13" style="width:60px" placeholder="auto"></div>
 <div style="font-size:.68rem;color:var(--muted-subtle);margin-top:2px">0 = automático</div>
 <div id="wifiMsg" style="display:none;margin-top:6px;padding:6px;border-radius:8px;font-size:.78rem;text-align:center"></div>
+</div>
 </div>
 )=====";
 #ifdef REPEATER_ENABLED
@@ -192,7 +222,12 @@ static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
 )=====";
 #endif
 static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
-<div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+<div class="card" id="card-actions">
+<div class="card-head">
+<h2>Ações</h2>
+</div>
+<div class="card-body">
+<div style="display:flex;gap:8px;justify-content:center">
 <button class="btn btn-primary" onclick="savePins()">Salvar</button>
 <button class="btn btn-primary" onclick="pairDevice()">Parear</button>
 <button class="btn btn-danger" onclick="restartDevice()">Reiniciar</button>
@@ -202,6 +237,8 @@ static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <input type="file" id="otaFile" accept=".bin">
 <button class="btn btn-primary btn-sm" onclick="doUpdate()">Enviar e Atualizar</button>
 <span class="value" id="otaStatus" style="font-size:.72rem;color:var(--muted-subtle)"></span>
+</div>
+</div>
 </div>
 </div>
 <div class="section" id="secPropriedades">
@@ -262,6 +299,7 @@ const fbGateway=document.getElementById('fbGateway');
 const fbTime=document.getElementById('fbTime');
 const fbUptime=document.getElementById('fbUptime');
 let loading=false,cicloOpen=false,currentSection='home';
+function toggleCard(id){const el=document.getElementById(id);const wasCollapsed=el.classList.contains('collapsed');document.querySelectorAll('.card.collapsible').forEach(function(c){c.classList.add('collapsed')});if(wasCollapsed)el.classList.remove('collapsed')}
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
 document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers()}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
@@ -356,6 +394,8 @@ async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
 async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){let txt=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';if(d.rssi!==undefined)txt+=' | RSSI: '+d.rssi+' dBm';st.textContent=txt;st.className='value'+(d.status==='connected'?' green':'')}if(d.ssid)document.getElementById('wifiSsid').value=d.ssid;if(d.password)document.getElementById('wifiPass').value=d.password;if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
 function showWifiMsg(t,c){let m=document.getElementById('wifiMsg');if(!m)return;m.textContent=t;m.className='';m.style.display='block';m.style.background=c==='ok'?'#dcfce7':'#fef2f2';m.style.color=c==='ok'?'var(--success)':'var(--danger)';setTimeout(function(){m.style.display='none'},3000)}
+async function saveOpMode(){let sel=document.getElementById('opModeSelect');let mode=parseInt(sel.value);if(!confirm('Alterar modo para '+(['Terminal','AP','Híbrido'])[mode]+'? Reiniciando...')){sel.value=String(window._curOpMode||0);return;}try{let r=await fetch('/api/config/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});let d=await r.json();if(d.status==='ok'){footerEl.textContent='Modo alterado, reiniciando...';setTimeout(function(){location.reload()},3000)}}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function fetchOpMode(){try{let r=await fetch('/api/config/mode');let d=await r.json();window._curOpMode=d.mode;document.getElementById('opModeSelect').value=String(d.mode)}catch(e){}}
 )=====";
 #ifdef PINS_ENABLED
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
@@ -365,12 +405,12 @@ let div=document.createElement('div');div.className='row';
 div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
 list.appendChild(div)})}catch(e){}}
 setInterval(function(){fetchState();if(currentSection==='pins')fetchPins()},3000);
-fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();if(currentSection==='pins')fetchPins();
+fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();fetchOpMode();if(currentSection==='pins')fetchPins();
 )=====";
 #else
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
 setInterval(function(){fetchState()},3000);
-fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();
+fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();fetchOpMode();
 )=====";
 #endif
 static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(
