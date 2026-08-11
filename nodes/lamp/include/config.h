@@ -110,8 +110,14 @@
 #endif
 
 #ifndef EEPROM_SIZE
-#define EEPROM_SIZE 256
+#define EEPROM_SIZE 512
 #endif
+
+// Operation modes (same as hub)
+#define OP_MODE_TERMINAL 0
+#define OP_MODE_AP       1
+#define OP_MODE_HYBRID   2
+#define EEPROM_OP_MODE_ADDR 201
 
 /* Pinos GPIO disponiveis para configuracao do relé */
 #ifdef ESP01S

@@ -101,6 +101,10 @@ const char PAGE_SHELL[] PROGMEM = R"rawliteral(
 "<title>LoRa + ESP-NOW Hub</title>"
 #elif defined(LORA_ENABLED)
 "<title>LoRa Hub</title>"
+#elif defined(TCP_ENABLED) && !defined(ESPNOW_ENABLED)
+"<title>TCP Hub</title>"
+#elif defined(TCP_ENABLED) && defined(ESPNOW_ENABLED)
+"<title>TCP + ESP-NOW Hub</title>"
 #else
 "<title>ESP-NOW Gateway</title>"
 #endif
@@ -169,8 +173,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 "<h1>LoRa + ESP-NOW</h1><span>Hub</span>"
 #elif defined(LORA_ENABLED)
 "<h1>LoRa</h1><span>Hub</span>"
+#elif defined(TCP_ENABLED) && !defined(ESPNOW_ENABLED)
+"<h1>TCP</h1><span>Hub</span>"
+#elif defined(TCP_ENABLED) && defined(ESPNOW_ENABLED)
+"<h1>TCP + ESP-NOW</h1><span>Hub</span>"
 #else
-"<h1>ESP-NOW</h1><span>Gateway</span>"
+"<h1>ESP-NOW</h1><span>hub</span>"
 #endif
 R"rawliteral(
 </div>
@@ -1069,7 +1077,24 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </div>
 </div>
 
-<div class="card collapsible" id="card-wifi" style="margin-top:12px">
+<div class="card collapsible collapsed" id="card-mode" style="margin-top:12px">
+<div class="card-head" onclick="toggleCard('card-mode')">
+<h2>Modo de Operação</h2>
+<div class="summary"><span id="mode-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
+<div class="row"><span class="label">Modo</span>
+<select id="opModeSelect" onchange="saveOpMode()" style="max-width:160px">
+<option value="0">Terminal (STA)</option>
+<option value="1">AP</option>
+<option value="2">Híbrido (AP+STA)</option>
+</select></div>
+<div style="font-size:.72rem;color:var(--muted-subtle);margin-top:6px">Terminal = STA | AP = Ponto de Acesso | Híbrido = STA + AP</div>
+<div id="modeMsg" style="display:none;margin-top:6px;padding:6px;border-radius:8px;font-size:.78rem;text-align:center"></div>
+</div>
+</div>
+
+<div class="card collapsible collapsed" id="card-wifi" style="margin-top:12px">
 <div class="card-head" onclick="toggleCard('card-wifi')">
 <h2>Rede (WiFi)</h2>
 <div class="summary"><span id="wifi-sum" class="badge badge-info">--</span><span class="chev">&#9662;</span></div>
@@ -1083,7 +1108,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </div>
 </div>
 
-<div class="card collapsible" id="card-mqtt" style="margin-top:12px">
+<div class="card collapsible collapsed" id="card-mqtt" style="margin-top:12px">
 <div class="card-head" onclick="toggleCard('card-mqtt')">
 <h2>MQTT</h2>
 <div class="summary"><span id="mqtt-sum" class="badge badge-off">--</span><span class="chev">&#9662;</span></div>
@@ -1137,7 +1162,12 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 
 <script>
 function toggleCard(id) {
-  document.getElementById(id).classList.toggle('collapsed');
+  const el = document.getElementById(id);
+  const wasCollapsed = el.classList.contains('collapsed');
+  // Close all collapsible cards first
+  document.querySelectorAll('.card.collapsible').forEach(c => c.classList.add('collapsed'));
+  // Toggle the clicked one
+  if (wasCollapsed) el.classList.remove('collapsed');
 }
 
 function setWifiMode(mode) {
@@ -1145,6 +1175,34 @@ function setWifiMode(mode) {
   document.getElementById('seg-static').classList.toggle('active', mode === 1);
   document.getElementById('wifi-static-fields').classList.toggle('hidden', mode !== 1);
   window.s_wifiMode = mode;
+}
+
+var s_currentMode = -1;
+
+function setOpMode(mode) {
+  document.getElementById('opModeSelect').value = mode;
+}
+
+async function loadOpMode() {
+  try {
+    var data = await api('/api/config/mode');
+    s_currentMode = data.mode;
+    var labels = ['Terminal', 'AP', 'Híbrido'];
+    document.getElementById('opModeSelect').value = data.mode;
+    document.getElementById('mode-sum').textContent = labels[data.mode] || '--';
+    document.getElementById('mode-sum').className = 'badge badge-info';
+  } catch(e) {}
+}
+
+async function saveOpMode() {
+  var mode = parseInt(document.getElementById('opModeSelect').value);
+  if (mode === s_currentMode) return;
+  if (!confirm('Reiniciar para aplicar o novo modo?')) return;
+  try {
+    await api('/api/config/mode', {method:'POST', body:JSON.stringify({mode:mode})});
+    showToast('Modo alterado, reiniciando...');
+    setTimeout(function() { window.location.reload(); }, 3000);
+  } catch(e) { showToast('Erro: '+e.message, true); }
 }
 
 async function loadSettings() {
@@ -1213,7 +1271,8 @@ async function saveMqttConfig() {
     await api('/api/config/mqtt', {method:'POST', body:JSON.stringify({host:host, port:port, user:user, pass:pass})});
     showToast('MQTT configurado: '+host+':'+port);
     closeMqttForm();
-    loadSettings();
+loadSettings();
+loadOpMode();
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
 
@@ -1276,6 +1335,7 @@ async function doReregister() {
 }
 
 loadSettings();
+loadOpMode();
 </script>
 )rawliteral";
 
@@ -1489,6 +1549,9 @@ R"rawliteral(
 <div class="desc">Lista redes Wi-Fi visíveis (usado pelo portal)</div>
 </div>
 
+)rawliteral"
+#ifdef TCP_ENABLED
+R"rawliteral(
 <h2>TCP Radio (Nodes)</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/node/register</span></div>
@@ -1524,6 +1587,9 @@ R"rawliteral(
 <div class="desc">Retorna <code>{"command":"on"|"off"|"restart"}</code> ou <code>{}</code> se vazio</div>
 </div>
 
+)rawliteral"
+#endif
+R"rawliteral(
 <h2>Manutencao</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>

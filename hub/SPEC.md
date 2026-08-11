@@ -92,3 +92,37 @@ enterPairingMode()
 
 ## MQTT integração com HomeAssistant
 - seguir: https://www.home-assistant.io/integrations/mqtt/#discovery-topic
+
+## Modos de Operação (Operation Modes)
+
+O gateway suporta 3 modos de operação, configuráveis via dashboard ou console:
+
+| Modo | Valor | Descrição |
+|------|-------|-----------|
+| Terminal | 0 | STA only — conecta ao roteador como cliente |
+| AP | 1 | AP only — cria ponto de acesso isolado |
+| Hybrid | 2 | STA+AP — conecta ao roteador E cria AP |
+
+### Default por rádio compilado
+- TCP only → Terminal (0)
+- ESP-NOW only → AP (1)
+- Both → Hybrid (2)
+
+### Comportamento por modo
+
+| Recurso | Terminal (0) | AP (1) | Hybrid (2) |
+|---------|--------------|--------|------------|
+| WiFi STA | ✅ | ❌ | ✅ |
+| WiFi AP | ❌ | ✅ | ✅ |
+| MQTT | ✅ | ❌ | ✅ |
+| ESP-NOW | ✅ | ✅ | ✅ |
+| TCP (port 5000) | ✅ | ✅ | ✅ |
+| OTA | ✅ | Via AP | ✅ |
+| Watchdog (hub RX) | ✅ | ❌ | ✅ |
+
+### Regras importantes
+- **AP mode não tem MQTT** — sem STA, não há conexão ao broker
+- **UDP discovery (porta 5000)** só é necessário quando `TCP_ENABLED` — nodes TCP precisam descobrir o hub via UDP broadcast
+- **Watchdog** só ativo nos modos com STA (Terminal/Hybrid)
+- EEPROM offset: `EEPROM_OP_MODE_OFFSET` em `config.h`
+- Persistência: modo salvo em EEPROM, restaurado no boot

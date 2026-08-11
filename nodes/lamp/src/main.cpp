@@ -16,6 +16,8 @@
 
 #ifdef ESPNOW_ENABLED
 #include "espnow_protocol.h"
+#else
+#undef REPEATER_ENABLED
 #endif
 
 #include "common_console.h"
@@ -32,7 +34,45 @@
 
 static const char *TAG = "agri-lamp";
 
-static unsigned long s_last_state_update = 0;
+// ── Operation mode (EEPROM) ──
+int getModeOperStrategy() {
+#if defined(TCP_ENABLED) && defined(ESPNOW_ENABLED)
+    return OP_MODE_HYBRID;
+#elif defined(TCP_ENABLED)
+    return OP_MODE_TERMINAL;
+#else
+    return OP_MODE_AP;
+#endif
+}
+
+static int s_op_mode = -1;
+
+int op_mode_load() {
+    if (s_op_mode >= 0) return s_op_mode;
+    EEPROM.begin(EEPROM_SIZE);
+    uint8_t val = EEPROM.read(EEPROM_OP_MODE_ADDR);
+    EEPROM.end();
+    if (val <= OP_MODE_HYBRID) {
+        s_op_mode = val;
+    } else {
+        s_op_mode = getModeOperStrategy();
+        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.write(EEPROM_OP_MODE_ADDR, (uint8_t)s_op_mode);
+        EEPROM.commit();
+        EEPROM.end();
+    }
+    return s_op_mode;
+}
+
+void op_mode_save(int mode) {
+    if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) mode = getModeOperStrategy();
+    s_op_mode = mode;
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(EEPROM_OP_MODE_ADDR, mode);
+    EEPROM.commit();
+    EEPROM.end();
+}
+
 static unsigned long s_last_telemetry_update = 0;
 static unsigned long s_alexa_last_attempt = 0;
 static unsigned long s_last_alexa_activity = 0;
@@ -69,7 +109,6 @@ static unsigned long s_synced_epoch = 0;
 static unsigned long s_sync_millis = 0;
 static bool s_tz_changed = false;
 
-static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 
 static bool s_ota_in_progress = false;
@@ -100,12 +139,8 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
 #define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
 #define EEPROM_REPEATER_EN_ADDR (EEPROM_STARTUP_MODE_ADDR + 1)
-#define EEPROM_SSID_ADDR 64
+// EEPROM_SSID_ADDR/EEPROM_PASS_ADDR removidos — conflitavam com myWiFiManager
 #define EEPROM_MULTIHUB_ADDR 200
-#define EEPROM_SSID_MAX 32
-#define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
-#define EEPROM_PASS_MAX 64
-#define EEPROM_WIFI_MARKER 0x5A
 #define EEPROM_MAGIC 0xAA
 
 #define SYNC_LITTLEFS_FILE "/sync.json"
@@ -349,78 +384,11 @@ static void load_startup_mode(void)
         s_startup_mode = 0;
 }
 
-static void save_wifi_credentials(const char *ssid, const char *pass)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_SSID_ADDR, EEPROM_WIFI_MARKER);
-    EEPROM.write(EEPROM_PASS_ADDR, EEPROM_WIFI_MARKER);
-    for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_SSID_ADDR + 1 + i, ssid[i]);
-        if (ssid[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_SSID_ADDR + EEPROM_SSID_MAX - 1, '\0');
-    for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_PASS_ADDR + 1 + i, pass[i]);
-        if (pass[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_PASS_ADDR + EEPROM_PASS_MAX - 1, '\0');
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool eeprom_str_valid_at(uint16_t addr, uint8_t max_len)
-{
-    for (int i = 0; i < max_len; i++)
-    {
-        uint8_t c = EEPROM.read(addr + i);
-        if (c == '\0')
-            return true;
-        if (c < 0x20 || c > 0x7E)
-            return false;
-    }
-    return EEPROM.read(addr + max_len) == '\0';
-}
-
-static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size_t pass_size)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_SSID_ADDR);
-    bool found = false;
-    if (marker == EEPROM_WIFI_MARKER && eeprom_str_valid_at(EEPROM_SSID_ADDR + 1, EEPROM_SSID_MAX - 1))
-    {
-        char buf[64];
-        for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
-        {
-            buf[i] = EEPROM.read(EEPROM_SSID_ADDR + 1 + i);
-            if (buf[i] == '\0')
-                break;
-        }
-        buf[EEPROM_SSID_MAX - 1] = '\0';
-        strncpy(ssid, buf, ssid_size - 1);
-        ssid[ssid_size - 1] = '\0';
-        found = true;
-
-        marker = EEPROM.read(EEPROM_PASS_ADDR);
-        if (marker == EEPROM_WIFI_MARKER && eeprom_str_valid_at(EEPROM_PASS_ADDR + 1, EEPROM_PASS_MAX - 1))
-        {
-            for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
-            {
-                buf[i] = EEPROM.read(EEPROM_PASS_ADDR + 1 + i);
-                if (buf[i] == '\0')
-                    break;
-            }
-            buf[EEPROM_PASS_MAX - 1] = '\0';
-            strncpy(pass, buf, pass_size - 1);
-            pass[pass_size - 1] = '\0';
-        }
-    }
-    EEPROM.end();
-    return found;
-}
+/* EEPROM layout: credenciais WiFi sao salvas/gravadas APENAS pelo myWiFiManager
+   (shared), que usa offsets 0 (SSID) e 33 (pass). O layout local antigo
+   (EEPROM_SSID_ADDR=64) sobrepunha o password shared e causava corrupcao.
+   Remover save_wifi_credentials e load_wifi_credentials — usar mywifi_save_creds
+   e sh_creds_load do shared. */
 
 static void set_relay(bool state);
 
@@ -444,6 +412,10 @@ static void name_to_ssid(const char *name, char *out, size_t max)
     out[j] = '\0';
 }
 
+/* PONTO ÚNICO de mudança do relay: botão físico, API /api/relay, Alexa,
+   timer, cyclic, console e comando do hub TODOS passam por set_relay().
+   Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
+   Não alterar s_relay_state diretamente fora daqui. */
 static void set_relay(bool state)
 {
     s_relay_state = state;
@@ -463,6 +435,14 @@ static void set_relay(bool state)
         s_on_count++;
     else
         cyclic_reset();
+
+    /* Qualquer mudança de estado deve publicar/tentar no hub imediatamente
+       (regra 14). O publish é guardado pelo radio (m_registered/m_paired),
+       então no boot (não registrado) é no-op. */
+    if (s_radio.is_paired())
+    {
+        s_radio.publish_state();
+    }
 }
 
 static void toggle_relay(void)
@@ -477,10 +457,6 @@ static void alexa_callback(EspalexaDevice *d)
     s_last_alexa_activity = millis();
     console.printf("[%s] Alexa: %s -> %s\n", TAG, s_device_name, state ? "ON" : "OFF");
     set_relay(state);
-    if (s_radio.is_paired())
-    {
-        s_radio.publish_state();
-    }
 }
 #endif
 
@@ -539,7 +515,9 @@ static void on_wifi_connected(void)
     {
         s_radio.begin();
         s_radio_initialized = true;
+#ifdef ESPNOW_ENABLED
         console.printf("[%s] ESP-NOW initialized on ch %d\n", TAG, WiFi.channel());
+#endif
     }
     console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
@@ -627,10 +605,11 @@ static void handle_api_wifi(void)
                     strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                     s_device_name[sizeof(s_device_name) - 1] = '\0';
                     espnow_save_device_name(s_device_name);
+                    console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
                 }
             }
 
-#ifdef REPEATER_ENABLED
+#if  defined(REPEATER_ENABLED) && defined(ESPNOW_ENABLED)
             if (doc.containsKey("repeater_mac"))
             {
                 const char *mac_str = doc["repeater_mac"];
@@ -640,6 +619,7 @@ static void handle_api_wifi(void)
                     repeater_save_enable();
                     s_radio.set_gateway_mac(s_gateway_mac);
                     s_radio.save_gateway_mac();
+                    console.printf("[%s] Repeater MAC changed to: %s\n", TAG, mac_str);
                 }
             }
 #endif
@@ -648,14 +628,14 @@ static void handle_api_wifi(void)
             {
                 uint8_t ch = doc["channel"];
                 if (ch > 0 && ch <= 13)
+                {
                     mywifi_save_channel(ch);
+                    console.printf("[%s] WiFi channel changed to %d\n", TAG, ch);
+                }
             }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
-            save_wifi_credentials(ssid, pass);
-            /* Persistir tambem no layout do myWiFiManager (shared), que e o que a
-               reconexao le. Sem isso, apos reboot a reconexao nao acha as creds. */
             mywifi_save_creds(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
@@ -734,7 +714,7 @@ static void handle_api_state(void)
         doc["state"] = s_relay_state;
         doc["button"] = (digitalRead(s_button_pin) == LOW);
         doc["battery"] = s_battery;
-        doc["device_id"] = s_device_id;
+        doc["device_id"] = getDeviceId();
         doc["device_name"] = s_device_name;
         doc["gateway_connected"] = s_radio.is_paired();
         doc["paired"] = s_radio.is_paired();
@@ -754,6 +734,7 @@ static void handle_api_state(void)
         doc["led_state"] = (digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
 #endif
         doc["fw_version"] = FW_VERSION;
+        doc["op_mode"] = op_mode_load();
         doc["platform"] = "esp8266";
         doc["type"] = "lampada";
         doc["tx_count"] = s_radio.tx_count();
@@ -818,7 +799,6 @@ static void handle_api_relay(void)
             resp["status"] = "ok";
             serializeJson(resp, json);
             s_server.send(200, "application/json", json);
-            s_last_state_update = 0;
         }
         else
         {
@@ -940,42 +920,26 @@ static void handle_console(char c)
         console.printf("\n--- Controle da Lampada ---\n");
         toggle_relay();
         console.printf("  Lampada: %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
-        else
-        {
-            console.printf("  (gateway nao pareado)\n");
-        }
         console.printf("--------------------------\n\n");
         break;
     }
     case '0':
         set_relay(false);
         console.printf("[%s] Relay OFF\n", TAG);
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
         break;
     case '1':
         set_relay(true);
         console.printf("[%s] Relay ON\n", TAG);
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
         break;
     case 'u':
     case 'U':
         console.printf("\n--- OTA ---\n");
-        console.printf("  Hostname: %s.local\n", s_device_id);
+        console.printf("  Hostname: %s.local\n", getDeviceId());
         console.printf("  Port:     8266 (ArduinoOTA)\n");
         console.printf("  PlatformIO CLI:\n");
-        console.printf("    pio run -t upload --upload-port %s.local\n", s_device_id);
+        console.printf("    pio run -t upload --upload-port %s.local\n", getDeviceId());
         console.printf("  espota.py:\n");
-        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", s_device_id);
+        console.printf("    espota.py -i %s.local -p 8266 -f firmware.bin\n", getDeviceId());
         console.printf("-------------\n\n");
         break;
     case 'p':
@@ -1004,6 +968,8 @@ static void handle_console(char c)
 #endif
         console.printf("  c    - zerar contadores\n");
         console.printf("  u    - info OTA\n");
+        console.printf("  m    - modo de operacao (atual: %d)\n", op_mode_load());
+        console.printf("  m 0  - Terminal | m 1 - AP | m 2 - Hibrido\n");
 #ifdef ALEXA_ENABLED
         console.printf("  a    - info Alexa\n");
 #endif
@@ -1085,7 +1051,7 @@ static void handle_console(char c)
     {
         unsigned long up = (millis() - s_start_time) / 1000;
         console.printf("\n--- Status ---\n");
-        console.printf("  Dispositivo: %s\n", s_device_id);
+        console.printf("  Dispositivo: %s\n", getDeviceId());
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Lampada:     %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
         console.printf("  Bateria:     %d %%\n", s_battery);
@@ -1130,7 +1096,45 @@ static void handle_console(char c)
         console.printf("  RSSI:        %d dBm\n", WiFi.RSSI());
         console.printf("  Canal:       %d\n", WiFi.channel());
         console.printf("  Uptime:      %lu s\n", up);
+        console.printf("  Modo:        %d (%s)\n", op_mode_load(),
+            op_mode_load() == 0 ? "Terminal" : op_mode_load() == 1 ? "AP" : "Hibrido");
         console.printf("---------------\n\n");
+        break;
+    }
+    case 'm':
+    case 'M':
+    {
+        int cur = op_mode_load();
+        int next = -1;
+        if (Serial.available() > 0) {
+            char nc = Serial.peek();
+            if (nc >= '0' && nc <= '2') {
+                next = nc - '0';
+                Serial.read();
+            }
+        } else if (console.telnet_available() > 0) {
+            char nc = console.telnet_read();
+            if (nc >= '0' && nc <= '2') {
+                next = nc - '0';
+            }
+        }
+        if (next >= 0) {
+            if (next == cur) {
+                console.printf("Modo ja e %d (%s)\n", cur,
+                    cur == 0 ? "Terminal" : cur == 1 ? "AP" : "Hibrido");
+            } else {
+                op_mode_save(next);
+                console.printf("Modo alterado: %d -> %d (%s). Reiniciando...\n",
+                    cur, next,
+                    next == 0 ? "Terminal" : next == 1 ? "AP" : "Hibrido");
+                delay(300);
+                ESP.restart();
+            }
+        } else {
+            console.printf("Modo atual: %d (%s)\n", cur,
+                cur == 0 ? "Terminal" : cur == 1 ? "AP" : "Hibrido");
+            console.println("  m 0 - Terminal | m 1 - AP | m 2 - Hibrido");
+        }
         break;
     }
     }
@@ -1270,6 +1274,7 @@ static void handle_api_settings(void)
             s_server.send(200, "application/json", "{\"status\":\"no changes\"}");
             return;
         }
+        console.printf("[%s] Configuração gravada\n", TAG);
         String json;
         JsonDocument resp;
         resp["device_name"] = s_device_name;
@@ -1306,7 +1311,7 @@ static void handle_api_devices(void)
     for (JsonVariant v : doc.as<JsonArray>())
     {
         const char *id = v["id"] | "";
-        if (strcmp(id, s_device_id) == 0)
+        if (strcmp(id, getDeviceId()) == 0)
             continue;
         JsonObject obj = arr.add<JsonObject>();
         obj["id"] = id;
@@ -1544,9 +1549,6 @@ static void on_command(uint8_t command)
 {
     console.printf("[%s] Command received: %d\n", TAG, command);
     set_relay(command == 0x01);
-    // if (s_radio.is_paired()) {
-    s_radio.publish_state();
-    //}
 }
 
 static void on_paired(uint8_t slot)
@@ -1574,6 +1576,7 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 
 static void on_pairing_failed()
 {
+    #ifdef ESPNOW_ENABLED
     console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
     if (mywifi_try_next_bssid())
     {
@@ -1583,6 +1586,7 @@ static void on_pairing_failed()
     {
         console.printf("[%s] No other APs found, will retry on current\n", TAG);
     }
+    #endif
 }
 
 #ifdef TCP_ENABLED
@@ -1592,10 +1596,10 @@ static void tcp_poll_pending_commands()
         return;
     if (WiFi.status() != WL_CONNECTED)
         return;
-    if (strlen(s_device_id) == 0)
+    if (strlen(getDeviceId()) == 0)
         return;
 
-    String url = String("http://") + WiFi.gatewayIP().toString() + ":" + String(DASHBOARD_PORT) + "/node/command/" + s_device_id;
+    String url = String("http://") + WiFi.gatewayIP().toString() + ":" + String(DASHBOARD_PORT) + "/node/command/" + getDeviceId();
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, url))
@@ -1623,13 +1627,11 @@ static void tcp_poll_pending_commands()
         {
             console.printf("[%s] TCP cmd: ON\n", TAG);
             set_relay(true);
-            s_radio.publish_state();
         }
         else if (strcmp(cmd, "off") == 0)
         {
             console.printf("[%s] TCP cmd: OFF\n", TAG);
             set_relay(false);
-            s_radio.publish_state();
         }
     }
 }
@@ -1649,8 +1651,7 @@ void setup(void)
         LittleFS.begin();
     }
 
-    uint32_t id = chip_id();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
+    getDeviceId(); // initializes device ID from chip_id()
 
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     timer_init(EEPROM_TIMER_BASE, MAX_TIMERS);
@@ -1670,7 +1671,7 @@ void setup(void)
     console.printf("\n");
     console.printf("============================================\n");
     console.printf("  AgriSense Lamp " FW_VERSION "\n");
-    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n");
 
@@ -1678,9 +1679,24 @@ void setup(void)
     init_hardware();
     console.printf("============================================\n");
 
-    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? s_device_id : s_device_name);
+    WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? getDeviceId() : s_device_name);
 
-    mywifi_begin(false);
+    int op_mode = op_mode_load();
+    console.printf("[%s] Operation mode: %d (%s)\n", TAG, op_mode,
+        op_mode == OP_MODE_TERMINAL ? "Terminal" :
+        op_mode == OP_MODE_AP ? "AP" : "Hibrido");
+
+    if (op_mode == OP_MODE_AP) {
+        // AP puro: só softAP, sem tentar STA
+        char ap_ssid[33];
+        name_to_ssid(s_device_name, ap_ssid, sizeof(ap_ssid));
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(ap_ssid, WIFI_CONFIG_PORTAL_PASS);
+        console.printf("[%s] AP '%s' started (no STA)\n", TAG, ap_ssid);
+    } else {
+        // Terminal ou Hibrido: tenta STA via myWiFiManager
+        mywifi_begin(false);
+    }
 
     uint8_t my_mac[6];
     WiFi.macAddress(my_mac);
@@ -1691,13 +1707,25 @@ void setup(void)
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
 #ifdef TCP_ENABLED
-    s_radio.set_device_id(s_device_id);
+    s_radio.set_device_id(getDeviceId());
 #endif
     s_radio.load_gateway_mac();
     memcpy(s_gateway_mac, s_radio.gateway_mac(), 6);
 
+    // Em modo AP, init radio aqui (on_wifi_connected não é chamado)
+    if (op_mode == OP_MODE_AP && !s_radio_initialized) {
+        s_radio.begin();
+        s_radio_initialized = true;
+#ifdef ESPNOW_ENABLED
+        console.printf("[%s] ESP-NOW initialized on AP ch %d\n", TAG, WiFi.channel());
+        #endif
+    }
+
+    // Watchdog: só em TCP_ENABLED e NÃO em modo AP
 #ifdef TCP_ENABLED
-    g_blink_wd.init(WATCHDOG_STABLE_RESET_MS, 300000);
+    if (op_mode != OP_MODE_AP) {
+        g_blink_wd.init(WATCHDOG_STABLE_RESET_MS, 300000);
+    }
 #endif
 
     // ── Registrar rotas do servidor ──
@@ -1740,6 +1768,35 @@ void setup(void)
     s_server.on("/api/restart", HTTP_POST, handle_api_restart);
     s_server.on("/api/pair", HTTP_POST, handle_api_pair);
     s_server.on("/api/ota", HTTP_POST, handle_ota, handle_ota_upload);
+    s_server.on("/api/config/mode", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["mode"] = op_mode_load();
+        String json;
+        serializeJson(doc, json);
+        s_server.send(200, "application/json", json);
+    });
+    s_server.on("/api/config/mode", HTTP_POST, []() {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        if (err || !doc.containsKey("mode")) {
+            s_server.send(400, "application/json", "{\"error\":\"mode required\"}");
+            return;
+        }
+        int mode = doc["mode"];
+        if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) {
+            s_server.send(400, "application/json", "{\"error\":\"invalid mode (0-2)\"}");
+            return;
+        }
+        int cur = op_mode_load();
+        if (mode == cur) {
+            s_server.send(200, "application/json", "{\"status\":\"no change\"}");
+            return;
+        }
+        op_mode_save(mode);
+        s_server.send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
+        delay(300);
+        ESP.restart();
+    });
 
 #ifdef ALEXA_ENABLED
     // Device adicionado ANTES de begin (padrão referência)
@@ -1747,7 +1804,6 @@ void setup(void)
     s_alexa.addDevice(s_alexa_dev);
     s_alexa.setDiscoverable(true);
     // s_alexa.begin() chamado no WiFi connect (precisa de IP para UDP)
-#endif
 
     // onNotFound registrado ANTES de server->begin() (padrão referência)
     s_server.onNotFound([]()
@@ -1756,11 +1812,12 @@ void setup(void)
             s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
             return;
         s_server.send(404, "text/plain", "Not found"); });
+#endif
 
     // begin() DEPOIS de todas as rotas e onNotFound (padrão referência)
     s_server.begin();
 
-    ota_setup(s_device_id);
+    ota_setup(getDeviceId());
 
     console.printf("  => Terminal:  'h' comando de ajuda\n");
 
@@ -1882,7 +1939,6 @@ void loop(void)
                 if (action >= 0)
                 {
                     apply_timer(action);
-                    s_radio.publish_state();
                 }
             }
         }
@@ -1898,22 +1954,26 @@ void loop(void)
             {
                 set_relay(true);
                 console.printf("[%s] Cyclic ON\n", TAG);
-                s_radio.publish_state();
             }
             else if (cyc_action == -1)
             {
                 set_relay(false);
                 console.printf("[%s] Cyclic OFF\n", TAG);
-                s_radio.publish_state();
             }
         }
     }
 
 #ifdef LED_PIN
     static unsigned long last_led = 0;
+    int cur_op_mode = op_mode_load();
     if (!s_led_enabled)
     {
         digitalWrite(LED_PIN, LED_OFF);
+    }
+    else if (cur_op_mode == OP_MODE_AP)
+    {
+        // Modo AP: LED ligado quando AP ativo, sem blink de WiFi
+        digitalWrite(LED_PIN, LED_ON);
     }
     else if (mywifi_state() == WIFI_STATE_PORTAL)
     {
@@ -1941,19 +2001,19 @@ void loop(void)
     }
 #endif
 
-#ifdef TCP_ENABLED // obrigatorio trabalhar conectado
-    // Watchdog: TCP node precisa estar conectado. Se ficar em estado
-    // "quebrado" (WiFi perdido / portal / gateway sem parear) por > 5min,
-    // reinicia. A prova de flip-flop: so arma o timer apos 60s saudaveis
-    // continuos (WATCHDOG_STABLE_RESET_MS) — reconexoes breves nao desarmam.
-    bool wd_healthy = (WiFi.status() == WL_CONNECTED)
-                      && (mywifi_state() != WIFI_STATE_PORTAL)
-                      && (s_radio.is_paired() || !s_radio.has_gateway());
-    if (g_blink_wd.check(wd_healthy))
+#ifdef TCP_ENABLED
+    // Watchdog: TCP node só precisa estar conectado se NÃO estiver em modo AP
+    if (op_mode_load() != OP_MODE_AP)
     {
-        console.printf("[%s] Watchdog blink\n", TAG);
-        delay(100);
-        ESP.restart();
+        bool wd_healthy = (WiFi.status() == WL_CONNECTED)
+                          && (mywifi_state() != WIFI_STATE_PORTAL)
+                          && (s_radio.is_paired() || !s_radio.has_gateway());
+        if (g_blink_wd.check(wd_healthy))
+        {
+            console.printf("[%s] Watchdog blink\n", TAG);
+            delay(100);
+            ESP.restart();
+        }
     }
 #endif
 }

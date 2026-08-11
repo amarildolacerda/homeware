@@ -8,6 +8,7 @@
 #include "espnow_protocol.h"
 #include "common_console.h"
 #include "common_espnow.h"
+#include "common_util.h"
 
 static const char *TAG = "agri-soil";
 
@@ -24,7 +25,6 @@ static State s_state = STATE_INIT;
 static unsigned long s_state_start = 0;
 
 static bool s_espnow_ready = false;
-static char s_device_id[32];
 static char s_device_name[32] = DEVICE_NAME;
 static uint16_t s_sequence = 0;
 
@@ -250,8 +250,7 @@ void setup(void)
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
 
-    uint32_t id = chip_id();
-    snprintf(s_device_id, sizeof(s_device_id), "agri_%06x", id);
+    getDeviceId(); // initializes device ID from chip_id()
     espnow_load_device_name(s_device_name, sizeof(s_device_name));
     EEPROM.begin(128);
     EEPROM.get(EEPROM_INTERVAL_ADDR, s_interval_s);
@@ -260,7 +259,7 @@ void setup(void)
 
     console.printf("\n============================================\n");
     console.printf("  AgriSense Soil Moisture " FW_VERSION "\n");
-    console.printf("  Device: %s\n", s_device_id);
+    console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n\n");
 

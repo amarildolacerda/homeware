@@ -153,6 +153,16 @@ static void pairing_config_save(bool enabled) {
     EEPROM.end();
 }
 
+int getModeOperStrategy() {
+#if defined(ESPNOW_ENABLED) && defined(TCP_ENABLED)
+    return OP_MODE_HYBRID;
+#elif defined(ESPNOW_ENABLED)
+    return OP_MODE_AP;
+#else
+    return OP_MODE_TERMINAL;
+#endif
+}
+
 // Cached operation mode — read once from EEPROM at boot, never re-read in loop.
 // Avoids excessive EEPROM.begin()/end()/commit() calls that wear out NVS flash.
 static int s_op_mode = -1;  // -1 = not loaded yet
@@ -165,8 +175,8 @@ int op_mode_load() {
     if (val <= OP_MODE_HYBRID) {
         s_op_mode = val;
     } else {
-        // Invalid: write default
-        s_op_mode = OP_MODE_DEFAULT;
+        // Invalid: write strategy default
+        s_op_mode = getModeOperStrategy();
         EEPROM.begin(EEPROM_SIZE);
         EEPROM.write(EEPROM_OP_MODE_OFFSET, (uint8_t)s_op_mode);
         EEPROM.commit();
@@ -179,7 +189,7 @@ int op_mode_load() {
 }
 
 void op_mode_save(int mode) {
-    if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) mode = OP_MODE_DEFAULT;
+    if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) mode = getModeOperStrategy();
     s_op_mode = mode;  // update cache
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.write(EEPROM_OP_MODE_OFFSET, mode);

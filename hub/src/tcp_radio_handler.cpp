@@ -9,11 +9,6 @@
 #include "platform.h"
 #include <uri/UriBraces.h>
 #include <algorithm>
-#if defined(ARDUINO_ARCH_ESP32)
-#include <HTTPClient.h>
-#endif
-
-#define TCP_PUSH_RETRY_INTERVAL_MS 1000
 
 extern MyWebServer s_server;
 
@@ -191,7 +186,6 @@ int TcpRadioHandler::send(const uint8_t* data, size_t len) {
 void TcpRadioHandler::loop() {
     handle_udp_discover();
     cleanup_expired_commands();
-    process_push_queue();
 }
 
 bool TcpRadioHandler::is_ready() const {
@@ -238,19 +232,6 @@ bool TcpRadioHandler::send_command(const uint8_t* mac, uint8_t state) {
     cmd.created_at = millis();
 
     m_pending_commands[sensor->bridge_device_id].push_back(cmd);
-
-    // Push direto se o IP do node é conhecido (fallback: polling acima)
-    if (sensor->ip[0] || sensor->ip[1] || sensor->ip[2] || sensor->ip[3]) {
-        PushCommand pc;
-        pc.device_id = sensor->bridge_device_id;
-        memcpy(pc.ip, sensor->ip, 4);
-        pc.state = state;
-        pc.created_at = millis();
-        pc.last_attempt_ms = 0;
-        m_push_queue.push_back(pc);
-        log_add("info", "[tcp] Push queued for %s: %s @ %d.%d.%d.%d", sensor->bridge_device_id,
-                cmd.command.c_str(), pc.ip[0], pc.ip[1], pc.ip[2], pc.ip[3]);
-    }
 
     console.printf("[tcp] Command queued for %s: %s\n", sensor->bridge_device_id, cmd.command.c_str());
     log_add("info", "[tcp] Command queued for %s: %s (radio_type=%d)", sensor->bridge_device_id, cmd.command.c_str(), sensor->radio_type);
@@ -460,60 +441,6 @@ void TcpRadioHandler::cleanup_expired_commands() {
             it = m_pending_commands.erase(it);
         } else {
             ++it;
-        }
-    }
-}
-
-void TcpRadioHandler::process_push_queue() {
-    unsigned long now = millis();
-
-    // Remove expirados
-    m_push_queue.erase(
-        std::remove_if(m_push_queue.begin(), m_push_queue.end(),
-            [now](const PushCommand& p) { return (now - p.created_at) > TCP_COMMAND_TTL_MS; }),
-        m_push_queue.end());
-
-    for (auto it = m_push_queue.begin(); it != m_push_queue.end(); ++it) {
-        if (it->last_attempt_ms != 0 && (now - it->last_attempt_ms) < TCP_PUSH_RETRY_INTERVAL_MS)
-            continue;  // ainda não é hora de tentar de novo
-
-        it->last_attempt_ms = now;
-
-        char url[64];
-        snprintf(url, sizeof(url), "http://%d.%d.%d.%d:%d/api/relay",
-                 it->ip[0], it->ip[1], it->ip[2], it->ip[3], TCP_HTTP_PORT);
-
-        WiFiClient client;
-        HTTPClient http;
-        if (!http.begin(client, url)) {
-            break;
-        }
-#if defined(ARDUINO_ARCH_ESP32)
-        http.setConnectTimeout(500);  // limita bloqueio do loop no connect (ESP32)
-#endif
-        http.setTimeout(800);
-        String body = String("{\"state\":") + (it->state ? "true" : "false") + "}";
-        int code = http.POST(body);
-        http.end();
-
-        if (code == 200) {
-            log_add("info", "[tcp] Push OK: %s (HTTP %d)", it->device_id.c_str(), code);
-            remove_pending_command(it->device_id.c_str());
-            m_push_queue.erase(it);
-        } else {
-            log_add("warn", "[tcp] Push retry: %s -> HTTP %d (polling fallback active)", it->device_id.c_str(), code);
-        }
-        break;  // máx. 1 tentativa HTTP por ciclo de loop
-    }
-}
-
-void TcpRadioHandler::remove_pending_command(const std::string& device_id) {
-    auto it = m_pending_commands.find(device_id);
-    if (it != m_pending_commands.end() && !it->second.empty()) {
-        it->second.erase(it->second.begin());
-        log_add("info", "[tcp] Polling fallback removed for %s (push OK)", device_id.c_str());
-        if (it->second.empty()) {
-            m_pending_commands.erase(it);
         }
     }
 }

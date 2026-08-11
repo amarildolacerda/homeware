@@ -69,7 +69,6 @@
 #define OP_MODE_TERMINAL 0
 #define OP_MODE_AP       1
 #define OP_MODE_HYBRID   2
-#define OP_MODE_DEFAULT  OP_MODE_TERMINAL
 
 // Operational AP config (modes 1 and 2)
 #define AP_CHANNEL 1
