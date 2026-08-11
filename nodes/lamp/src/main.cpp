@@ -508,7 +508,9 @@ static void on_wifi_connected(void)
     {
         s_radio.begin();
         s_radio_initialized = true;
+#ifdef ESPNOW_ENABLED
         console.printf("[%s] ESP-NOW initialized on ch %d\n", TAG, WiFi.channel());
+#endif
     }
     console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
@@ -1581,6 +1583,7 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 
 static void on_pairing_failed()
 {
+    #ifdef ESPNOW_ENABLED
     console.printf("[%s] Pairing failed on ch %d — trying next AP...\n", TAG, WiFi.channel());
     if (mywifi_try_next_bssid())
     {
@@ -1590,6 +1593,7 @@ static void on_pairing_failed()
     {
         console.printf("[%s] No other APs found, will retry on current\n", TAG);
     }
+    #endif
 }
 
 #ifdef TCP_ENABLED
@@ -1721,7 +1725,9 @@ void setup(void)
     if (op_mode == OP_MODE_AP && !s_radio_initialized) {
         s_radio.begin();
         s_radio_initialized = true;
+#ifdef ESPNOW_ENABLED
         console.printf("[%s] ESP-NOW initialized on AP ch %d\n", TAG, WiFi.channel());
+        #endif
     }
 
     // Watchdog: só em TCP_ENABLED e NÃO em modo AP
@@ -1807,7 +1813,6 @@ void setup(void)
     s_alexa.addDevice(s_alexa_dev);
     s_alexa.setDiscoverable(true);
     // s_alexa.begin() chamado no WiFi connect (precisa de IP para UDP)
-#endif
 
     // onNotFound registrado ANTES de server->begin() (padrão referência)
     s_server.onNotFound([]()
@@ -1816,6 +1821,7 @@ void setup(void)
             s_alexa.handleAlexaApiCall(s_server.uri(), s_server.arg("plain")))
             return;
         s_server.send(404, "text/plain", "Not found"); });
+#endif
 
     // begin() DEPOIS de todas as rotas e onNotFound (padrão referência)
     s_server.begin();
