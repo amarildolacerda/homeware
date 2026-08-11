@@ -1874,10 +1874,7 @@ void loop(void)
     {
         s_alexa.loop();
     }
-    else
-    {
-        s_server.handleClient();
-    }
+    s_server.handleClient();
 #else
     s_server.handleClient();
 #endif
