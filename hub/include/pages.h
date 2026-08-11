@@ -1549,6 +1549,9 @@ R"rawliteral(
 <div class="desc">Lista redes Wi-Fi visíveis (usado pelo portal)</div>
 </div>
 
+)rawliteral"
+#ifdef TCP_ENABLED
+R"rawliteral(
 <h2>TCP Radio (Nodes)</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/node/register</span></div>
@@ -1584,6 +1587,9 @@ R"rawliteral(
 <div class="desc">Retorna <code>{"command":"on"|"off"|"restart"}</code> ou <code>{}</code> se vazio</div>
 </div>
 
+)rawliteral"
+#endif
+R"rawliteral(
 <h2>Manutencao</h2>
 <div class="endpoint">
 <div class="head"><span class="method post">POST</span><span class="path">/api/restart</span></div>

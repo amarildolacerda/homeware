@@ -73,7 +73,6 @@ void op_mode_save(int mode) {
     EEPROM.end();
 }
 
-static unsigned long s_last_state_update = 0;
 static unsigned long s_last_telemetry_update = 0;
 static unsigned long s_alexa_last_attempt = 0;
 static unsigned long s_last_alexa_activity = 0;
@@ -413,6 +412,10 @@ static void name_to_ssid(const char *name, char *out, size_t max)
     out[j] = '\0';
 }
 
+/* PONTO ÚNICO de mudança do relay: botão físico, API /api/relay, Alexa,
+   timer, cyclic, console e comando do hub TODOS passam por set_relay().
+   Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
+   Não alterar s_relay_state diretamente fora daqui. */
 static void set_relay(bool state)
 {
     s_relay_state = state;
@@ -432,6 +435,14 @@ static void set_relay(bool state)
         s_on_count++;
     else
         cyclic_reset();
+
+    /* Qualquer mudança de estado deve publicar/tentar no hub imediatamente
+       (regra 14). O publish é guardado pelo radio (m_registered/m_paired),
+       então no boot (não registrado) é no-op. */
+    if (s_radio.is_paired())
+    {
+        s_radio.publish_state();
+    }
 }
 
 static void toggle_relay(void)
@@ -446,10 +457,6 @@ static void alexa_callback(EspalexaDevice *d)
     s_last_alexa_activity = millis();
     console.printf("[%s] Alexa: %s -> %s\n", TAG, s_device_name, state ? "ON" : "OFF");
     set_relay(state);
-    if (s_radio.is_paired())
-    {
-        s_radio.publish_state();
-    }
 }
 #endif
 
@@ -598,6 +605,7 @@ static void handle_api_wifi(void)
                     strncpy(s_device_name, new_name, sizeof(s_device_name) - 1);
                     s_device_name[sizeof(s_device_name) - 1] = '\0';
                     espnow_save_device_name(s_device_name);
+                    console.printf("[%s] Device name changed to: %s\n", TAG, s_device_name);
                 }
             }
 
@@ -611,6 +619,7 @@ static void handle_api_wifi(void)
                     repeater_save_enable();
                     s_radio.set_gateway_mac(s_gateway_mac);
                     s_radio.save_gateway_mac();
+                    console.printf("[%s] Repeater MAC changed to: %s\n", TAG, mac_str);
                 }
             }
 #endif
@@ -619,7 +628,10 @@ static void handle_api_wifi(void)
             {
                 uint8_t ch = doc["channel"];
                 if (ch > 0 && ch <= 13)
+                {
                     mywifi_save_channel(ch);
+                    console.printf("[%s] WiFi channel changed to %d\n", TAG, ch);
+                }
             }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
@@ -787,7 +799,6 @@ static void handle_api_relay(void)
             resp["status"] = "ok";
             serializeJson(resp, json);
             s_server.send(200, "application/json", json);
-            s_last_state_update = 0;
         }
         else
         {
@@ -909,32 +920,16 @@ static void handle_console(char c)
         console.printf("\n--- Controle da Lampada ---\n");
         toggle_relay();
         console.printf("  Lampada: %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
-        else
-        {
-            console.printf("  (gateway nao pareado)\n");
-        }
         console.printf("--------------------------\n\n");
         break;
     }
     case '0':
         set_relay(false);
         console.printf("[%s] Relay OFF\n", TAG);
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
         break;
     case '1':
         set_relay(true);
         console.printf("[%s] Relay ON\n", TAG);
-        if (s_radio.is_paired())
-        {
-            s_radio.publish_state();
-        }
         break;
     case 'u':
     case 'U':
@@ -1279,6 +1274,7 @@ static void handle_api_settings(void)
             s_server.send(200, "application/json", "{\"status\":\"no changes\"}");
             return;
         }
+        console.printf("[%s] Configuração gravada\n", TAG);
         String json;
         JsonDocument resp;
         resp["device_name"] = s_device_name;
@@ -1553,9 +1549,6 @@ static void on_command(uint8_t command)
 {
     console.printf("[%s] Command received: %d\n", TAG, command);
     set_relay(command == 0x01);
-    // if (s_radio.is_paired()) {
-    s_radio.publish_state();
-    //}
 }
 
 static void on_paired(uint8_t slot)
@@ -1634,13 +1627,11 @@ static void tcp_poll_pending_commands()
         {
             console.printf("[%s] TCP cmd: ON\n", TAG);
             set_relay(true);
-            s_radio.publish_state();
         }
         else if (strcmp(cmd, "off") == 0)
         {
             console.printf("[%s] TCP cmd: OFF\n", TAG);
             set_relay(false);
-            s_radio.publish_state();
         }
     }
 }
@@ -1948,7 +1939,6 @@ void loop(void)
                 if (action >= 0)
                 {
                     apply_timer(action);
-                    s_radio.publish_state();
                 }
             }
         }
@@ -1964,13 +1954,11 @@ void loop(void)
             {
                 set_relay(true);
                 console.printf("[%s] Cyclic ON\n", TAG);
-                s_radio.publish_state();
             }
             else if (cyc_action == -1)
             {
                 set_relay(false);
                 console.printf("[%s] Cyclic OFF\n", TAG);
-                s_radio.publish_state();
             }
         }
     }
