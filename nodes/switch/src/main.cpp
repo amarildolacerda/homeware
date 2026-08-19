@@ -39,6 +39,7 @@ static uint32_t s_on_count = 0;
 static char s_device_name[32] = DEVICE_NAME;
 
 static bool s_led_enabled = true;
+static bool s_ota_in_progress = false;
 static int s_startup_mode = 0; // 0=OFF, 1=ON, 2=LAST
 
 static MyWebServer s_server(DASHBOARD_PORT);
@@ -78,10 +79,8 @@ static unsigned long get_synced_epoch(void) {
 #define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
 #define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
 #define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
-#define EEPROM_SSID_ADDR 64
-#define EEPROM_SSID_MAX 32
-#define EEPROM_PASS_ADDR (EEPROM_SSID_ADDR + EEPROM_SSID_MAX)
-#define EEPROM_PASS_MAX 64
+/* EEPROM_SSID_ADDR/EEPROM_PASS_ADDR removidos — conflitavam com myWiFiManager
+   (shared/src/shared_config.h usa offset 0 para SSID e 33 para PASS). */
 #define EEPROM_MAGIC 0xAA
 
 static bool s_pulse_enabled = false;
@@ -205,68 +204,6 @@ static void load_startup_mode(void)
         s_startup_mode = 0;
 }
 
-static void save_wifi_credentials(const char *ssid, const char *pass)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.write(EEPROM_SSID_ADDR, 0xFF);
-    EEPROM.write(EEPROM_PASS_ADDR, 0xFF);
-    for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_SSID_ADDR + 1 + i, ssid[i]);
-        if (ssid[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_SSID_ADDR + EEPROM_SSID_MAX - 1, '\0');
-    for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
-    {
-        EEPROM.write(EEPROM_PASS_ADDR + 1 + i, pass[i]);
-        if (pass[i] == '\0')
-            break;
-    }
-    EEPROM.write(EEPROM_PASS_ADDR + EEPROM_PASS_MAX - 1, '\0');
-    EEPROM.commit();
-    EEPROM.end();
-}
-
-static bool load_wifi_credentials(char *ssid, size_t ssid_size, char *pass, size_t pass_size)
-{
-    EEPROM.begin(EEPROM_SIZE);
-    uint8_t marker = EEPROM.read(EEPROM_SSID_ADDR);
-    bool found = false;
-    if (marker == 0xFF)
-    {
-        char buf[64];
-        for (int i = 0; i < EEPROM_SSID_MAX - 1; i++)
-        {
-            buf[i] = EEPROM.read(EEPROM_SSID_ADDR + 1 + i);
-            if (buf[i] == '\0')
-                break;
-        }
-        buf[EEPROM_SSID_MAX - 1] = '\0';
-        if (strlen(buf) > 0)
-        {
-            strncpy(ssid, buf, ssid_size - 1);
-            ssid[ssid_size - 1] = '\0';
-            found = true;
-        }
-        marker = EEPROM.read(EEPROM_PASS_ADDR);
-        if (marker == 0xFF)
-        {
-            for (int i = 0; i < EEPROM_PASS_MAX - 1; i++)
-            {
-                buf[i] = EEPROM.read(EEPROM_PASS_ADDR + 1 + i);
-                if (buf[i] == '\0')
-                    break;
-            }
-            buf[EEPROM_PASS_MAX - 1] = '\0';
-            strncpy(pass, buf, pass_size - 1);
-            pass[pass_size - 1] = '\0';
-        }
-    }
-    EEPROM.end();
-    return found;
-}
-
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
     size_t j = 0;
@@ -358,6 +295,11 @@ static void set_relay(bool state)
         s_pulse_on_time = millis();
     if (!state)
         cyclic_reset();
+
+    /* Publicar estado no gateway (regra 14). O publish e guardado pelo radio,
+       entao no boot (nao registrado) e no-op. */
+    if (s_radio.is_paired())
+        s_radio.publish_state();
 }
 
 static void toggle_relay(void)
@@ -504,9 +446,6 @@ static void handle_api_wifi(void)
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
             s_server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Connecting...\"}");
-            save_wifi_credentials(ssid, pass);
-            /* Persistir tambem no layout do myWiFiManager (shared), que e o que a
-               reconexao le. Sem isso, apos reboot a reconexao nao acha as creds. */
             mywifi_save_creds(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
@@ -1156,6 +1095,7 @@ static void handle_ota_upload(void)
     HTTPUpload &upload = s_server.upload();
     if (upload.status == UPLOAD_FILE_START)
     {
+        s_ota_in_progress = true;
         console.printf("[%s] OTA update started: %s (%d bytes)\n", TAG, upload.filename.c_str(), upload.totalSize);
         if (!Update.begin(upload.totalSize))
             Update.printError(Serial);
@@ -1316,19 +1256,21 @@ void loop(void)
     }
     ArduinoOTA.handle();
 #ifdef ALEXA_ENABLED
-    if (s_alexa_initialized) {
-        s_alexa.loop();
-    } else {
-        s_server.handleClient();
-    }
-#else
-    s_server.handleClient();
+    s_alexa.loop();
 #endif
+    s_server.handleClient();
+
+    if (s_ota_in_progress)
+    {
+        yield();
+        return;
+    }
 
     {
         bool btn = digitalRead(s_button_pin);
         unsigned long now = millis();
-        if (btn != s_button_last && now - s_button_last_ms > 50)
+        // Ignorar GPIO nos primeiros 2s apos boot (float/ruido)
+        if (now - s_start_time > 2000 && btn != s_button_last && now - s_button_last_ms > 100)
         {
             s_button_last_ms = now;
             s_button_last = btn;
