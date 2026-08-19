@@ -1870,14 +1870,11 @@ void loop(void)
     }
     ota_handle();
 #ifdef ALEXA_ENABLED
-    if (s_alexa_initialized)
-    {
+    //if (s_alexa_initialized)
+    //{
         s_alexa.loop();
-    }
-    else
-    {
-        s_server.handleClient();
-    }
+    //}
+    s_server.handleClient();
 #else
     s_server.handleClient();
 #endif
