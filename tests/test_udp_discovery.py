@@ -7,7 +7,7 @@ from app.udp_discovery import UDPDiscovery, DISCOVERY_SERVICE
 class TestUDPDiscovery:
     @pytest.fixture
     def discovery(self):
-        ud = UDPDiscovery(bridge_ip="192.168.1.50", http_port=80)
+        ud = UDPDiscovery(bridge_ip="192.168.1.14", http_port=80)
         yield ud
 
     def test_handle_discover_request(self, discovery):
