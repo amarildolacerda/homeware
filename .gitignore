@@ -19,3 +19,5 @@ private.md
 bridge/
 alexa_diag_results.json
 nodes/lamp/alexa_diag_results.json
+
+.env
