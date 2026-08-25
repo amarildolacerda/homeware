@@ -7,6 +7,7 @@
 #include "log_buffer.h"
 #include "web_server.h"
 #include "platform.h"
+#include "mqtt_client.h"
 #include <uri/UriBraces.h>
 #include <algorithm>
 
@@ -363,6 +364,14 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;
+
+    /* Feedback to HA: the ESP-NOW path bridges state via queue_bridge_state()
+       -> mqtt_client_publish_state(); without the same publish here, TCP nodes
+       never update the MQTT state_topic and HA shows the entity always "off"
+       (non-optimistic light/switch waits for state_topic). */
+    if (mqtt_client_is_connected()) {
+        mqtt_client_publish_state(sensor);
+    }
 }
 
 void TcpRadioHandler::handle_heartbeat(const char* device_id) {
