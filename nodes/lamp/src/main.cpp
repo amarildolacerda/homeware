@@ -390,7 +390,7 @@ static void load_startup_mode(void)
    Remover save_wifi_credentials e load_wifi_credentials — usar mywifi_save_creds
    e sh_creds_load do shared. */
 
-static void set_relay(bool state);
+static void set_relay(bool state, bool from_cyclic = false);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
@@ -416,7 +416,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
    timer, cyclic, console e comando do hub TODOS passam por set_relay().
    Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
    Não alterar s_relay_state diretamente fora daqui. */
-static void set_relay(bool state)
+static void set_relay(bool state, bool from_cyclic)
 {
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
@@ -432,9 +432,16 @@ static void set_relay(bool state)
 
     save_relay_state();
     if (state)
+    {
         s_on_count++;
+        pulse_start();
+    }
     else
-        cyclic_reset();
+    {
+        pulse_cancel();
+        if (!from_cyclic)
+            cyclic_reset();
+    }
 
     /* Qualquer mudança de estado deve publicar/tentar no hub imediatamente
        (regra 14). O publish é guardado pelo radio (m_registered/m_paired),
@@ -1574,6 +1581,13 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 #endif
 }
 
+static void on_time_sync(uint32_t epoch_seconds)
+{
+    s_synced_epoch = epoch_seconds;
+    s_sync_millis = millis();
+    console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
+}
+
 static void on_pairing_failed()
 {
     #ifdef ESPNOW_ENABLED
@@ -1702,7 +1716,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed};
+    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed, on_time_sync};
     s_radio.set_pair_interval(ESPNOW_PAIR_INTERVAL_MS);
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
@@ -1954,9 +1968,19 @@ void loop(void)
             }
             else if (cyc_action == -1)
             {
-                set_relay(false);
+                set_relay(false, true);
                 console.printf("[%s] Cyclic OFF\n", TAG);
             }
+        }
+    }
+
+    /* Pulse: desligar relé após duração configurada */
+    {
+        int8_t pulse_action = pulse_check(now);
+        if (pulse_action == -1)
+        {
+            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
+            set_relay(false);
         }
     }
 

@@ -55,12 +55,13 @@ static unsigned long s_last_timer_check = 0;
 static unsigned long s_last_cyclic_check = 0;
 static int s_timezone_offset = -3;
 static unsigned long s_synced_epoch = 0;
+static unsigned long s_sync_millis = 0;
 
 static unsigned long get_synced_epoch(void) {
     time_t t = time(NULL);
     if (t > 100000) return (unsigned long)t;
     if (s_synced_epoch > 0)
-        return s_synced_epoch + (millis() / 1000);
+        return s_synced_epoch + ((millis() - s_sync_millis) / 1000);
     return 0;
 }
 
@@ -87,7 +88,7 @@ static bool s_pulse_enabled = false;
 static uint16_t s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
 static unsigned long s_pulse_on_time = 0;
 
-static void set_relay(bool state);
+static void set_relay(bool state, bool from_cyclic = false);
 static void on_timer_fire(uint8_t action)
 {
     console.printf("[%s] Timer fired: action=%d\n", TAG, action);
@@ -275,7 +276,13 @@ static void on_restart() {
     ESP.restart();
 }
 
-static void set_relay(bool state)
+static void on_time_sync(uint32_t epoch_seconds) {
+    s_synced_epoch = epoch_seconds;
+    s_sync_millis = millis();
+    console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
+}
+
+static void set_relay(bool state, bool from_cyclic)
 {
     if (state && !s_relay_state)
         s_on_count++;
@@ -293,7 +300,7 @@ static void set_relay(bool state)
     save_relay_state();
     if (state && s_pulse_enabled)
         s_pulse_on_time = millis();
-    if (!state)
+    if (!state && !from_cyclic)
         cyclic_reset();
 
     /* Publicar estado no gateway (regra 14). O publish e guardado pelo radio,
@@ -1151,7 +1158,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr, on_pairing_failed };
+    s_radio.callbacks = { get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr, on_pairing_failed, on_time_sync };
     s_radio.load_gateway_mac();
     s_radio.begin();
 
@@ -1302,7 +1309,7 @@ void loop(void)
         s_last_cyclic_check = now;
         int8_t ca = cyclic_check(now, s_relay_state);
         if (ca == 1) { console.printf("[%s] Cyclic ON\n", TAG); set_relay(true); }
-        else if (ca == -1) { console.printf("[%s] Cyclic OFF\n", TAG); set_relay(false); }
+        else if (ca == -1) { console.printf("[%s] Cyclic OFF\n", TAG); set_relay(false, true); }
     }
 
     if (s_pulse_enabled && s_relay_state && (now - s_pulse_on_time > (unsigned long)s_pulse_duration_min * 60000))
