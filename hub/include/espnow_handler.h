@@ -30,6 +30,7 @@ public:
     uint8_t* get_radio_mac() override { return m_gateway_mac; }
     void announce() override;
     void broadcast_time_sync(uint32_t epoch_seconds) override;
+    void broadcast_device_list() override;
 
     bool send_command(const uint8_t* mac, uint8_t state) override;
     bool send_restart(const uint8_t* mac) override;
@@ -95,6 +96,7 @@ private:
     int m_pending_state_tail = 0;
 
     uint16_t m_time_sync_sequence = 0;
+    uint16_t m_device_list_sequence = 0;
 
     void queue_bridge_state(int slot);
     void process_bridge_queue();
@@ -140,6 +142,7 @@ public:
     uint8_t* get_radio_mac() override { return nullptr; }
     void announce() override {}
     void broadcast_time_sync(uint32_t) override {}
+    void broadcast_device_list() override {}
     bool send_command(const uint8_t*, uint8_t) override { return false; }
     bool send_restart(const uint8_t*) override { return false; }
 };

@@ -4,7 +4,7 @@
 			"path": "."
 		},
 		{
-			"path": "clients/esp8266_pir"
+			"path": "nodes/lamp"
 		}
 	],
 	"settings": {}

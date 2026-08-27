@@ -362,6 +362,64 @@ void EspnowHandler::broadcast_time_sync(uint32_t epoch_seconds) {
     espnow_send_wrapper((uint8_t*)s_bcast_addr, (uint8_t*)&ts, sizeof(ts), "ESP-NOW");
 }
 
+void EspnowHandler::broadcast_device_list() {
+    // Build a compact device list broadcast: each entry is 42 bytes
+    // (6 mac + 32 name + 1 type + 1 slot + 1+1 bridge_device_id len + id)
+    // Max ESP-NOW payload is 250 bytes → up to 5 devices per frame
+    // For simplicity, send one device per broadcast (the hub retransmits periodically)
+    
+    // Find all paired sensors and iterate
+    static int s_last_slot = 0;
+    int start_slot = s_last_slot;
+    int found = 0;
+    
+    // Build a JSON-based device list (compact, fits in one frame)
+    // Format: {t:0x0E, s:seq, devices:[{id:"...",n:"...",tp:type},...]}
+    // Use raw bytes for efficiency: [msg_type, seq, count, [mac(6), type, slot, name_len, name...], ...]
+    
+    uint8_t buf[250];
+    int pos = 0;
+    buf[pos++] = MSG_DEVICE_LIST;
+    buf[pos++] = (m_device_list_sequence >> 8) & 0xFF;
+    buf[pos++] = m_device_list_sequence & 0xFF;
+    m_device_list_sequence++;
+    
+    int count = 0;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS && pos < 200; i++) {
+        int idx = (start_slot + i) % MAX_VIRTUAL_SENSORS;
+        virtual_sensor_t *s = sensor_registry_get(idx);
+        if (s && s->paired) {
+            // mac (6 bytes)
+            memcpy(buf + pos, s->mac, 6); pos += 6;
+            // type (1 byte)
+            buf[pos++] = s->type;
+            // slot (1 byte)
+            buf[pos++] = s->slot;
+            // bridge_device_id length + string
+            uint8_t id_len = strlen(s->bridge_device_id);
+            if (id_len > 30) id_len = 30;
+            buf[pos++] = id_len;
+            memcpy(buf + pos, s->bridge_device_id, id_len); pos += id_len;
+            // name length + string (truncated)
+            uint8_t name_len = strlen(s->name);
+            if (name_len > 30) name_len = 30;
+            buf[pos++] = name_len;
+            memcpy(buf + pos, s->name, name_len); pos += name_len;
+            
+            s_last_slot = idx + 1;
+            count++;
+        }
+    }
+    
+    if (count > 0) {
+        int ch = WiFi.channel();
+        if (ch < 1 || ch > 13) ch = 1;
+        espnow_add_peer_wrapper((uint8_t*)s_bcast_addr, ch);
+        espnow_send_wrapper((uint8_t*)s_bcast_addr, buf, pos, "ESP-NOW");
+        console.printf("[ESP-NOW] Device list broadcast: %d devices, %d bytes\n", count, pos);
+    }
+}
+
 void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
     if (!data || len < 1) { m_crc_errors++; console.printf("[ESPNOW] RX null/empty, len=%d\n", len); return; }
     m_rx_count++;

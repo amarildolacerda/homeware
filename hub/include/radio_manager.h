@@ -25,6 +25,7 @@ public:
     void all_stop_pairing();
     void all_announce();
     void all_broadcast_time_sync(uint32_t epoch);
+    void all_broadcast_device_list();
 
     RadioInterface* get_radio(uint8_t radio_type) const;
 

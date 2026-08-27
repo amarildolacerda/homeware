@@ -8,7 +8,6 @@
 #include "web_server.h"
 #include "platform.h"
 #include "mqtt_client.h"
-#include <uri/UriBraces.h>
 #include <algorithm>
 
 extern MyWebServer s_server;
@@ -23,16 +22,16 @@ int TcpRadioHandler::init() {
     m_udp.begin(TCP_UDP_PORT);
     console.printf("[tcp] UDP server started on port %d\n", TCP_UDP_PORT);
 
-    s_server.on("/node/register", HTTP_POST, [this]() {
-        if (!s_server.hasArg("plain")) {
-            s_server.send(400, "application/json", "{\"error\":\"no body\"}");
+    s_server.on("/node/register", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!request->hasParam("body", true)) {
+            request->send(400, "application/json", "{\"error\":\"no body\"}");
             return;
         }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError error = deserializeJson(doc, request->arg("body"));
         if (error) {
-            s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
+            request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
         }
 
@@ -42,19 +41,19 @@ int TcpRadioHandler::init() {
         uint8_t sensor_type = doc["sensor_type"];
 
         if (!device_id || !device_name) {
-            s_server.send(400, "application/json", "{\"error\":\"missing fields\"}");
+            request->send(400, "application/json", "{\"error\":\"missing fields\"}");
             return;
         }
 
         for (int i = 0; device_id[i]; i++) {
             if (device_id[i] < 0x20 || device_id[i] > 0x7E) {
-                s_server.send(400, "application/json", "{\"error\":\"invalid device_id\"}");
+                request->send(400, "application/json", "{\"error\":\"invalid device_id\"}");
                 return;
             }
         }
 
         if (sensor_type < 1 || sensor_type > 10) {
-            s_server.send(400, "application/json", "{\"error\":\"invalid sensor_type\"}");
+            request->send(400, "application/json", "{\"error\":\"invalid sensor_type\"}");
             return;
         }
 
@@ -80,7 +79,7 @@ int TcpRadioHandler::init() {
         if (!mac_ok) {
             // Fallback: derive unique pseudo-MAC from client IP to avoid all
             // TCP nodes sharing the hub's MAC (which causes slot collision).
-            IPAddress client_ip = s_server.client().remoteIP();
+            IPAddress client_ip = request->client()->remoteIP();
             mac[0] = 0x02;  // locally-administered, unicast
             mac[1] = 0x00;
             mac[2] = 0x00;
@@ -107,63 +106,64 @@ int TcpRadioHandler::init() {
 
         String responseStr;
         serializeJson(response, responseStr);
-        s_server.send(200, "application/json", responseStr);
+        request->send(200, "application/json", responseStr);
     });
 
-    s_server.on("/node/state", HTTP_POST, [this]() {
-        if (!s_server.hasArg("plain")) {
-            s_server.send(400, "application/json", "{\"error\":\"no body\"}");
+    s_server.on("/node/state", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!request->hasParam("body", true)) {
+            request->send(400, "application/json", "{\"error\":\"no body\"}");
             return;
         }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError error = deserializeJson(doc, request->arg("body"));
         if (error) {
-            s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
+            request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
         }
 
         const char* device_id = doc["device_id"];
         if (!device_id) {
-            s_server.send(400, "application/json", "{\"error\":\"missing device_id\"}");
+            request->send(400, "application/json", "{\"error\":\"missing device_id\"}");
             return;
         }
 
         JsonObject state = doc.as<JsonObject>();
         handle_state(device_id, state);
 
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
-    s_server.on("/node/heartbeat", HTTP_POST, [this]() {
-        if (!s_server.hasArg("plain")) {
-            s_server.send(400, "application/json", "{\"error\":\"no body\"}");
+    s_server.on("/node/heartbeat", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!request->hasParam("body", true)) {
+            request->send(400, "application/json", "{\"error\":\"no body\"}");
             return;
         }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError error = deserializeJson(doc, request->arg("body"));
         if (error) {
-            s_server.send(400, "application/json", "{\"error\":\"invalid json\"}");
+            request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
         }
 
         const char* device_id = doc["device_id"];
         if (!device_id) {
-            s_server.send(400, "application/json", "{\"error\":\"missing device_id\"}");
+            request->send(400, "application/json", "{\"error\":\"missing device_id\"}");
             return;
         }
 
         handle_heartbeat(device_id);
 
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
-    s_server.on(UriBraces("/node/command/{}"), HTTP_GET, [this]() {
-        String device_id = s_server.pathArg(0);
+    s_server.on("/node/command/*", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        // Parse /node/command/{device_id} from URL
+        String device_id = request->url().substring(15); // after "/node/command/"
 
         if (device_id.length() == 0) {
-            s_server.send(400, "application/json", "{\"error\":\"missing device_id\"}");
+            request->send(400, "application/json", "{\"error\":\"missing device_id\"}");
             return;
         }
 
@@ -171,9 +171,15 @@ int TcpRadioHandler::init() {
         JsonObject resObj = response.to<JsonObject>();
         handle_command_get(device_id.c_str(), resObj);
 
+        // Piggyback epoch on every command poll response so TCP nodes stay
+        // time-synced without a separate push endpoint.
+        if (m_time_sync_epoch > 0) {
+            resObj["epoch"] = m_time_sync_epoch;
+        }
+
         String responseStr;
         serializeJson(response, responseStr);
-        s_server.send(200, "application/json", responseStr);
+        request->send(200, "application/json", responseStr);
     });
 
     console.println("[tcp] HTTP endpoints registered");
@@ -187,6 +193,7 @@ int TcpRadioHandler::send(const uint8_t* data, size_t len) {
 void TcpRadioHandler::loop() {
     handle_udp_discover();
     cleanup_expired_commands();
+    process_bridge_queue();
 }
 
 bool TcpRadioHandler::is_ready() const {
@@ -218,6 +225,16 @@ void TcpRadioHandler::announce() {
 }
 
 void TcpRadioHandler::broadcast_time_sync(uint32_t epoch_seconds) {
+    // TCP nodes poll for commands every ~1s; the epoch is delivered via
+    // piggyback in the command poll response (handle_command_get).
+    // Store it here so the next poll response carries the fresh epoch.
+    m_time_sync_epoch = epoch_seconds;
+    console.printf("[tcp] Time sync stored: %lu (delivered via command poll)\n", epoch_seconds);
+}
+
+void TcpRadioHandler::broadcast_device_list() {
+    // TCP nodes poll for commands; device list is delivered via HTTP GET /api/sensors.
+    // Nothing to broadcast here — the lamp fetches it directly.
 }
 
 bool TcpRadioHandler::send_command(const uint8_t* mac, uint8_t state) {
@@ -366,12 +383,12 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
     m_rx_count++;
 
     /* Feedback to HA: the ESP-NOW path bridges state via queue_bridge_state()
-       -> mqtt_client_publish_state(); without the same publish here, TCP nodes
-       never update the MQTT state_topic and HA shows the entity always "off"
-       (non-optimistic light/switch waits for state_topic). */
-    if (mqtt_client_is_connected()) {
-        mqtt_client_publish_state(sensor);
-    }
+       -> process_bridge_queue() -> mqtt_client_publish_state(); without the
+       same publish here, TCP nodes never update the MQTT state_topic and HA
+       shows the entity always "off" (non-optimistic light/switch waits for
+       state_topic). Queue instead of publishing synchronously so the HTTP
+       handler never blocks on the broker TCP write. */
+    queue_bridge_state(slot);
 }
 
 void TcpRadioHandler::handle_heartbeat(const char* device_id) {
@@ -384,6 +401,23 @@ void TcpRadioHandler::handle_heartbeat(const char* device_id) {
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;
+}
+
+void TcpRadioHandler::queue_bridge_state(int slot) {
+    int next = (m_pending_state_head + 1) % TCP_PENDING_STATE_MAX;
+    if (next == m_pending_state_tail) return;
+    m_pending_state_slots[m_pending_state_head] = slot;
+    m_pending_state_head = next;
+}
+
+void TcpRadioHandler::process_bridge_queue() {
+    while (m_pending_state_tail != m_pending_state_head) {
+        int slot = m_pending_state_slots[m_pending_state_tail];
+        m_pending_state_tail = (m_pending_state_tail + 1) % TCP_PENDING_STATE_MAX;
+        virtual_sensor_t *s = sensor_registry_get(slot);
+        if (s && s->paired && mqtt_client_is_connected())
+            mqtt_client_publish_state(s);
+    }
 }
 
 bool TcpRadioHandler::handle_command_get(const char* device_id, JsonObject& response) {
