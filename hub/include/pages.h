@@ -113,7 +113,15 @@ R"rawliteral(
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--border-strong:#d1d5db;--success:#16a34a;--danger:#dc2626;--warn:#f59e0b;--info:#2563eb}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-.sidebar{width:200px;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:10}
+.sidebar{width:240px;max-width:85vw;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+.sidebar.open{transform:translateX(0)}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
+.sidebar-backdrop.open{display:block}
+.topbar{display:flex;align-items:center;gap:12px;margin:-24px -24px 16px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30}
+.hamburger{background:none;border:1px solid var(--border);border-radius:8px;width:40px;height:40px;font-size:1.2rem;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;line-height:1}
+.hamburger:hover{background:var(--surface-2)}
+.topbar .topbar-title{font-weight:600;color:var(--primary);font-size:0.95rem}
+.topbar .topbar-sub{color:var(--muted-subtle);font-size:0.75rem;margin-left:4px}
 .sidebar .logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:8px}
 .sidebar .logo h1{font-size:1rem;font-weight:700;color:var(--primary)}
 .sidebar .logo span{font-size:0.75rem;color:var(--muted)}
@@ -140,9 +148,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .nav-group-list a:hover{color:var(--text);background:var(--primary-focus)}
 .sidebar .nav-group-list .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
 .sidebar .nav-group-list .empty{font-size:0.72rem;color:var(--muted-subtle);padding:6px 20px 6px 44px}
-.main{margin-left:200px;flex:1;padding:24px;max-width:960px}
+.main{margin-left:0;flex:1;padding:24px;max-width:960px}
 #page{min-height:calc(100vh - 80px)}
-.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
+.mqtt-footer{position:fixed;bottom:0;right:0;left:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
 .mqtt-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .mqtt-footer .dot.on{background:var(--success)}
 .mqtt-footer .dot.off{background:var(--danger)}
@@ -153,18 +161,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .toast.show{display:block;animation:slideIn .3s}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){
-.sidebar{width:60px}
-.sidebar .logo h1,.sidebar .logo span,.sidebar .logo .signal,.sidebar nav a span:last-child,.sidebar .footer-nav,.sidebar .nav-group-head .chev,.sidebar .nav-group-head span:not(.icon){display:none}
-.sidebar nav a{justify-content:center;padding:14px;border-left:none}
-.sidebar nav a.active{border-left:none;background:var(--primary-focus)}
-.sidebar .nav-group-head{justify-content:center;padding:14px;border-left:none}
-.main{margin-left:60px;padding:16px}
-.mqtt-footer{left:60px}
+.sidebar{width:80%}
+.topbar{padding:10px 12px;margin:-16px -16px 12px}
+.main{padding:16px}
+.mqtt-footer{padding:8px 16px;font-size:0.72rem;gap:8px}
 }
 </style>
 </head>
 <body>
-<div class="sidebar">
+<div class="sidebar-backdrop" id="sbBackdrop" onclick="closeSidebar()"></div>
+<div class="sidebar" id="sidebar">
 <div class="logo">
 <div class="logo-row">
 <div class="logo-title">
@@ -198,7 +204,7 @@ R"rawliteral(
 </nav>
 <div class="footer-nav" id="fw-sidebar">v--</div>
 </div>
-<div class="main"><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
+<div class="main"><div class="topbar"><button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button><span class="topbar-title">Gateway</span><span class="topbar-sub" id="sbVersion-top">v--</span></div><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
 <div class="mqtt-footer" id="mqtt-footer"><div style="display:flex;align-items:center;gap:6px"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span><span class="pairing-dot" id="pairing-dot"></span><span id="pairing-text" style="font-size:0.78rem;color:var(--warn)"></span></div><span style="display:flex;align-items:center;gap:12px"><span id="footer-clock" style="color:var(--muted-subtle)">--:--:--</span><span id="footer-uptime" style="color:var(--muted-subtle)">--</span></span></div>
 <div class="toast" id="toast"></div>
 <script>
@@ -218,6 +224,7 @@ function navigate(page) {
   document.querySelectorAll('.sidebar nav a').forEach(function(a) { a.classList.remove('active'); });
   var link = document.getElementById('nav-'+page);
   if (link) link.classList.add('active');
+  closeSidebar();
   var el = document.getElementById('page');
   el.innerHTML = '<div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div>';
   fetch('/'+page).then(function(r) { return r.text(); }).then(function(html) {
@@ -375,6 +382,21 @@ function toggleRepeaterNav() {
   var g = document.getElementById('repeater-nav');
   if (g) g.classList.toggle('collapsed');
 }
+function toggleSidebar() {
+  var s = document.getElementById('sidebar');
+  var b = document.getElementById('sbBackdrop');
+  if (!s) return;
+  var open = s.classList.toggle('open');
+  if (b) b.classList.toggle('open', open);
+  try { localStorage.setItem('hub_drawer_open', open ? '1' : '0'); } catch(e) {}
+}
+function closeSidebar() {
+  var s = document.getElementById('sidebar');
+  var b = document.getElementById('sbBackdrop');
+  if (s) s.classList.remove('open');
+  if (b) b.classList.remove('open');
+  try { localStorage.setItem('hub_drawer_open', '0'); } catch(e) {}
+}
 async function loadRepeaterNav(sensors) {
   var list = document.getElementById('repeater-nav-list');
   var nav = document.getElementById('repeater-nav');
@@ -407,7 +429,10 @@ function syncBrowserTime() {
 
 startRepeaterNavPoll();
 syncBrowserTime();
-navigate('overview');
+(function(){
+  try { if (localStorage.getItem('hub_drawer_open') === '1') { var s=document.getElementById('sidebar'), b=document.getElementById('sbBackdrop'); if(s)s.classList.add('open'); if(b)b.classList.add('open'); } } catch(e) {}
+  navigate('overview');
+})();
 </script>
 </body>
 </html>
@@ -962,7 +987,7 @@ async function loadData() {
     document.getElementById('stat-online').textContent = info.online_count;
     document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
-    if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.fw_version) { document.getElementById('fw-sidebar').textContent = info.fw_version; var tv=document.getElementById('sbVersion-top'); if(tv) tv.textContent=info.fw_version; }
     if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
@@ -1224,7 +1249,7 @@ async function loadSettings() {
     document.getElementById('s-uptime').textContent = fmtUptime(info.uptime_ms);
     document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
     document.getElementById('bridge-sum').textContent = info.ip || '--';
-    if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.fw_version) { document.getElementById('fw-sidebar').textContent = info.fw_version; var tv=document.getElementById('sbVersion-top'); if(tv) tv.textContent=info.fw_version; }
     if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
