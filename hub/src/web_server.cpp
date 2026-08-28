@@ -323,6 +323,9 @@ void web_server_init() {
                 obj["client_chip"] = s->client_chip;
                 obj["name"] = s->name;
                 obj["bridge_device_id"] = s->bridge_device_id;
+                if (s->fw_version[0]) {
+                    obj["fw_version"] = s->fw_version;
+                }
                 obj["sequence"] = s->sequence;
                 obj["battery_pct"] = s->battery_pct;
                 obj["last_rssi"] = s->last_rssi;

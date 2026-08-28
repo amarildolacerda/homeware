@@ -146,7 +146,7 @@ int TcpRadioHandler::init() {
 
     s_server.on("/node/command/*", HTTP_GET, [this](AsyncWebServerRequest *request) {
         // Parse /node/command/{device_id} from URL
-        String device_id = request->url().substring(15); // after "/node/command/"
+        String device_id = request->url().substring(14); // after "/node/command/" (14 chars)
 
         if (device_id.length() == 0) {
             request->send(400, "application/json", "{\"error\":\"missing device_id\"}");
@@ -279,6 +279,11 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
             mac_copy(sensor->mac, mac);
             sensor->radio_type = RADIO_TCP;
             sensor->client_chip = client_chip;
+            // fw_version is node-reported (not user-set) → always refresh
+            if (fw_version && strlen(fw_version) > 0) {
+                strncpy(sensor->fw_version, fw_version, sizeof(sensor->fw_version) - 1);
+                sensor->fw_version[sizeof(sensor->fw_version) - 1] = '\0';
+            }
             sensor_registry_save();
         }
         return;
@@ -305,6 +310,10 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         sensor->paired = true;
         sensor->online = true;
         sensor->last_seen = millis();
+        if (fw_version && strlen(fw_version) > 0) {
+            strncpy(sensor->fw_version, fw_version, sizeof(sensor->fw_version) - 1);
+            sensor->fw_version[sizeof(sensor->fw_version) - 1] = '\0';
+        }
         sensor_registry_save();
     }
 
@@ -337,6 +346,13 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
     }
     if (state["free_heap"].is<uint32_t>()) {
         sensor->free_heap = state["free_heap"];
+    }
+    if (state["fw_version"].is<const char*>()) {
+        const char* fw = state["fw_version"];
+        if (strlen(fw) > 0) {
+            strncpy(sensor->fw_version, fw, sizeof(sensor->fw_version) - 1);
+            sensor->fw_version[sizeof(sensor->fw_version) - 1] = '\0';
+        }
     }
 
     switch (sensor->type) {

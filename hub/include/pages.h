@@ -661,7 +661,7 @@ function buildSensorCard(s) {
       '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
       '<div style="flex:1;min-width:0">'+
         '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span></div>'+
-        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+         '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+(s.fw_version?' &bull; '+escHtml(s.fw_version):'')+'</div>'+
       '</div>'+
       '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
         battInline(s.battery_pct)+
