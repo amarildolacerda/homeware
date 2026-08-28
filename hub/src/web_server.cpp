@@ -427,7 +427,7 @@ void web_server_init() {
     s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/sensor/*", [](AsyncWebServerRequest *request, JsonVariant json) {
         // Parse /api/sensor/{slot}/{action} from URL
         String url = request->url();
-        int p1 = url.indexOf('/', 14); // after "/api/sensor/"
+        int p1 = url.indexOf('/', 11); // slash before slot (after "/api/sensor/")
         int p2 = url.indexOf('/', p1 + 1);
         if (p1 < 0 || p2 < 0) {
             request->send(400, "application/json", "{\"error\":\"invalid path\"}");
