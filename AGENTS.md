@@ -148,7 +148,7 @@ Ver `nodes/SPEC.md` — checklist completo com template, estrutura, implementaç
 4. quando marcar estável, anotar a tag e a data
 
 ### Nodes estáveis (não modificar)
-- `hub` — v1.2.21 (2026-08-25) — ESP-NOW + TCP Hub, WiFi 3-tier (EEPROM→STATIC_WIFI→AP), NTP+time sync broadcast, MQTT discovery
+- `hub` — v1.2.22 (2026-08-28) — ESP-NOW + TCP Hub, WiFi 3-tier (EEPROM→STATIC_WIFI→AP), NTP+time sync broadcast, MQTT discovery
 - `nodes/lamp` — v1.2.8 (2026-08-05) — relé ON/OFF com Alexa (Espalexa) + extender ESP-NOW, usa shared WiFi
 - `nodes/switch` — v1.2.8 (2026-08-05) — relé ON/OFF com Alexa (Espalexa) + ESP-NOW + pulse/timer, LoRa envs prontos
 
