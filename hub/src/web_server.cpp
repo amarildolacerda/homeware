@@ -12,6 +12,7 @@ extern RadioManager s_radio_mgr;
 #include "captive_portal.h"
 #include "device_router.h"
 #include <ArduinoJson.h>
+#include "AsyncJson.h"  // AsyncCallbackJsonWebHandler (JSON POST bodies)
 
 extern bool gateway_ntp_synced();
 extern time_t gateway_ntp_epoch();
@@ -294,17 +295,13 @@ void web_server_init() {
         request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/time", HTTP_POST, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("body", true)) {
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, request->arg("body"));
-            if (!err && doc["epoch"].is<uint32_t>()) {
-                gateway_set_browser_epoch((time_t)doc["epoch"].as<uint32_t>());
-                console.printf("[TIME] hora ajustada via browser (epoch=%u)\n", doc["epoch"].as<uint32_t>());
-            }
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/time", [](AsyncWebServerRequest *request, JsonVariant json) {
+        if (!json.isNull() && json["epoch"].is<uint32_t>()) {
+            gateway_set_browser_epoch((time_t)json["epoch"].as<uint32_t>());
+            console.printf("[TIME] hora ajustada via browser (epoch=%u)\n", json["epoch"].as<uint32_t>());
         }
         request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    }));
 
 
     s_server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -427,7 +424,7 @@ void web_server_init() {
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
-    s_server.on("/api/sensor/*", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/sensor/*", [](AsyncWebServerRequest *request, JsonVariant json) {
         // Parse /api/sensor/{slot}/{action} from URL
         String url = request->url();
         int p1 = url.indexOf('/', 14); // after "/api/sensor/"
@@ -441,7 +438,7 @@ void web_server_init() {
 
         if (action == "name") {
             JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, request->arg("body"));
+            DeserializationError err = deserializeJson(doc, json.as<String>());
             if (err || !doc.containsKey("name")) {
                 request->send(400, "application/json", "{\"error\":\"invalid json or missing name\"}");
                 return;
@@ -460,7 +457,7 @@ void web_server_init() {
             request->send(200, "application/json", "{\"status\":\"ok\"}");
         } else if (action == "command") {
             JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, request->arg("body"));
+            DeserializationError err = deserializeJson(doc, json.as<String>());
             if (err || !doc.containsKey("state")) {
                 request->send(400, "application/json", "{\"error\":\"state required\"}");
                 return;
@@ -501,7 +498,7 @@ void web_server_init() {
         } else {
             request->send(404, "application/json", "{\"error\":\"unknown action\"}");
         }
-    });
+    }));
 
     s_server.on("/api/config/mqtt", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
@@ -513,9 +510,9 @@ void web_server_init() {
         request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/mqtt", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/mqtt", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, request->arg("body"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("host") || !doc.containsKey("port")) {
             request->send(400, "application/json", "{\"error\":\"host and port required\"}");
             return;
@@ -526,7 +523,7 @@ void web_server_init() {
         const char *pass = doc["pass"] | "";
         mqtt_client_save_config(host, port, user, pass);
         request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    }));
 
     s_server.on("/api/config/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
         char ssid[EEPROM_WIFI_SSID_SIZE];
@@ -548,9 +545,9 @@ void web_server_init() {
         request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/wifi", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, request->arg("body"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("ssid")) {
             request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
@@ -575,7 +572,7 @@ void web_server_init() {
         request->send(200, "application/json", "{\"status\":\"ok\"}");
         delay(300);
         ESP.restart();
-    });
+    }));
 
     s_server.on("/api/config/pairing", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
@@ -585,9 +582,9 @@ void web_server_init() {
         request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/pairing", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/pairing", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, request->arg("body"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("enabled")) {
             request->send(400, "application/json", "{\"error\":\"enabled required\"}");
             return;
@@ -595,7 +592,7 @@ void web_server_init() {
         bool enabled = doc["enabled"];
         pairing_config_save(enabled);
         request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    }));
 
     s_server.on("/api/config/mode", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
@@ -605,9 +602,9 @@ void web_server_init() {
         request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/mode", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/mode", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, request->arg("body"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("mode")) {
             request->send(400, "application/json", "{\"error\":\"mode required\"}");
             return;
@@ -626,7 +623,7 @@ void web_server_init() {
         request->send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
         delay(300);
         ESP.restart();
-    });
+    }));
 
     s_server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
         log_add("warn", "Reiniciando via web");
@@ -677,9 +674,9 @@ void web_server_init() {
         request->send(204);
     });
 
-    s_server.on("/api/portal/setup", HTTP_POST, [](AsyncWebServerRequest *request) {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/portal/setup", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, request->arg("body"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("ssid")) {
             request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
@@ -710,7 +707,7 @@ void web_server_init() {
         wifi_net_save(mode, ip, gw, mask, dns);
         request->send(200, "application/json", "{\"status\":\"ok\"}");
         captive_portal_set_submitted();
-    });
+    }));
     s_server.on("/api/portal/scan", HTTP_GET, [](AsyncWebServerRequest *request) {
         int n = WiFi.scanNetworks();
         const int MAX_NET = 64;

@@ -8,6 +8,7 @@
 #include "web_server.h"
 #include "platform.h"
 #include "mqtt_client.h"
+#include "AsyncJson.h"
 #include <algorithm>
 
 extern MyWebServer s_server;
@@ -22,14 +23,9 @@ int TcpRadioHandler::init() {
     m_udp.begin(TCP_UDP_PORT);
     console.printf("[tcp] UDP server started on port %d\n", TCP_UDP_PORT);
 
-    s_server.on("/node/register", HTTP_POST, [this](AsyncWebServerRequest *request) {
-        if (!request->hasParam("body", true)) {
-            request->send(400, "application/json", "{\"error\":\"no body\"}");
-            return;
-        }
-
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/node/register", [this](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, request->arg("body"));
+        DeserializationError error = deserializeJson(doc, json.as<String>());
         if (error) {
             request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
@@ -107,16 +103,11 @@ int TcpRadioHandler::init() {
         String responseStr;
         serializeJson(response, responseStr);
         request->send(200, "application/json", responseStr);
-    });
+    }));
 
-    s_server.on("/node/state", HTTP_POST, [this](AsyncWebServerRequest *request) {
-        if (!request->hasParam("body", true)) {
-            request->send(400, "application/json", "{\"error\":\"no body\"}");
-            return;
-        }
-
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/node/state", [this](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, request->arg("body"));
+        DeserializationError error = deserializeJson(doc, json.as<String>());
         if (error) {
             request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
@@ -132,16 +123,11 @@ int TcpRadioHandler::init() {
         handle_state(device_id, state);
 
         request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    }));
 
-    s_server.on("/node/heartbeat", HTTP_POST, [this](AsyncWebServerRequest *request) {
-        if (!request->hasParam("body", true)) {
-            request->send(400, "application/json", "{\"error\":\"no body\"}");
-            return;
-        }
-
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/node/heartbeat", [this](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, request->arg("body"));
+        DeserializationError error = deserializeJson(doc, json.as<String>());
         if (error) {
             request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
@@ -156,7 +142,7 @@ int TcpRadioHandler::init() {
         handle_heartbeat(device_id);
 
         request->send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+    }));
 
     s_server.on("/node/command/*", HTTP_GET, [this](AsyncWebServerRequest *request) {
         // Parse /node/command/{device_id} from URL
