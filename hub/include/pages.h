@@ -864,6 +864,7 @@ function showPropsModal(slot) {
     (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
     '<div class="row"><span class="label">Rádio</span><span class="value">'+radioName(s.radio_type)+'</span></div>'+
     '<div class="row"><span class="label">Chip</span><span class="value">'+chipName(s.client_chip)+'</span></div>'+
+    (s.fw_version?'<div class="row"><span class="label">Versão FW</span><span class="value">'+escHtml(s.fw_version)+'</span></div>':'')+
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
