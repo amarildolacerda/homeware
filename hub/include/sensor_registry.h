@@ -19,6 +19,7 @@ typedef struct {
     uint8_t radio_type;    // radio_type_t: 0=ESP-NOW, 1=LoRa
     char name[32];
     char bridge_device_id[16];
+    char fw_version[16];   // firmware version reported by the node (e.g. "v1.2.21")
     uint8_t battery_pct;
     int16_t last_rssi;
     unsigned long last_seen;

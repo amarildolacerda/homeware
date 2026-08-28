@@ -467,6 +467,13 @@ void loop() {
         s_radio_mgr.all_broadcast_time_sync((uint32_t)s_ntp_epoch);
     }
     
+    // Broadcast device list to nodes periodically (every 60s)
+    static unsigned long s_last_device_list_broadcast = 0;
+    if (millis() - s_last_device_list_broadcast > 60000) {
+        s_last_device_list_broadcast = millis();
+        s_radio_mgr.all_broadcast_device_list();
+    }
+    
     delay(1);
 }
 

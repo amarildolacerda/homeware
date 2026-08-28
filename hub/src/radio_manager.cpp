@@ -96,6 +96,12 @@ void RadioManager::all_broadcast_time_sync(uint32_t epoch) {
         m_entries[i].radio->broadcast_time_sync(epoch);
 }
 
+void RadioManager::all_broadcast_device_list() {
+    for (int i = 0; i < m_count; i++) {
+        m_entries[i].radio->broadcast_device_list();
+    }
+}
+
 RadioInterface* RadioManager::get_radio(uint8_t radio_type) const {
     for (int i = 0; i < m_count; i++)
         if (m_entries[i].type == radio_type)

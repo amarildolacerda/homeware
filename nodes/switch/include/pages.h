@@ -108,7 +108,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="timer-add">
 <select id="timerHour" style="width:56px"></select><span style="color:var(--muted-subtle)">:</span><select id="timerMin" style="width:56px"></select>
 <select id="timerAction" style="width:62px"><option value="0">OFF</option><option value="1">ON</option></select>
-<select id="timerDays" style="width:74px"><option value="0">Todos</option><option value="127">Semana</option><option value="64">Fim de sem</option></select>
+<select id="timerDays" style="width:74px"><option value="0">Todos</option><option value="127">Semana</option><option value="65">Fim de sem</option></select>
 <button class="btn btn-primary btn-sm" onclick="addTimer()">+</button>
 </div>
 </div>

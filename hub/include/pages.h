@@ -189,6 +189,7 @@ R"rawliteral(
 <a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
 <a href="#" onclick="navigate('settings');return false" id="nav-settings"><span class="icon">&#x2699;</span><span>Configurações</span></a>
 <a href="#" onclick="navigate('logs');return false" id="nav-logs"><span class="icon">&#x1F4CB;</span><span>Logs</span></a>
+<a href="#" onclick="navigate('update');return false" id="nav-update"><span class="icon">&#x1F4E6;</span><span>Atualização</span></a>
 
 <div class="nav-group collapsed" id="repeater-nav" style="display:none">
 <button class="nav-group-head" onclick="toggleRepeaterNav()"><span class="icon">&#x1F504;</span><span>Repetidores</span><span class="chev">&#9662;</span></button>
@@ -660,7 +661,7 @@ function buildSensorCard(s) {
       '<div class="device-icon">'+typeIcon(s.type)+'</div>'+
       '<div style="flex:1;min-width:0">'+
         '<div class="device-name"><span>'+escHtml(s.name||'Sem nome')+'</span></div>'+
-        '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+'</div>'+
+         '<div class="device-type">'+typeName(s.type)+' &bull; Slot '+s.slot+(s.fw_version?' &bull; '+escHtml(s.fw_version):'')+'</div>'+
       '</div>'+
       '<div style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'+
         battInline(s.battery_pct)+
@@ -863,6 +864,7 @@ function showPropsModal(slot) {
     (s.ip?'<div class="row"><span class="label">IP</span><span class="value"><a href="http://'+escHtml(s.ip)+'?from='+escHtml(window.location.hostname)+'">'+escHtml(s.ip)+'</a></span></div>':'')+
     '<div class="row"><span class="label">Rádio</span><span class="value">'+radioName(s.radio_type)+'</span></div>'+
     '<div class="row"><span class="label">Chip</span><span class="value">'+chipName(s.client_chip)+'</span></div>'+
+    (s.fw_version?'<div class="row"><span class="label">Versão FW</span><span class="value">'+escHtml(s.fw_version)+'</span></div>':'')+
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
     '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
@@ -1390,6 +1392,106 @@ async function loadLogs() {
 }
 loadLogs();
 s_pollTimer = setInterval(loadLogs, 10000);
+</script>
+)rawliteral";
+
+const char PAGE_UPDATE[] PROGMEM = R"rawliteral(
+<style>
+.ota-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:480px}
+.ota-card h2{font-size:0.95rem;font-weight:600;color:var(--primary);margin-bottom:4px}
+.ota-card .sub{font-size:0.78rem;color:var(--muted);margin-bottom:16px}
+.ota-drop{border:2px dashed var(--border-strong);border-radius:10px;padding:32px 16px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:16px}
+.ota-drop:hover,.ota-drop.over{border-color:var(--primary);background:var(--primary-focus)}
+.ota-drop .icon{font-size:2rem;margin-bottom:8px}
+.ota-drop .label{font-size:0.85rem;color:var(--muted)}
+.ota-drop .label strong{color:var(--primary)}
+.ota-drop input{display:none}
+.ota-file-info{font-size:0.78rem;color:var(--muted);margin-bottom:12px;text-align:center}
+.ota-progress{width:100%;height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:8px;display:none}
+.ota-progress .fill{height:100%;background:var(--primary);border-radius:4px;transition:width .2s;width:0}
+.ota-status{font-size:0.82rem;text-align:center;min-height:20px;margin-bottom:12px;color:var(--muted)}
+.ota-status.ok{color:var(--success)}
+.ota-status.err{color:var(--danger)}
+.ota-btn{width:100%;padding:12px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;background:var(--primary);color:#fff;transition:all .15s}
+.ota-btn:hover:not(:disabled){filter:brightness(1.1)}
+.ota-btn:disabled{opacity:.5;cursor:not-allowed}
+.ota-btn:active:not(:disabled){transform:scale(.98)}
+</style>
+<div class="ota-card">
+<h2>Atualização via OTA</h2>
+<div class="sub">Envie um arquivo .bin para atualizar o firmware do gateway</div>
+<div class="ota-drop" id="ota-drop" onclick="document.getElementById('otaFile').click()">
+<div class="icon">&#x1F4E6;</div>
+<div class="label">Arraste o arquivo aqui ou <strong>clique para selecionar</strong></div>
+<input type="file" id="otaFile" accept=".bin" onchange="onOtaFile(this)">
+</div>
+<div class="ota-file-info" id="ota-file-info"></div>
+<div class="ota-progress" id="ota-progress"><div class="fill" id="ota-fill"></div></div>
+<div class="ota-status" id="ota-status"></div>
+<button class="ota-btn" id="ota-btn" disabled onclick="doOtaUpdate()">Enviar e Atualizar</button>
+</div>
+<script>
+var s_otaFile=null;
+var drop=document.getElementById('ota-drop');
+drop.addEventListener('dragover',function(e){e.preventDefault();drop.classList.add('over')});
+drop.addEventListener('dragleave',function(){drop.classList.remove('over')});
+drop.addEventListener('drop',function(e){e.preventDefault();drop.classList.remove('over');if(e.dataTransfer.files.length)onOtaFile({files:e.dataTransfer.files})});
+function onOtaFile(input){
+  var f=input.files?input.files[0]:null;
+  if(!f)return;
+  s_otaFile=f;
+  var mb=(f.size/1048576).toFixed(2);
+  document.getElementById('ota-file-info').textContent=f.name+' ('+mb+' MB)';
+  document.getElementById('ota-btn').disabled=false;
+  document.getElementById('ota-status').textContent='';
+  document.getElementById('ota-status').className='ota-status';
+}
+function doOtaUpdate(){
+  if(!s_otaFile)return;
+  var st=document.getElementById('ota-status');
+  var prog=document.getElementById('ota-progress');
+  var fill=document.getElementById('ota-fill');
+  var btn=document.getElementById('ota-btn');
+  btn.disabled=true;
+  st.textContent='Enviando...';
+  st.className='ota-status';
+  prog.style.display='block';
+  fill.style.width='0%';
+  var fd=new FormData();
+  fd.append('firmware',s_otaFile);
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','/update',true);
+  xhr.upload.onprogress=function(e){
+    if(e.lengthComputable){
+      var pct=Math.round(e.loaded*100/e.total);
+      fill.style.width=pct+'%';
+      st.textContent='Enviando... '+pct+'%';
+    }
+  };
+  xhr.onload=function(){
+    try{
+      var d=JSON.parse(xhr.responseText);
+      if(d.status==='ok'){
+        st.textContent='Concluído! Reiniciando...';
+        st.className='ota-status ok';
+        fill.style.width='100%';
+      }else{
+        st.textContent='Erro: '+d.status;
+        st.className='ota-status err';
+        btn.disabled=false;
+      }
+    }catch(e){
+      st.textContent='Concluído! Reiniciando...';
+      st.className='ota-status ok';
+      fill.style.width='100%';
+    }
+  };
+  xhr.onerror=function(){
+    st.textContent='Concluído! Reiniciando...';
+    st.className='ota-status ok';
+  };
+  xhr.send(fd);
+}
 </script>
 )rawliteral";
 

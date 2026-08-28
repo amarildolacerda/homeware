@@ -155,6 +155,9 @@ typedef struct
 } sync_config_t;
 
 static sync_config_t s_sync_cfg = {false, "", ""};
+static bool s_last_sync_state = false;
+static int s_sync_target_slot = -1;
+static unsigned long s_sync_sent_ms = 0;  // timestamp do último envio de sync (debounce)
 
 static void sync_load(void)
 {
@@ -175,6 +178,14 @@ static void sync_load(void)
     const char *tn = doc["target_device_name"] | "";
     strncpy(s_sync_cfg.target_device_name, tn, sizeof(s_sync_cfg.target_device_name) - 1);
     s_sync_cfg.target_device_name[sizeof(s_sync_cfg.target_device_name) - 1] = '\0';
+    // Guard: desabilitar sync se target é o próprio device (evita loop)
+    if (s_sync_cfg.enabled && strlen(s_sync_cfg.target_device_id) > 0 &&
+        strcmp(s_sync_cfg.target_device_id, getDeviceId()) == 0)
+    {
+        console.printf("[%s] Sync: desabilitado — target é o próprio device\n", TAG);
+        s_sync_cfg.enabled = false;
+        s_sync_cfg.target_device_id[0] = '\0';
+    }
 }
 
 static void devices_load(JsonDocument &doc)
@@ -390,7 +401,7 @@ static void load_startup_mode(void)
    Remover save_wifi_credentials e load_wifi_credentials — usar mywifi_save_creds
    e sh_creds_load do shared. */
 
-static void set_relay(bool state);
+static void set_relay(bool state, bool from_cyclic = false, bool from_sync = false);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
@@ -416,8 +427,9 @@ static void name_to_ssid(const char *name, char *out, size_t max)
    timer, cyclic, console e comando do hub TODOS passam por set_relay().
    Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
    Não alterar s_relay_state diretamente fora daqui. */
-static void set_relay(bool state)
+static void set_relay(bool state, bool from_cyclic, bool from_sync)
 {
+    bool was_on = s_relay_state;
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
     console.printf("Relay: %s -> %s\n", s_device_name, state ? "ON" : "OFF");
@@ -431,10 +443,17 @@ static void set_relay(bool state)
 #endif
 
     save_relay_state();
-    if (state)
+    if (state && !was_on)
+    {
         s_on_count++;
+        pulse_start();
+    }
     else
-        cyclic_reset();
+    {
+        pulse_cancel();
+        if (!from_cyclic)
+            cyclic_reset();
+    }
 
     /* Qualquer mudança de estado deve publicar/tentar no hub imediatamente
        (regra 14). O publish é guardado pelo radio (m_registered/m_paired),
@@ -442,6 +461,37 @@ static void set_relay(bool state)
     if (s_radio.is_paired())
     {
         s_radio.publish_state();
+    }
+
+    // Sync: mirror relay state to target device via hub
+    // from_sync: não re-enviar se veio de sync (evita loop infinito A→B→A)
+    if (!from_sync && state != s_last_sync_state && s_sync_cfg.enabled && strlen(s_sync_cfg.target_device_id) > 0)
+    {
+        s_last_sync_state = state;
+        s_sync_sent_ms = millis();  // marca tempo para debounce
+#ifdef TCP_ENABLED
+        // TCP mode: send command to target via hub HTTP API
+        if (s_radio.is_paired() && s_sync_target_slot >= 0)
+        {
+            String endpoint = String("/api/sensor/") + String(s_sync_target_slot) + "/command";
+            String payload = String("{\"state\":") + (state ? "1" : "0") + "}";
+            if (s_radio.send_to_hub(endpoint.c_str(), payload))
+            {
+                console.printf("[%s] Sync: sent %s to %s (slot %d)\n", TAG, state ? "ON" : "OFF", s_sync_cfg.target_device_id, s_sync_target_slot);
+            }
+            else
+            {
+                console.printf("[%s] Sync: failed to send to %s (slot %d)\n", TAG, s_sync_cfg.target_device_id, s_sync_target_slot);
+            }
+        }
+        else if (s_radio.is_paired())
+        {
+            console.printf("[%s] Sync: target %s slot unknown\n", TAG, s_sync_cfg.target_device_id);
+        }
+#else
+        console.printf("[%s] Sync: relay %s -> target %s (ESP-NOW sync not yet implemented)\n",
+                       TAG, state ? "ON" : "OFF", s_sync_cfg.target_device_id);
+#endif
     }
 }
 
@@ -1304,6 +1354,44 @@ static unsigned long get_epoch(void)
 static void handle_api_devices(void)
 {
     String json;
+
+#ifdef TCP_ENABLED
+    // TCP mode: fetch device list directly from hub's /api/sensors
+    {
+        char buf[2048];
+        if (s_radio.fetch_hub_devices(buf, sizeof(buf)))
+        {
+            // Filtrar device atual da lista (evita sync para si mesmo)
+            JsonDocument hubDoc;
+            if (!deserializeJson(hubDoc, buf) && hubDoc.is<JsonArray>())
+            {
+                JsonDocument outDoc;
+                JsonArray outArr = outDoc.to<JsonArray>();
+                for (JsonVariant v : hubDoc.as<JsonArray>())
+                {
+                    if (!v.is<JsonObject>()) continue;
+                    const char *id = v["bridge_device_id"] | v["id"] | "";
+                    if (strcmp(id, getDeviceId()) == 0) continue;
+                    JsonObject obj = outArr.add<JsonObject>();
+                    obj["id"] = id;
+                    obj["name"] = v["name"] | v["device_name"] | id;
+                    if (v.containsKey("slot")) obj["slot"] = v["slot"];
+                }
+                String out;
+                serializeJson(outDoc, out);
+                s_server.sendHeader("Access-Control-Allow-Origin", "*");
+                s_server.send(200, "application/json", out);
+                return;
+            }
+            // Fallback: enviar raw se parse falhar
+            s_server.sendHeader("Access-Control-Allow-Origin", "*");
+            s_server.send(200, "application/json", buf);
+            return;
+        }
+    }
+#endif
+
+    // Fallback: local known_devices.json (also used by ESP-NOW when hub list arrives via MSG_DEVICE_LIST)
     JsonDocument doc;
     devices_load(doc);
     JsonDocument out;
@@ -1318,6 +1406,7 @@ static void handle_api_devices(void)
         obj["name"] = v["name"] | id;
     }
     serializeJson(out, json);
+    s_server.sendHeader("Access-Control-Allow-Origin", "*");
     s_server.send(200, "application/json", json);
 }
 
@@ -1388,8 +1477,21 @@ static void handle_api_timers(void)
             strncpy(s_sync_cfg.target_device_name, tn, sizeof(s_sync_cfg.target_device_name) - 1);
             s_sync_cfg.target_device_name[sizeof(s_sync_cfg.target_device_name) - 1] = '\0';
             sync_save();
+            // Guard: rejeitar sync para si mesmo (causa loop A→B→A)
             if (strlen(s_sync_cfg.target_device_id) > 0)
-                devices_add(s_sync_cfg.target_device_id, s_sync_cfg.target_device_name);
+            {
+                if (strcmp(s_sync_cfg.target_device_id, getDeviceId()) == 0)
+                {
+                    console.printf("[%s] Sync: rejeitado — target é o próprio device (%s)\n", TAG, s_sync_cfg.target_device_id);
+                    s_sync_cfg.enabled = false;
+                    s_sync_cfg.target_device_id[0] = '\0';
+                    sync_save();
+                }
+                else
+                {
+                    devices_add(s_sync_cfg.target_device_id, s_sync_cfg.target_device_name);
+                }
+            }
         }
         if (doc.containsKey("index"))
         {
@@ -1548,7 +1650,10 @@ static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
 static void on_command(uint8_t command)
 {
     console.printf("[%s] Command received: %d\n", TAG, command);
-    set_relay(command == 0x01);
+    // Se comando chegou logo após ter enviado sync (debounce 500ms),
+    // é eco do hub — não re-enviar sync para evitar loop A→B→A
+    bool from_sync = (s_sync_sent_ms > 0 && millis() - s_sync_sent_ms < 500);
+    set_relay(command == 0x01, false, from_sync);
 }
 
 static void on_paired(uint8_t slot)
@@ -1565,6 +1670,47 @@ static void on_restart()
 
 static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 {
+#ifdef ESPNOW_ENABLED
+    // Handle device list broadcast from hub
+    if (data[0] == MSG_DEVICE_LIST && len >= 4)
+    {
+        // Format: [msg_type(1), seq(2), count(1), {mac(6), type(1), slot(1), id_len(1), id, name_len(1), name}...]
+        int pos = 3; // skip msg_type + seq
+        uint8_t count = data[pos++];
+        for (int i = 0; i < count && pos < (int)len; i++)
+        {
+            if (pos + 9 > (int)len) break; // minimum: mac(6)+type+slot+id_len+name_len
+            const uint8_t *dmac = data + pos;
+            (void)dmac; // mac available for future use
+            pos += 6;
+            uint8_t type = data[pos++];
+            uint8_t slot = data[pos++];
+            uint8_t id_len = data[pos++];
+            if (pos + (int)id_len > (int)len) break;
+            char id[33];
+            memcpy(id, data + pos, id_len);
+            id[id_len] = '\0';
+            pos += id_len;
+            uint8_t name_len = data[pos++];
+            if (pos + (int)name_len > (int)len) break;
+            char name[33];
+            memcpy(name, data + pos, name_len);
+            name[name_len] = '\0';
+            pos += name_len;
+
+            devices_add(id, name);
+
+            // Cache sync target slot
+            if (s_sync_cfg.enabled && strcmp(id, s_sync_cfg.target_device_id) == 0)
+            {
+                s_sync_target_slot = slot;
+                console.printf("[%s] Device list: sync target %s -> slot %d\n", TAG, id, slot);
+            }
+        }
+        return; // don't forward as unknown message
+    }
+#endif
+
 #ifdef REPEATER_ENABLED
     if (repeater_is_enabled() && mac_is_nonzero(s_gateway_mac) && !mac_equal(mac, s_gateway_mac))
     {
@@ -1572,6 +1718,13 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
                          repeater_send_adapter, TAG);
     }
 #endif
+}
+
+static void on_time_sync(uint32_t epoch_seconds)
+{
+    s_synced_epoch = epoch_seconds;
+    s_sync_millis = millis();
+    console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
 }
 
 static void on_pairing_failed()
@@ -1702,7 +1855,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed};
+    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed, on_time_sync};
     s_radio.set_pair_interval(ESPNOW_PAIR_INTERVAL_MS);
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);
@@ -1954,11 +2107,63 @@ void loop(void)
             }
             else if (cyc_action == -1)
             {
-                set_relay(false);
+                set_relay(false, true);
                 console.printf("[%s] Cyclic OFF\n", TAG);
             }
         }
     }
+
+    /* Pulse: desligar relé após duração configurada */
+    {
+        int8_t pulse_action = pulse_check(now);
+        if (pulse_action == -1)
+        {
+            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
+            set_relay(false);
+        }
+    }
+
+#ifdef TCP_ENABLED
+    // Periodically fetch device list from hub to cache sync target slot
+    if (s_sync_cfg.enabled && strlen(s_sync_cfg.target_device_id) > 0)
+    {
+        static unsigned long last_device_fetch = 0;
+        if (now - last_device_fetch > 30000 && s_radio.is_paired())
+        {
+            last_device_fetch = now;
+            // Fetch raw sensor list to get slot numbers
+            String resp;
+            if (s_radio.send_to_hub_get("/api/sensors", resp))
+            {
+                JsonDocument doc;
+                if (!deserializeJson(doc, resp))
+                {
+                    JsonArray sensors = doc.as<JsonArray>();
+                    for (JsonVariant v : sensors)
+                    {
+                        if (!v.is<JsonObject>())
+                            continue;
+                        JsonObject obj = v.as<JsonObject>();
+                        bool paired = obj["paired"] | false;
+                        if (!paired)
+                            continue;
+                        const char *id = obj["bridge_device_id"] | "";
+                        if (strcmp(id, s_sync_cfg.target_device_id) == 0)
+                        {
+                            int new_slot = obj["slot"] | -1;
+                            if (new_slot != s_sync_target_slot)
+                            {
+                                console.printf("[%s] Sync: target %s -> slot %d\n", TAG, id, new_slot);
+                            }
+                            s_sync_target_slot = new_slot;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
 
 #ifdef LED_PIN
     static unsigned long last_led = 0;

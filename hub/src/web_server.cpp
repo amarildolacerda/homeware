@@ -11,8 +11,8 @@ extern RadioManager s_radio_mgr;
 #include "platform.h"
 #include "captive_portal.h"
 #include "device_router.h"
-#include <uri/UriBraces.h>
 #include <ArduinoJson.h>
+#include "AsyncJson.h"  // AsyncCallbackJsonWebHandler (JSON POST bodies)
 
 extern bool gateway_ntp_synced();
 extern time_t gateway_ntp_epoch();
@@ -200,56 +200,42 @@ void op_mode_save(int mode) {
         mode == OP_MODE_AP ? "Ponto de Acesso" : "Hibrido");
 }
 
-static void serve_pgm_page(const char* page) {
-    size_t total = strlen_P(page);
-    WiFiClient cl = s_server.client();
-    cl.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "));
-    cl.print(total);
-    cl.print(F("\r\nConnection: close\r\n\r\n"));
-    PGM_P src = page;
-    char buf[256];
-    while (total > 0) {
-        size_t chunk = total > sizeof(buf) ? sizeof(buf) : total;
-        memcpy_P(buf, src, chunk);
-        cl.write((const uint8_t*)buf, chunk);
-        src += chunk;
-        total -= chunk;
-        yield();
-    }
-}
-
 void web_server_init() {
-    s_server.on("/", HTTP_GET, []() {
-        if (s_wifi_config_mode) serve_pgm_page(PAGE_PORTAL);
-        else serve_pgm_page(PAGE_SHELL);
+    s_server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (s_wifi_config_mode) request->send_P(200, "text/html", PAGE_PORTAL);
+        else request->send_P(200, "text/html", PAGE_SHELL);
     });
 
-    s_server.on("/overview", HTTP_GET, []() {
-        serve_pgm_page(PAGE_OVERVIEW);
+    s_server.on("/overview", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_OVERVIEW);
     });
 
-    s_server.on("/settings", HTTP_GET, []() {
-        serve_pgm_page(PAGE_SETTINGS);
+    s_server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_SETTINGS);
     });
 
-    s_server.on("/logs", HTTP_GET, []() {
-        serve_pgm_page(PAGE_LOGS);
+    s_server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_LOGS);
     });
 
-    s_server.on("/api/logs", HTTP_GET, []() {
-        s_server.send(200, "application/json", log_get_json());
+    s_server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_UPDATE);
     });
 
-    s_server.on("/api/logs/clear", HTTP_POST, []() {
+    s_server.on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", log_get_json());
+    });
+
+    s_server.on("/api/logs/clear", HTTP_POST, [](AsyncWebServerRequest *request) {
         log_buffer_clear();
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
-    s_server.on("/docs", HTTP_GET, []() {
-        serve_pgm_page(PAGE_DOCS);
+    s_server.on("/docs", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_DOCS);
     });
-    
-    s_server.on("/api/info", HTTP_GET, []() {
+
+    s_server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["paired_count"] = sensor_registry_count_paired();
         doc["online_count"] = sensor_registry_count_online();
@@ -306,26 +292,22 @@ void web_server_init() {
         }
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/time", HTTP_POST, []() {
-        if (s_server.hasArg("plain")) {
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
-            if (!err && doc["epoch"].is<uint32_t>()) {
-                gateway_set_browser_epoch((time_t)doc["epoch"].as<uint32_t>());
-                console.printf("[TIME] hora ajustada via browser (epoch=%u)\n", doc["epoch"].as<uint32_t>());
-            }
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/time", [](AsyncWebServerRequest *request, JsonVariant json) {
+        if (!json.isNull() && json["epoch"].is<uint32_t>()) {
+            gateway_set_browser_epoch((time_t)json["epoch"].as<uint32_t>());
+            console.printf("[TIME] hora ajustada via browser (epoch=%u)\n", json["epoch"].as<uint32_t>());
         }
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
 
-    
-    s_server.on("/api/sensors", HTTP_GET, []() {
+
+    s_server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
-        
+
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
             if (s && s->paired) {
@@ -341,6 +323,9 @@ void web_server_init() {
                 obj["client_chip"] = s->client_chip;
                 obj["name"] = s->name;
                 obj["bridge_device_id"] = s->bridge_device_id;
+                if (s->fw_version[0]) {
+                    obj["fw_version"] = s->fw_version;
+                }
                 obj["sequence"] = s->sequence;
                 obj["battery_pct"] = s->battery_pct;
                 obj["last_rssi"] = s->last_rssi;
@@ -353,7 +338,7 @@ void web_server_init() {
                     sprintf(ip_str, "%d.%d.%d.%d", s->ip[0], s->ip[1], s->ip[2], s->ip[3]);
                     obj["ip"] = ip_str;
                 }
-                
+
                 JsonObject state = obj["state"].to<JsonObject>();
                 switch (s->type) {
                     case SENSOR_TYPE_TEMP_HUM:
@@ -406,56 +391,65 @@ void web_server_init() {
                 }
             }
         }
-        
+
         String json;
         serializeJson(doc, json);
-        s_server.sendHeader("Access-Control-Allow-Origin", "*");
-        s_server.send(200, "application/json", json);
-    });
-    
-    s_server.on("/api/pair/start", HTTP_POST, []() {
-        if (s_radio_mgr.any_pairing_active()) {
-            s_server.send(409, "application/json", "{\"error\":\"already pairing\"}");
-        } else if (s_radio_mgr.any_start_pairing()) {
-            log_add("info", "Pareamento iniciado");
-            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            s_server.send(400, "application/json", "{\"error\":\"max sensors reached\"}");
-        }
-    });
-    
-    s_server.on("/api/pair/stop", HTTP_POST, []() {
-        s_radio_mgr.all_stop_pairing();
-        log_add("info", "Pareamento finalizado");
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
+        response->addHeader("Access-Control-Allow-Origin", "*");
+        request->send(response);
     });
 
-    s_server.on("/api/clear", HTTP_POST, []() {
+    s_server.on("/api/pair/start", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (s_radio_mgr.any_pairing_active()) {
+            request->send(409, "application/json", "{\"error\":\"already pairing\"}");
+        } else if (s_radio_mgr.any_start_pairing()) {
+            log_add("info", "Pareamento iniciado");
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            request->send(400, "application/json", "{\"error\":\"max sensors reached\"}");
+        }
+    });
+
+    s_server.on("/api/pair/stop", HTTP_POST, [](AsyncWebServerRequest *request) {
+        s_radio_mgr.all_stop_pairing();
+        log_add("info", "Pareamento finalizado");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    s_server.on("/api/clear", HTTP_POST, [](AsyncWebServerRequest *request) {
         sensor_registry_clear_all();
         log_add("warn", "Todos os sensores removidos");
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
-    
-    s_server.on("/api/broadcast", HTTP_POST, []() {
+
+    s_server.on("/api/broadcast", HTTP_POST, [](AsyncWebServerRequest *request) {
         mqtt_client_publish_all();
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
-    
-    s_server.on(UriBraces("/api/sensor/{}/{}"), HTTP_POST, []() {
-        int slot = s_server.pathArg(0).toInt();
-        String action = s_server.pathArg(1);
-        
+
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/sensor/*", [](AsyncWebServerRequest *request, JsonVariant json) {
+        // Parse /api/sensor/{slot}/{action} from URL
+        String url = request->url();
+        int p1 = url.indexOf('/', 11); // slash before slot (after "/api/sensor/")
+        int p2 = url.indexOf('/', p1 + 1);
+        if (p1 < 0 || p2 < 0) {
+            request->send(400, "application/json", "{\"error\":\"invalid path\"}");
+            return;
+        }
+        int slot = url.substring(p1 + 1, p2).toInt();
+        String action = url.substring(p2 + 1);
+
         if (action == "name") {
             JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+            DeserializationError err = deserializeJson(doc, json.as<String>());
             if (err || !doc.containsKey("name")) {
-                s_server.send(400, "application/json", "{\"error\":\"invalid json or missing name\"}");
+                request->send(400, "application/json", "{\"error\":\"invalid json or missing name\"}");
                 return;
             }
             const char *name = doc["name"];
             virtual_sensor_t *s = sensor_registry_get(slot);
             if (!s || !s->paired) {
-                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                request->send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
             strncpy(s->name, name, sizeof(s->name) - 1);
@@ -463,67 +457,67 @@ void web_server_init() {
             sensor_registry_save();
             mqtt_client_publish_discovery(s);
             log_add("info", "Sensor slot %d renomeado para \"%s\"", slot, name);
-            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
         } else if (action == "command") {
             JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+            DeserializationError err = deserializeJson(doc, json.as<String>());
             if (err || !doc.containsKey("state")) {
-                s_server.send(400, "application/json", "{\"error\":\"state required\"}");
+                request->send(400, "application/json", "{\"error\":\"state required\"}");
                 return;
             }
             uint8_t state = doc["state"] ? 1 : 0;
             virtual_sensor_t *s = sensor_registry_get(slot);
             if (!s || !s->paired) {
-                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                request->send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
             if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
-                s_server.send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
+                request->send(400, "application/json", "{\"error\":\"sensor type not supported\"}");
                 return;
             }
             if (device_send_command(s->mac, slot, state)) {
                 log_add("info", "Comando %s enviado para slot %d", state ? "ON" : "OFF", slot);
-                s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
             } else
-                s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
+                request->send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "restart") {
             virtual_sensor_t *s = sensor_registry_get(slot);
             if (!s || !s->paired) {
-                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                request->send(404, "application/json", "{\"error\":\"sensor not found\"}");
                 return;
             }
             if (device_send_restart(s->mac, s->slot)) {
                 log_add("info", "Restart enviado para slot %d", slot);
-                s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
             } else
-                s_server.send(500, "application/json", "{\"error\":\"send failed\"}");
+                request->send(500, "application/json", "{\"error\":\"send failed\"}");
         } else if (action == "remove") {
             if (sensor_registry_remove(slot)) {
                 log_add("warn", "Sensor slot %d removido", slot);
-                s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
             } else {
-                s_server.send(404, "application/json", "{\"error\":\"sensor not found\"}");
+                request->send(404, "application/json", "{\"error\":\"sensor not found\"}");
             }
         } else {
-            s_server.send(404, "application/json", "{\"error\":\"unknown action\"}");
+            request->send(404, "application/json", "{\"error\":\"unknown action\"}");
         }
-    });
-    
-    s_server.on("/api/config/mqtt", HTTP_GET, []() {
+    }));
+
+    s_server.on("/api/config/mqtt", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["host"] = mqtt_client_get_host();
         doc["port"] = mqtt_client_get_port();
         doc["user"] = mqtt_client_get_user();
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/mqtt", HTTP_POST, []() {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/mqtt", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("host") || !doc.containsKey("port")) {
-            s_server.send(400, "application/json", "{\"error\":\"host and port required\"}");
+            request->send(400, "application/json", "{\"error\":\"host and port required\"}");
             return;
         }
         const char *host = doc["host"];
@@ -531,10 +525,10 @@ void web_server_init() {
         const char *user = doc["user"] | "";
         const char *pass = doc["pass"] | "";
         mqtt_client_save_config(host, port, user, pass);
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
 
-    s_server.on("/api/config/wifi", HTTP_GET, []() {
+    s_server.on("/api/config/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
         char ssid[EEPROM_WIFI_SSID_SIZE];
         char pass[EEPROM_WIFI_PASS_SIZE];
         bool have_creds = wifi_creds_load(ssid, pass);
@@ -551,14 +545,14 @@ void web_server_init() {
         doc["dns"] = dns;
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/wifi", HTTP_POST, []() {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/wifi", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("ssid")) {
-            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
         }
         const char *ssid = doc["ssid"];
@@ -569,7 +563,7 @@ void web_server_init() {
         const char *mask = doc["subnet"] | "";
         const char *dns = doc["dns"] | "";
         if (strlen(ssid) == 0) {
-            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
         }
         char cur_ssid[EEPROM_WIFI_SSID_SIZE];
@@ -578,120 +572,116 @@ void web_server_init() {
         const char *pass = (strlen(newpass) > 0) ? newpass : cur_pass;
         wifi_creds_save(ssid, pass);
         wifi_net_save(mode, ip, gw, mask, dns);
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
         delay(300);
         ESP.restart();
-    });
+    }));
 
-    s_server.on("/api/config/pairing", HTTP_GET, []() {
+    s_server.on("/api/config/pairing", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["enabled"] = pairing_config_load();
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/pairing", HTTP_POST, []() {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/pairing", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("enabled")) {
-            s_server.send(400, "application/json", "{\"error\":\"enabled required\"}");
+            request->send(400, "application/json", "{\"error\":\"enabled required\"}");
             return;
         }
         bool enabled = doc["enabled"];
         pairing_config_save(enabled);
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-    });
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
 
-    s_server.on("/api/config/mode", HTTP_GET, []() {
+    s_server.on("/api/config/mode", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["mode"] = op_mode_load();
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
 
-    s_server.on("/api/config/mode", HTTP_POST, []() {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/mode", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("mode")) {
-            s_server.send(400, "application/json", "{\"error\":\"mode required\"}");
+            request->send(400, "application/json", "{\"error\":\"mode required\"}");
             return;
         }
         int mode = doc["mode"];
         if (mode < OP_MODE_TERMINAL || mode > OP_MODE_HYBRID) {
-            s_server.send(400, "application/json", "{\"error\":\"invalid mode (0-2)\"}");
+            request->send(400, "application/json", "{\"error\":\"invalid mode (0-2)\"}");
             return;
         }
         int cur = op_mode_load();
         if (mode == cur) {
-            s_server.send(200, "application/json", "{\"status\":\"no change\"}");
+            request->send(200, "application/json", "{\"status\":\"no change\"}");
             return;
         }
         op_mode_save(mode);
-        s_server.send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
+        request->send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
         delay(300);
         ESP.restart();
-    });
-    
-    s_server.on("/api/restart", HTTP_POST, []() {
+    }));
+
+    s_server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
         log_add("warn", "Reiniciando via web");
-        s_server.send(200, "application/json", "{\"status\":\"restarting\"}");
+        request->send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(500);
         ESP.restart();
     });
-    
-    s_server.on("/update", HTTP_POST, []() {
-        if (Update.hasError()) {
-#ifdef ESP32
-            console.printf("[OTA] Error: %s\n", Update.errorString());
-#else
-            console.printf("[OTA] Error: %s\n", Update.getErrorString().c_str());
-#endif
-            s_server.send(500, "application/json", "{\"status\":\"error\"}");
-            return;
-        }
-        if (!Update.end()) {
-#ifdef ESP32
-            console.printf("[OTA] End failed: %s\n", Update.errorString());
-#else
-            console.printf("[OTA] End failed: %s\n", Update.getErrorString().c_str());
-#endif
-            s_server.send(500, "application/json", "{\"status\":\"error\"}");
-            return;
-        }
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-        delay(500);
-        ESP.restart();
-    }, []() {
-        HTTPUpload &upload = s_server.upload();
-        if (upload.status == UPLOAD_FILE_START) {
-            console.printf("[OTA] Update started: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-            if (!Update.begin(upload.totalSize)) {
+
+    s_server.on("/update", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            bool error = Update.hasError();
+            if (error) {
                 Update.printError(console);
-                console.printf("[OTA] Begin failed (no OTA partition space?)\n");
+                request->send(500, "application/json", "{\"status\":\"error\"}");
+            } else {
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                delay(500);
+                ESP.restart();
             }
-        } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-                console.printf("[OTA] Write failed at %d\n", upload.currentSize);
-                Update.printError(console);
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!index) {
+                console.printf("[OTA] Update started: %s (%d bytes)\n", filename.c_str(), request->contentLength());
+                if (!Update.begin(request->contentLength())) {
+                    Update.printError(console);
+                    console.printf("[OTA] Begin failed (no OTA partition space?)\n");
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    console.printf("[OTA] Write failed at %d\n", index + len);
+                    Update.printError(console);
+                }
+            }
+            if (final) {
+                if (!Update.end()) {
+                    Update.printError(console);
+                }
             }
         }
+    );
+
+    s_server.on("/api/ota", HTTP_POST, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", "{\"status\":\"deprecated\"}");
     });
 
-    s_server.on("/api/ota", HTTP_POST, []() {
-        s_server.send(200, "application/json", "{\"status\":\"deprecated\"}");
-    });
-    
-    s_server.on("/favicon.ico", HTTP_GET, []() {
-        s_server.send(204);
+    s_server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(204);
     });
 
-    s_server.on("/api/portal/setup", HTTP_POST, []() {
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/portal/setup", [](AsyncWebServerRequest *request, JsonVariant json) {
         JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, s_server.arg("plain"));
+        DeserializationError err = deserializeJson(doc, json.as<String>());
         if (err || !doc.containsKey("ssid")) {
-            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
         }
         const char *ssid = doc["ssid"];
@@ -702,11 +692,11 @@ void web_server_init() {
         const char *mask = doc["subnet"] | "";
         const char *dns = doc["dns"] | "";
         if (strlen(ssid) == 0) {
-            s_server.send(400, "application/json", "{\"error\":\"ssid required\"}");
+            request->send(400, "application/json", "{\"error\":\"ssid required\"}");
             return;
         }
         if (mode == WIFI_MODE_STATIC && (strlen(ip) == 0 || strlen(gw) == 0)) {
-            s_server.send(400, "application/json", "{\"error\":\"static ip and gateway required\"}");
+            request->send(400, "application/json", "{\"error\":\"static ip and gateway required\"}");
             return;
         }
         const char *mqtt_host = doc["mqtt_host"] | "";
@@ -718,10 +708,10 @@ void web_server_init() {
         }
         wifi_creds_save(ssid, pass);
         wifi_net_save(mode, ip, gw, mask, dns);
-        s_server.send(200, "application/json", "{\"status\":\"ok\"}");
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
         captive_portal_set_submitted();
-    });
-    s_server.on("/api/portal/scan", HTTP_GET, []() {
+    }));
+    s_server.on("/api/portal/scan", HTTP_GET, [](AsyncWebServerRequest *request) {
         int n = WiFi.scanNetworks();
         const int MAX_NET = 64;
         String ssids[MAX_NET];
@@ -762,22 +752,20 @@ void web_server_init() {
         WiFi.scanDelete();
         String json;
         serializeJson(doc, json);
-        s_server.send(200, "application/json", json);
+        request->send(200, "application/json", json);
     });
-    auto portal_redirect = []() {
-        s_server.sendHeader("Location", "/");
-        s_server.send(302, "text/plain", "");
+    auto portal_redirect = [](AsyncWebServerRequest *request) {
+        request->redirect("/");
     };
     s_server.on("/generate_204", HTTP_GET, portal_redirect);
     s_server.on("/hotspot-detect.html", HTTP_GET, portal_redirect);
     s_server.on("/ncsi.txt", HTTP_GET, portal_redirect);
     s_server.on("/success.html", HTTP_GET, portal_redirect);
-    s_server.onNotFound([]() {
+    s_server.onNotFound([](AsyncWebServerRequest *request) {
         if (s_wifi_config_mode) {
-            s_server.sendHeader("Location", "/");
-            s_server.send(302, "text/plain", "");
+            request->redirect("/");
         } else {
-            s_server.send(404, "text/plain", "Not found");
+            request->send(404, "text/plain", "Not found");
         }
     });
 
@@ -786,8 +774,7 @@ void web_server_init() {
 }
 
 void web_server_loop() {
-    s_server.handleClient();
-
+    // No handleClient() needed — async server handles requests automatically
     if (s_wifi_config_mode) captive_dns_poll();
 
     if (s_wifi_config_mode && millis() - s_wifi_config_start > 300000) {
@@ -797,7 +784,7 @@ void web_server_loop() {
 }
 
 void web_server_handle_client() {
-    s_server.handleClient();
+    // No-op: async server does not require polling
 }
 
 bool web_server_wifi_setup(bool force_portal) {

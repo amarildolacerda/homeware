@@ -57,7 +57,8 @@ void captive_portal_set_submitted() {
 
 void captive_portal_run() {
     while (true) {
-        web_server_handle_client();
+        // No web_server_handle_client() needed — async server handles
+        // requests automatically on its own FreeRTOS task.
         captive_dns_poll();
         if (s_submitted) {
             console.println("[PORTAL] Config salva, reiniciando...");

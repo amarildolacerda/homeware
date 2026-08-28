@@ -12,6 +12,8 @@
 
 #ifdef TCP_ENABLED
 
+static const int TCP_PENDING_STATE_MAX = 32;
+
 struct PendingCommand {
     String command;
     uint8_t slot;
@@ -40,6 +42,7 @@ public:
     uint8_t* get_radio_mac() override { return nullptr; }
     void announce() override;
     void broadcast_time_sync(uint32_t epoch_seconds) override;
+    void broadcast_device_list() override;
 
     bool send_command(const uint8_t* mac, uint8_t state) override;
     bool send_restart(const uint8_t* mac) override;
@@ -48,6 +51,9 @@ public:
     void handle_state(const char* device_id, JsonObject& state);
     void handle_heartbeat(const char* device_id);
     bool handle_command_get(const char* device_id, JsonObject& response);
+
+    void queue_bridge_state(int slot);
+    void process_bridge_queue();
 
 public:
     static TcpRadioHandler* s_self;
@@ -58,9 +64,14 @@ private:
     unsigned long m_rx_count = 0;
     unsigned long m_ack_count = 0;
     unsigned long m_crc_errors = 0;
+    uint32_t m_time_sync_epoch = 0;
 
     WiFiUDP m_udp;
     std::map<std::string, std::vector<PendingCommand>> m_pending_commands;
+
+    int m_pending_state_head = 0;
+    int m_pending_state_tail = 0;
+    int m_pending_state_slots[TCP_PENDING_STATE_MAX];
 
     void handle_udp_discover();
     void cleanup_expired_commands();
@@ -91,6 +102,7 @@ public:
     uint8_t* get_radio_mac() override { return nullptr; }
     void announce() override {}
     void broadcast_time_sync(uint32_t) override {}
+    void broadcast_device_list() override {}
     bool send_command(const uint8_t*, uint8_t) override { return false; }
     bool send_restart(const uint8_t*) override { return false; }
 };
