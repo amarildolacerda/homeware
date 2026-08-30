@@ -63,6 +63,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
 bool sensor_registry_remove(int slot);
 bool sensor_registry_update_state(int slot, const espnow_header_t *header, const uint8_t *payload, size_t payload_len);
 bool sensor_registry_save();
+void sensor_registry_flush_if_dirty();
 void sensor_registry_load();
 void sensor_registry_clear_all();
 void sensor_registry_print_all();

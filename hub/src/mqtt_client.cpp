@@ -1,8 +1,8 @@
 #include "mqtt_client.h"
 #include "config.h"
+#include "config_store.h"
 #include "sensor_registry.h"
 #include "platform.h"
-#include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
 #include "common_console.h"
@@ -143,66 +143,38 @@ static void publish_entity_state(const char *component, const char *entity_id, c
     s_mqtt.publish(topic, value, false);
 }
 
-// Load a NUL-terminated printable-ASCII string from EEPROM. Returns false
-// (and leaves buf empty) if the region holds garbage: no terminator within
-// buflen, or any non-printable byte before the terminator. This prevents
-// corrupted EEPROM data from leaking control characters into JSON responses.
-static bool eeprom_read_string(uint16_t offset, char *buf, size_t buflen) {
-    bool terminated = false;
-    for (size_t i = 0; i < buflen - 1; i++) {
-        char c = EEPROM.read(offset + i);
-        if (c == 0) { terminated = true; break; }
-        if (c < 0x20 || c > 0x7E) { terminated = false; break; }
-        buf[i] = c;
-    }
-    buf[buflen - 1] = '\0';
-    return terminated && strlen(buf) > 0;
-}
-
 bool mqtt_client_load_config() {
-    EEPROM.begin(EEPROM_SIZE);
-
-    if (!eeprom_read_string(EEPROM_MQTT_HOST_OFFSET, s_mqtt_host, sizeof(s_mqtt_host))) {
+    MQTTConfig cfg;
+    if (config_mqtt_load(&cfg)) {
+        strncpy(s_mqtt_host, cfg.host, sizeof(s_mqtt_host) - 1);
+        s_mqtt_host[sizeof(s_mqtt_host) - 1] = '\0';
+        s_mqtt_port = cfg.port;
+        strncpy(s_mqtt_user, cfg.user, sizeof(s_mqtt_user) - 1);
+        s_mqtt_user[sizeof(s_mqtt_user) - 1] = '\0';
+        strncpy(s_mqtt_pass, cfg.password, sizeof(s_mqtt_pass) - 1);
+        s_mqtt_pass[sizeof(s_mqtt_pass) - 1] = '\0';
+    } else {
         strcpy(s_mqtt_host, MQTT_HOST_DEFAULT);
-    }
-
-    uint16_t port = 0;
-    EEPROM.get(EEPROM_MQTT_PORT_OFFSET, port);
-    if (port > 0 && port < 65535) {
-        s_mqtt_port = port;
-    }
-
-    if (!eeprom_read_string(EEPROM_MQTT_USER_OFFSET, s_mqtt_user, sizeof(s_mqtt_user))) {
+        s_mqtt_port = MQTT_PORT_DEFAULT;
         s_mqtt_user[0] = '\0';
-    }
-
-    if (!eeprom_read_string(EEPROM_MQTT_PASS_OFFSET, s_mqtt_pass, sizeof(s_mqtt_pass))) {
         s_mqtt_pass[0] = '\0';
     }
-
-    EEPROM.end();
 
     console.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
     return true;
 }
 
 bool mqtt_client_save_config(const char *host, uint16_t port, const char *user, const char *pass) {
-    EEPROM.begin(EEPROM_SIZE);
+    MQTTConfig cfg;
+    strncpy(cfg.host, host, sizeof(cfg.host) - 1);
+    cfg.host[sizeof(cfg.host) - 1] = '\0';
+    cfg.port = port;
+    strncpy(cfg.user, user, sizeof(cfg.user) - 1);
+    cfg.user[sizeof(cfg.user) - 1] = '\0';
+    strncpy(cfg.password, pass, sizeof(cfg.password) - 1);
+    cfg.password[sizeof(cfg.password) - 1] = '\0';
 
-    for (int i = 0; i < 64; i++) {
-        EEPROM.write(EEPROM_MQTT_HOST_OFFSET + i, i < (int)strlen(host) ? host[i] : 0);
-    }
-    EEPROM.put(EEPROM_MQTT_PORT_OFFSET, port);
-
-    for (int i = 0; i < 32; i++) {
-        EEPROM.write(EEPROM_MQTT_USER_OFFSET + i, i < (int)strlen(user) ? user[i] : 0);
-    }
-    for (int i = 0; i < 32; i++) {
-        EEPROM.write(EEPROM_MQTT_PASS_OFFSET + i, i < (int)strlen(pass) ? pass[i] : 0);
-    }
-
-    EEPROM.commit();
-    EEPROM.end();
+    bool ok = config_mqtt_save(&cfg);
 
     strcpy(s_mqtt_host, host);
     s_mqtt_port = port;

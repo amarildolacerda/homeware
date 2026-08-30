@@ -1,16 +1,16 @@
 #include "sensor_registry.h"
 #include "config.h"
-#include <EEPROM.h>
+#include "config_store.h"
 #include <Arduino.h>
 #include "common_console.h"
 
 static virtual_sensor_t s_sensors[MAX_VIRTUAL_SENSORS];
 static bool s_initialized = false;
+static bool s_dirty = false;
 
 bool sensor_registry_init() {
-    EEPROM.begin(EEPROM_SIZE);
+    config_store_init();
     sensor_registry_load();
-    EEPROM.end();
     s_initialized = true;
     console.printf("[Gateway] Sensor registry initialized: %d paired\n", sensor_registry_count_paired());
     return true;
@@ -93,7 +93,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     }
     s->name[sizeof(s->name) - 1] = '\0';
 
-    sensor_registry_save();
+    s_dirty = true;
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     console.printf("[Gateway] Added sensor slot %d: MAC=%s type=%d\n",
@@ -115,7 +115,7 @@ bool sensor_registry_remove(int slot) {
     console.printf("[Gateway] Removing sensor slot %d: %s (%s)\n",
                    slot, s_sensors[slot].name, s_sensors[slot].bridge_device_id);
     memset(&s_sensors[slot], 0, sizeof(virtual_sensor_t));
-    sensor_registry_save();
+    s_dirty = true;
     return true;
 }
 
@@ -246,104 +246,63 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
 }
 
 bool sensor_registry_save() {
-    console.println("[EEPROM] Saving sensors...");
-    EEPROM.begin(EEPROM_SIZE);
+    SensorSlot slots[MAX_VIRTUAL_SENSORS];
+    memset(slots, 0, sizeof(slots));
+
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        int addr = EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE;
-        uint8_t marker = s_sensors[i].paired ? 0xAA : 0x00;
-        EEPROM.write(addr, marker);
-        if (s_sensors[i].paired) {
-            EEPROM.write(addr + 1, s_sensors[i].type);
-            EEPROM.write(addr + 2, s_sensors[i].slot);
-            for (int j = 0; j < 6; j++) EEPROM.write(addr + 3 + j, s_sensors[i].mac[j]);
-            for (int j = 0; j < 32; j++) {
-                if (j < (int)strlen(s_sensors[i].name))
-                    EEPROM.write(addr + 9 + j, s_sensors[i].name[j]);
-                else
-                    EEPROM.write(addr + 9 + j, 0);
-            }
-            EEPROM.write(addr + 41, s_sensors[i].client_chip);
-            EEPROM.write(addr + 42, s_sensors[i].radio_type);
-            for (int j = 0; j < EEPROM_SENSOR_BRIDGE_ID_SIZE; j++) {
-                if (j < (int)strlen(s_sensors[i].bridge_device_id))
-                    EEPROM.write(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j, s_sensors[i].bridge_device_id[j]);
-                else
-                    EEPROM.write(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j, 0);
-            }
-            console.printf("[EEPROM] Saved slot %d marker=0x%02X at addr=%d\n", i, marker, addr);
-        }
+        slots[i].paired      = s_sensors[i].paired;
+        slots[i].sensor_type = s_sensors[i].type;
+        slots[i].slot        = s_sensors[i].slot;
+        memcpy(slots[i].mac, s_sensors[i].mac, 6);
+        strncpy(slots[i].name, s_sensors[i].name, sizeof(slots[i].name) - 1);
+        slots[i].client_chip = s_sensors[i].client_chip;
+        slots[i].radio_type  = s_sensors[i].radio_type;
+        strncpy(slots[i].bridge_device_id, s_sensors[i].bridge_device_id, sizeof(slots[i].bridge_device_id) - 1);
     }
-    bool ok = EEPROM.commit();
-    EEPROM.end();
-    console.printf("[EEPROM] commit=%s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
+
+    bool ok = config_sensors_save(slots, MAX_VIRTUAL_SENSORS);
+    console.printf("[CFG] Sensors saved: %s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
+    s_dirty = false;
     return ok;
 }
 
+void sensor_registry_flush_if_dirty() {
+    if (s_dirty) sensor_registry_save();
+}
+
 void sensor_registry_load() {
-    console.print("[EEPROM] Dump markers:");
-    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        uint8_t m = EEPROM.read(EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE);
-        console.printf(" %02X", m);
+    SensorSlot slots[MAX_VIRTUAL_SENSORS];
+    if (!config_sensors_load(slots, MAX_VIRTUAL_SENSORS)) {
+        console.println("[CFG] No saved sensors found");
+        return;
     }
-    console.println();
+
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        int addr = EEPROM_SENSOR_BASE + i * EEPROM_SENSOR_SIZE;
-        uint8_t marker = EEPROM.read(addr);
-        if (marker == 0xAA) {
-            uint8_t type = EEPROM.read(addr + 1);
-            uint8_t slot = EEPROM.read(addr + 2);
-            // Skip corrupt entries: an invalid sensor type or an out-of-range
-            // slot indicates garbage in EEPROM (e.g. from a different firmware
-            // layout). Loading it would produce junk cards / invalid data.
-            if (type < SENSOR_TYPE_TEMP_HUM || type > SENSOR_TYPE_SOIL_MOISTURE ||
-                slot >= MAX_VIRTUAL_SENSORS) {
-                console.printf("[EEPROM] Skipping corrupt entry at index %d (type=%d slot=%d)\n",
-                               i, type, slot);
-                continue;
-            }
-            s_sensors[i].paired = true;
-            s_sensors[i].type = type;
-            s_sensors[i].slot = slot;
-            for (int j = 0; j < 6; j++) s_sensors[i].mac[j] = EEPROM.read(addr + 3 + j);
-            char name[33] = {0};
-            int name_len = 0;
-            for (int j = 0; j < 32; j++) {
-                uint8_t c = EEPROM.read(addr + 9 + j);
-                if (c == 0) break;
-                if (c < 32 || c > 126) break;
-                name[j] = (char)c;
-                name_len = j + 1;
-            }
-            name[name_len] = 0;
-            strncpy(s_sensors[i].name, name, sizeof(s_sensors[i].name) - 1);
-            s_sensors[i].sequence = 0;
-            s_sensors[i].battery_pct = 100;
-            s_sensors[i].last_rssi = -127;
-            s_sensors[i].last_seen = 0;
-            s_sensors[i].online = false;
-            s_sensors[i].client_chip = EEPROM.read(addr + 41);
-            s_sensors[i].radio_type = EEPROM.read(addr + 42);
-            // Load bridge_device_id from EEPROM
-            char bid[EEPROM_SENSOR_BRIDGE_ID_SIZE + 1] = {0};
-            int bid_len = 0;
-            for (int j = 0; j < EEPROM_SENSOR_BRIDGE_ID_SIZE; j++) {
-                uint8_t c = EEPROM.read(addr + EEPROM_SENSOR_BRIDGE_ID_OFFSET + j);
-                if (c == 0) break;
-                if (c < 32 || c > 126) break;
-                bid[j] = (char)c;
-                bid_len = j + 1;
-            }
-            bid[bid_len] = 0;
-            if (bid_len > 0) {
-                strncpy(s_sensors[i].bridge_device_id, bid, sizeof(s_sensors[i].bridge_device_id) - 1);
-                s_sensors[i].bridge_device_id[sizeof(s_sensors[i].bridge_device_id) - 1] = '\0';
-            } else {
-                snprintf(s_sensors[i].bridge_device_id, sizeof(s_sensors[i].bridge_device_id),
-                         "gw_%02X%02X%02X_%d",
-                          s_sensors[i].mac[3], s_sensors[i].mac[4], s_sensors[i].mac[5], i);
-            }
-            memset(&s_sensors[i].state, 0, sizeof(s_sensors[i].state));
+        if (!slots[i].paired) continue;
+
+        virtual_sensor_t *s = &s_sensors[i];
+        s->paired      = true;
+        s->type        = slots[i].sensor_type;
+        s->slot        = slots[i].slot;
+        memcpy(s->mac, slots[i].mac, 6);
+        strncpy(s->name, slots[i].name, sizeof(s->name) - 1);
+        s->client_chip = slots[i].client_chip;
+        s->radio_type  = slots[i].radio_type;
+        s->sequence    = 0;
+        s->battery_pct = 100;
+        s->last_rssi   = -127;
+        s->last_seen   = 0;
+        s->online      = false;
+        memset(&s->state, 0, sizeof(s->state));
+
+        if (strlen(slots[i].bridge_device_id) > 0) {
+            strncpy(s->bridge_device_id, slots[i].bridge_device_id, sizeof(s->bridge_device_id) - 1);
+        } else {
+            snprintf(s->bridge_device_id, sizeof(s->bridge_device_id),
+                     "gw_%02X%02X%02X_%d", s->mac[3], s->mac[4], s->mac[5], i);
         }
+
+        console.printf("[CFG] Loaded slot %d: %s (type=%d)\n", i, s->name, s->type);
     }
 }
 
@@ -351,7 +310,7 @@ void sensor_registry_clear_all() {
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         memset(&s_sensors[i], 0, sizeof(virtual_sensor_t));
     }
-    sensor_registry_save();
+    s_dirty = true;
     console.println("[Gateway] All sensors cleared");
 }
 

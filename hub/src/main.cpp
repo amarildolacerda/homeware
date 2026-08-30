@@ -369,6 +369,7 @@ void setup() {
 
 void loop() {
     console.loop();
+    sensor_registry_flush_if_dirty();
 
     // Watchdog: only in Terminal and Hybrid (with STA connected)
     // A prova de flip-flop: so (re)arma apos 60s saudaveis continuos; um pico
