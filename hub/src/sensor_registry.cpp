@@ -361,8 +361,12 @@ void sensor_registry_print_all() {
         if (s_sensors[i].paired) {
             char mac_str[18];
             mac_to_str(s_sensors[i].mac, mac_str, sizeof(mac_str));
-            console.printf("  Slot %d: %s | MAC=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
-                          i, s_sensors[i].name, mac_str, s_sensors[i].type,
+            char ip_str[16];
+            snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
+                     s_sensors[i].ip[0], s_sensors[i].ip[1],
+                     s_sensors[i].ip[2], s_sensors[i].ip[3]);
+            console.printf("  Slot %d: %s | MAC=%s | IP=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
+                          i, s_sensors[i].name, mac_str, ip_str, s_sensors[i].type,
                           s_sensors[i].sequence, s_sensors[i].battery_pct,
                           s_sensors[i].last_rssi, s_sensors[i].online ? "Yes" : "No");
         }

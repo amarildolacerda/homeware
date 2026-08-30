@@ -1,11 +1,11 @@
 #include "telegram_bot.h"
 #include "config.h"
+#include "config_store.h"
 #include "sensor_registry.h"
 #include "device_router.h"
 #include "mqtt_client.h"
 #include "common_console.h"
 #include "platform.h"
-#include <EEPROM.h>
 
 #if defined(TELEGRAM_ENABLED)
 
@@ -17,8 +17,8 @@ static bool s_tg_enabled = false;
 static bool s_tg_initialized = false;
 static unsigned long s_tg_last_poll = 0;
 static uint32_t s_tg_poll_interval = 2000;
-static char s_tg_token[EEPROM_TELEGRAM_TOKEN_SIZE];
-static char s_tg_chatid[EEPROM_TELEGRAM_CHATID_SIZE];
+static char s_tg_token[64];
+static char s_tg_chatid[20];
 static uint8_t s_tg_alerts_lvl = 0x0F;
 static uint16_t s_tg_alerts_type = 0x03FF;
 
@@ -52,35 +52,19 @@ static UniversalTelegramBot* s_tg_bot = nullptr;
 static long s_tg_authorized_users[4] = {0};
 static int s_tg_num_authorized = 0;
 
-// Load configuration from EEPROM
+// Load configuration from LittleFS
 static void telegram_load_config() {
-    EEPROM.begin(EEPROM_SIZE);
-    s_tg_enabled = EEPROM.read(EEPROM_TELEGRAM_EN_OFFSET) == 1;
+    TelegramConfig cfg;
+    config_telegram_load(&cfg);
     
-    for (int i = 0; i < EEPROM_TELEGRAM_TOKEN_SIZE - 1; i++) {
-        uint8_t c = EEPROM.read(EEPROM_TELEGRAM_TOKEN_OFFSET + i);
-        s_tg_token[i] = (c >= 32 && c <= 126) ? c : 0;
-        if (c == 0) break;
-    }
-    s_tg_token[EEPROM_TELEGRAM_TOKEN_SIZE - 1] = '\0';
-    
-    for (int i = 0; i < EEPROM_TELEGRAM_CHATID_SIZE - 1; i++) {
-        uint8_t c = EEPROM.read(EEPROM_TELEGRAM_CHATID_OFFSET + i);
-        s_tg_chatid[i] = (c >= 32 && c <= 126) ? c : 0;
-        if (c == 0) break;
-    }
-    s_tg_chatid[EEPROM_TELEGRAM_CHATID_SIZE - 1] = '\0';
-    
-    EEPROM.get(EEPROM_TELEGRAM_POLL_OFFSET, s_tg_poll_interval);
-    if (s_tg_poll_interval < 1000 || s_tg_poll_interval > 60000) s_tg_poll_interval = 2000;
-    
-    s_tg_alerts_lvl = EEPROM.read(EEPROM_TELEGRAM_ALERTS_LVL_OFFSET);
-    if (s_tg_alerts_lvl > 0x0F) s_tg_alerts_lvl = 0x0F;
-    
-    EEPROM.get(EEPROM_TELEGRAM_ALERTS_TYPE_OFFSET, s_tg_alerts_type);
-    if (s_tg_alerts_type > 0x03FF) s_tg_alerts_type = 0x03FF;
-    
-    EEPROM.end();
+    s_tg_enabled = cfg.enabled;
+    strncpy(s_tg_token, cfg.token, sizeof(s_tg_token) - 1);
+    s_tg_token[sizeof(s_tg_token) - 1] = '\0';
+    strncpy(s_tg_chatid, cfg.chat_id, sizeof(s_tg_chatid) - 1);
+    s_tg_chatid[sizeof(s_tg_chatid) - 1] = '\0';
+    s_tg_poll_interval = cfg.poll_interval;
+    s_tg_alerts_lvl = cfg.alerts_level;
+    s_tg_alerts_type = cfg.alerts_type;
     
     // Parse chat ID as authorized user
     if (strlen(s_tg_chatid) > 0) {
@@ -399,6 +383,20 @@ void telegram_bot_init() {
     
     if (!s_tg_enabled || strlen(s_tg_token) == 0) {
         console.println("[TELEGRAM] Bot disabled or no token configured");
+        return;
+    }
+    
+    // Validate token format (must contain ':' and be longer than 20 chars)
+    if (strlen(s_tg_token) < 20 || strchr(s_tg_token, ':') == nullptr) {
+        console.printf("[TELEGRAM] Invalid token format (len=%d), skipping init\n", strlen(s_tg_token));
+        s_tg_enabled = false;
+        return;
+    }
+    
+    // Validate chat_id (must be numeric)
+    if (strlen(s_tg_chatid) == 0 || atol(s_tg_chatid) == 0) {
+        console.printf("[TELEGRAM] Invalid chat_id: '%s', skipping init\n", s_tg_chatid);
+        s_tg_enabled = false;
         return;
     }
     

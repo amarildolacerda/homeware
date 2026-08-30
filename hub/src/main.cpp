@@ -26,6 +26,7 @@
 #include "common_watchdog.h"
 #include "device_router.h"
 #include "telegram_bot.h"
+#include "config_store.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
 
@@ -60,13 +61,13 @@ void print_help() {
     console.println("\n=== Comandos ===");
     console.println("  h/?  - Esta ajuda");
     console.println("  l    - Listar sensores pareados");
-    console.printf("  p    - Iniciar modo pareamento (%us)\n", PAIRING_WINDOW_MS / 1000);
+    console.printf( "  p    - Iniciar modo pareamento (%us)\n", PAIRING_WINDOW_MS / 1000);
     console.println("  c    - Limpar TODOS os sensores");
     console.println("  r    - Reiniciar");
     console.println("  b    - Publicar todos os sensores via MQTT");
     console.println("  s    - Status do gateway");
     console.println("  w    - Forçar portal WiFi");
-    console.printf("  m    - Modo de operacao (atual: %d)\n", op_mode_load());
+    console.printf( "  m    - Modo de operacao (atual: %d)\n", op_mode_load());
     console.println("  m 0  - Terminal | m 1 - AP | m 2 - Hibrido");
     console.println("================\n");
 }
@@ -299,6 +300,7 @@ void setup() {
     console.printf("============================================\n");
     
     sensor_registry_init();
+    config_store_init();
     mqtt_client_load_config();
     mqtt_client_generate_device_ids();
     // Watchdog de RX: arma apos 60s saudaveis continuos, reinicia apos 5min
