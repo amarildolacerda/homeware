@@ -4,6 +4,8 @@
 #include "radio_interface.h"
 #include "lora_spi_radio.h"
 #include "lora_protocol.h"
+#include "sensor_registry.h"
+#include "config.h"
 
 class LoraHandler : public RadioInterface {
 public:
@@ -18,6 +20,7 @@ public:
         m_radio.set_rx_callback(cb, arg);
     }
 private:
+    void check_offline_sensors();
     LoraSpiRadio m_radio;
 };
 

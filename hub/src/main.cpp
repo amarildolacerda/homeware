@@ -224,6 +224,10 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
                     strncpy(dev_name, req->device_name, sizeof(dev_name) - 1);
                 }
                 sensor_registry_add(frame->sensor_id, sensor_type, slot, dev_name, HW_CHIP_UNKNOWN, RADIO_LORA);
+                if (mqtt_client_is_connected()) {
+                    mqtt_client_publish_discovery(sensor_registry_get(slot));
+                    mqtt_client_publish_availability(sensor_registry_get(slot), true);
+                }
             }
             lora_pair_response_t resp;
             memset(&resp, 0, sizeof(resp));
@@ -237,12 +241,17 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
         }
         case MSG_SENSOR_DATA: {
             if (slot >= 0) {
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                bool was_offline = s && !s->online;
                 espnow_header_t hdr;
                 memset(&hdr, 0, sizeof(hdr));
                 hdr.sequence = frame->sequence;
                 hdr.rssi = rssi;
                 hdr.payload_len = frame->payload_len;
                 sensor_registry_update_state(slot, &hdr, frame->payload, frame->payload_len);
+                if (was_offline && s && mqtt_client_is_connected()) {
+                    mqtt_client_publish_availability(s, true);
+                }
                 queue_bridge_state(slot);
             }
             break;
@@ -251,8 +260,12 @@ static void lora_rx_cb(const uint8_t* data, size_t len, int16_t rssi, void* arg)
             if (slot >= 0) {
                 virtual_sensor_t *s = sensor_registry_get(slot);
                 if (s) {
+                    bool was_offline = !s->online;
                     s->last_seen = millis();
                     s->online = true;
+                    if (was_offline && mqtt_client_is_connected()) {
+                        mqtt_client_publish_availability(s, true);
+                    }
                 }
             }
             break;

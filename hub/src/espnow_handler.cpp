@@ -98,8 +98,10 @@ void EspnowHandler::loop() {
             mac_to_str(m_pending_pairs[i].mac, mac_str, sizeof(mac_str));
             log_add("info", "Sensor %s pareado slot %d", mac_str, free_slot);
         }
-        if (mqtt_client_is_connected())
+        if (mqtt_client_is_connected()) {
             mqtt_client_publish_discovery(sensor_registry_get(free_slot));
+            mqtt_client_publish_availability(sensor_registry_get(free_slot), true);
+        }
 
         char pending_mac_str[18];
         mac_to_str(m_pending_pairs[i].mac, pending_mac_str, sizeof(pending_mac_str));
@@ -121,6 +123,8 @@ void EspnowHandler::loop() {
                     s->online = false;
                     log_add("warn", "Sensor slot %d offline", i);
                     console.printf("[ESP-NOW] Sensor slot %d offline (last seen %lu ms ago)\n", i, elapsed);
+                    if (mqtt_client_is_connected())
+                        mqtt_client_publish_availability(s, false);
                 }
             }
         }
@@ -489,7 +493,12 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                     send_ack(mac, hdr->sequence, PAIR_STATUS_DENIED, 0xFF);
                     return;
                 }
+                virtual_sensor_t *s = sensor_registry_get(slot);
+                bool was_offline = s && !s->online;
                 sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
+                if (was_offline && s && mqtt_client_is_connected()) {
+                    mqtt_client_publish_availability(s, true);
+                }
                 send_ack(mac, hdr->sequence, PAIR_STATUS_OK, slot);
                 log_add("info", "Dados recebidos slot %d seq %d", slot, hdr->sequence);
                 m_ack_count++;
@@ -497,8 +506,12 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             } else {
                 if (slot >= 0) {
                     virtual_sensor_t *s = sensor_registry_get(slot);
+                    bool was_offline = !s->online;
                     s->last_seen = millis();
                     s->online = true;
+                    if (was_offline && mqtt_client_is_connected()) {
+                        mqtt_client_publish_availability(s, true);
+                    }
                     // Extract node IP from heartbeat
                     if (hdr->ip[0] != 0 || hdr->ip[1] != 0 || hdr->ip[2] != 0 || hdr->ip[3] != 0) {
                         memcpy(s->ip, hdr->ip, 4);
