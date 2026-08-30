@@ -102,11 +102,11 @@
 #endif
 
 #ifndef EEPROM_TIMEZONE_ADDR
-#define EEPROM_TIMEZONE_ADDR 160
+#define EEPROM_TIMEZONE_ADDR 170
 #endif
 
 #ifndef EEPROM_TIMER_BASE
-#define EEPROM_TIMER_BASE 161
+#define EEPROM_TIMER_BASE 171
 #endif
 
 #ifndef EEPROM_SIZE
@@ -117,7 +117,7 @@
 #define OP_MODE_TERMINAL 0
 #define OP_MODE_AP       1
 #define OP_MODE_HYBRID   2
-#define EEPROM_OP_MODE_ADDR 201
+#define EEPROM_OP_MODE_ADDR 202
 
 /* Pinos GPIO disponiveis para configuracao do relé */
 #ifdef ESP01S

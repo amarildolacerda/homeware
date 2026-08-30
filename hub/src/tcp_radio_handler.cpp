@@ -180,6 +180,29 @@ void TcpRadioHandler::loop() {
     handle_udp_discover();
     cleanup_expired_commands();
     process_bridge_queue();
+
+    // Check for TCP nodes that haven't reported in and mark them offline.
+    // TCP nodes poll for commands every ~1s and send heartbeat/state every
+    // 30-60s, so SENSOR_TIMEOUT_MS (300s) is a safe threshold.
+    static unsigned long s_last_timeout_check = 0;
+    unsigned long now = millis();
+    if (now - s_last_timeout_check > 30000) {
+        s_last_timeout_check = now;
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *s = sensor_registry_get(i);
+            if (s && s->paired && s->radio_type == RADIO_TCP && s->online) {
+                unsigned long elapsed = now - s->last_seen;
+                if (elapsed > SENSOR_TIMEOUT_MS) {
+                    s->online = false;
+                    log_add("warn", "TCP sensor slot %d offline", i);
+                    console.printf("[tcp] Sensor slot %d offline (last seen %lu ms ago)\n", i, elapsed);
+                    if (mqtt_client_is_connected()) {
+                        mqtt_client_publish_availability(s, false);
+                    }
+                }
+            }
+        }
+    }
 }
 
 bool TcpRadioHandler::is_ready() const {
@@ -268,8 +291,12 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         console.printf("[tcp] Device %s already registered at slot %d, fw=%s\n", device_id, slot, fw_version ? fw_version : "unknown");
         virtual_sensor_t* sensor = sensor_registry_get(slot);
         if (sensor) {
+            bool was_offline = !sensor->online;
             sensor->online = true;
             sensor->last_seen = millis();
+            if (was_offline && mqtt_client_is_connected()) {
+                mqtt_client_publish_availability(sensor, true);
+            }
             // refresh type/mac/radio/name in place
             sensor->type = sensor_type;
             if (device_name && strlen(device_name) > 0) {
@@ -318,6 +345,12 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
     }
 
     console.printf("[tcp] Device %s registered at slot %d (type %d, fw=%s)\n", device_id, slot, sensor_type, fw_version ? fw_version : "unknown");
+
+    // Publish discovery + online availability for the new sensor
+    if (mqtt_client_is_connected()) {
+        mqtt_client_publish_discovery(sensor_registry_get(slot));
+        mqtt_client_publish_availability(sensor_registry_get(slot), true);
+    }
 }
 
 void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
@@ -380,9 +413,14 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             break;
     }
 
+    bool was_offline = !sensor->online;
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;
+
+    if (was_offline && mqtt_client_is_connected()) {
+        mqtt_client_publish_availability(sensor, true);
+    }
 
     /* Feedback to HA: the ESP-NOW path bridges state via queue_bridge_state()
        -> process_bridge_queue() -> mqtt_client_publish_state(); without the
@@ -400,9 +438,14 @@ void TcpRadioHandler::handle_heartbeat(const char* device_id) {
     virtual_sensor_t* sensor = sensor_registry_get(slot);
     if (!sensor) return;
 
+    bool was_offline = !sensor->online;
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;
+
+    if (was_offline && mqtt_client_is_connected()) {
+        mqtt_client_publish_availability(sensor, true);
+    }
 }
 
 void TcpRadioHandler::queue_bridge_state(int slot) {

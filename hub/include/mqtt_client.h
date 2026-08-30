@@ -19,6 +19,8 @@ void mqtt_client_loop();
 bool mqtt_client_publish_discovery(virtual_sensor_t *sensor);
 bool mqtt_client_publish_state(virtual_sensor_t *sensor);
 bool mqtt_client_publish_all();
+bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online);
+void mqtt_client_publish_offline_all();
 void mqtt_client_generate_device_ids();
 const char* get_gateway_device_id();
 

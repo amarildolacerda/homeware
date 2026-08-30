@@ -597,6 +597,133 @@ void web_server_init() {
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }));
 
+    // Telegram config endpoints
+    s_server.on("/api/config/telegram", HTTP_GET, [](AsyncWebServerRequest *request) {
+        EEPROM.begin(EEPROM_SIZE);
+        bool enabled = EEPROM.read(EEPROM_TELEGRAM_EN_OFFSET) == 1;
+        char token[EEPROM_TELEGRAM_TOKEN_SIZE];
+        char chatid[EEPROM_TELEGRAM_CHATID_SIZE];
+        uint32_t poll_ms = 2000;
+        uint8_t alerts_lvl_mask = 0x0F;  // All levels enabled by default
+        uint16_t alerts_type_mask = 0x03FF;  // All types enabled by default (10 bits)
+        
+        for (int i = 0; i < EEPROM_TELEGRAM_TOKEN_SIZE - 1; i++) {
+            uint8_t c = EEPROM.read(EEPROM_TELEGRAM_TOKEN_OFFSET + i);
+            token[i] = (c >= 32 && c <= 126) ? c : 0;
+            if (c == 0) break;
+        }
+        token[EEPROM_TELEGRAM_TOKEN_SIZE - 1] = '\0';
+        
+        for (int i = 0; i < EEPROM_TELEGRAM_CHATID_SIZE - 1; i++) {
+            uint8_t c = EEPROM.read(EEPROM_TELEGRAM_CHATID_OFFSET + i);
+            chatid[i] = (c >= 32 && c <= 126) ? c : 0;
+            if (c == 0) break;
+        }
+        chatid[EEPROM_TELEGRAM_CHATID_SIZE - 1] = '\0';
+        
+        EEPROM.get(EEPROM_TELEGRAM_POLL_OFFSET, poll_ms);
+        if (poll_ms < 1000 || poll_ms > 60000) poll_ms = 2000;
+        alerts_lvl_mask = EEPROM.read(EEPROM_TELEGRAM_ALERTS_LVL_OFFSET);
+        if (alerts_lvl_mask > 0x0F) alerts_lvl_mask = 0x0F;
+        EEPROM.get(EEPROM_TELEGRAM_ALERTS_TYPE_OFFSET, alerts_type_mask);
+        if (alerts_type_mask > 0x03FF) alerts_type_mask = 0x03FF;
+        EEPROM.end();
+        
+        JsonDocument doc;
+        doc["enabled"] = enabled;
+        doc["token"] = token;
+        doc["chat_id"] = chatid;
+        doc["poll_interval_ms"] = poll_ms;
+        // Alert levels
+        doc["alert_critical"] = (alerts_lvl_mask & 0x01) != 0;
+        doc["alert_alert"] = (alerts_lvl_mask & 0x02) != 0;
+        doc["alert_warning"] = (alerts_lvl_mask & 0x04) != 0;
+        doc["alert_info"] = (alerts_lvl_mask & 0x08) != 0;
+        // Alert types
+        doc["alert_gas"] = (alerts_type_mask & 0x0001) != 0;
+        doc["alert_smoke"] = (alerts_type_mask & 0x0002) != 0;
+        doc["alert_offline"] = (alerts_type_mask & 0x0004) != 0;
+        doc["alert_reconnect"] = (alerts_type_mask & 0x0008) != 0;
+        doc["alert_battery"] = (alerts_type_mask & 0x0010) != 0;
+        doc["alert_temperature"] = (alerts_type_mask & 0x0020) != 0;
+        doc["alert_humidity"] = (alerts_type_mask & 0x0040) != 0;
+        doc["alert_rssi"] = (alerts_type_mask & 0x0080) != 0;
+        doc["alert_heap"] = (alerts_type_mask & 0x0100) != 0;
+        doc["alert_daily_report"] = (alerts_type_mask & 0x0200) != 0;
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/telegram", [](AsyncWebServerRequest *request, JsonVariant json) {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, json.as<String>());
+        if (err) {
+            request->send(400, "application/json", "{\"error\":\"invalid json\"}");
+            return;
+        }
+        
+        bool enabled = doc["enabled"] | false;
+        const char *token = doc["token"] | "";
+        const char *chatid = doc["chat_id"] | "";
+        uint32_t poll_ms = doc["poll_interval_ms"] | 2000;
+        // Alert levels
+        bool alert_critical = doc["alert_critical"] | true;
+        bool alert_alert = doc["alert_alert"] | true;
+        bool alert_warning = doc["alert_warning"] | true;
+        bool alert_info = doc["alert_info"] | true;
+        // Alert types
+        bool alert_gas = doc["alert_gas"] | true;
+        bool alert_smoke = doc["alert_smoke"] | true;
+        bool alert_offline = doc["alert_offline"] | true;
+        bool alert_reconnect = doc["alert_reconnect"] | true;
+        bool alert_battery = doc["alert_battery"] | true;
+        bool alert_temperature = doc["alert_temperature"] | true;
+        bool alert_humidity = doc["alert_humidity"] | true;
+        bool alert_rssi = doc["alert_rssi"] | false;
+        bool alert_heap = doc["alert_heap"] | false;
+        bool alert_daily_report = doc["alert_daily_report"] | true;
+        
+        if (poll_ms < 1000 || poll_ms > 60000) poll_ms = 2000;
+        
+        uint8_t alerts_lvl_mask = 0;
+        if (alert_critical) alerts_lvl_mask |= 0x01;
+        if (alert_alert) alerts_lvl_mask |= 0x02;
+        if (alert_warning) alerts_lvl_mask |= 0x04;
+        if (alert_info) alerts_lvl_mask |= 0x08;
+        
+        uint16_t alerts_type_mask = 0;
+        if (alert_gas) alerts_type_mask |= 0x0001;
+        if (alert_smoke) alerts_type_mask |= 0x0002;
+        if (alert_offline) alerts_type_mask |= 0x0004;
+        if (alert_reconnect) alerts_type_mask |= 0x0008;
+        if (alert_battery) alerts_type_mask |= 0x0010;
+        if (alert_temperature) alerts_type_mask |= 0x0020;
+        if (alert_humidity) alerts_type_mask |= 0x0040;
+        if (alert_rssi) alerts_type_mask |= 0x0080;
+        if (alert_heap) alerts_type_mask |= 0x0100;
+        if (alert_daily_report) alerts_type_mask |= 0x0200;
+        
+        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.write(EEPROM_TELEGRAM_EN_OFFSET, enabled ? 1 : 0);
+        
+        for (int i = 0; i < EEPROM_TELEGRAM_TOKEN_SIZE; i++) {
+            EEPROM.write(EEPROM_TELEGRAM_TOKEN_OFFSET + i, i < (int)strlen(token) ? token[i] : 0);
+        }
+        for (int i = 0; i < EEPROM_TELEGRAM_CHATID_SIZE; i++) {
+            EEPROM.write(EEPROM_TELEGRAM_CHATID_OFFSET + i, i < (int)strlen(chatid) ? chatid[i] : 0);
+        }
+        EEPROM.put(EEPROM_TELEGRAM_POLL_OFFSET, poll_ms);
+        EEPROM.write(EEPROM_TELEGRAM_ALERTS_LVL_OFFSET, alerts_lvl_mask);
+        EEPROM.put(EEPROM_TELEGRAM_ALERTS_TYPE_OFFSET, alerts_type_mask);
+        
+        EEPROM.commit();
+        EEPROM.end();
+        
+        console.printf("[TELEGRAM] Config salva: enabled=%d, chat_id=%s, lvl=0x%02X, type=0x%04X\n", enabled, chatid, alerts_lvl_mask, alerts_type_mask);
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
+
     s_server.on("/api/config/mode", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
         doc["mode"] = op_mode_load();

@@ -118,6 +118,18 @@ static void publish_entity_config(const char *component, const char *entity_id,
         doc["unit_of_measurement"] = unit;
     }
 
+    // Availability: each entity gets an availability topic so HA knows when
+    // the physical node goes offline. The availability_topic is derived from
+    // the entity_id (same pattern used by publish_availability).
+    {
+        char avail_topic[128];
+        snprintf(avail_topic, sizeof(avail_topic), "%s/%s/%s/availability",
+                 MQTT_TOPIC_PREFIX, component, entity_id);
+        doc["availability_topic"] = avail_topic;
+        doc["payload_available"] = "online";
+        doc["payload_not_available"] = "offline";
+    }
+
     String json;
     serializeJson(doc, json);
     console.printf("[MQTT TX] topic=%s payload=%s\n", topic, json.c_str());
@@ -237,6 +249,11 @@ bool mqtt_client_connect() {
         s_mqtt.subscribe("homeassistant/light/+/set");
 
         mqtt_client_publish_all();
+
+        // Publish offline for all paired sensors so HA knows their real
+        // state. Nodes that are actually online will re-register/state
+        // shortly and get marked online again.
+        mqtt_client_publish_offline_all();
     } else {
         s_should_reconnect = false;
         s_consecutive_fails++;
@@ -536,4 +553,115 @@ bool mqtt_client_publish_all() {
     }
     console.printf("[MQTT] Published %d sensors to MQTT\n", count);
     return count > 0;
+}
+
+// Publish online/offline availability for all entities belonging to a sensor.
+// Home Assistant uses this to show the entity as "unavailable" when the node
+// goes offline. Topics follow: homeassistant/<component>/<entity_id>/availability
+bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
+    if (!s_mqtt_connected || !sensor || !sensor->paired) return false;
+
+    const char *payload = online ? "online" : "offline";
+    char entity[32];
+    char topic[128];
+    int count = 0;
+
+    // Publish availability for each entity type based on sensor type
+    switch (sensor->type) {
+        case SENSOR_TYPE_TEMP_HUM:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_CONTACT:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "cnt");
+            snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_MOTION:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "occ");
+            snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_GAS:
+        case SENSOR_TYPE_DHT_GAS:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
+            snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+
+            if (sensor->type == SENSOR_TYPE_DHT_GAS) {
+                build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
+                snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+                s_mqtt.publish(topic, payload, true); count++;
+
+                build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
+                snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+                s_mqtt.publish(topic, payload, true); count++;
+            }
+            break;
+        case SENSOR_TYPE_RAIN:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "rain");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "raind");
+            snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_SOIL_MOISTURE:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "soil");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_LEVEL:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lvl");
+            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_ONOFF:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "pwr");
+            snprintf(topic, sizeof(topic), "%s/switch/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_LIGHT:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "lgt");
+            snprintf(topic, sizeof(topic), "%s/light/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
+        case SENSOR_TYPE_REPEATER:
+            // Repeaters don't expose HA entities; skip
+            return false;
+    }
+
+    // Battery entity (common to all sensor types except repeater)
+    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+    snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+    s_mqtt.publish(topic, payload, true); count++;
+
+    console.printf("[MQTT] Availability %s for %s (%d entities)\n",
+                   payload, sensor->name, count);
+    return count > 0;
+}
+
+// Publish offline for all paired sensors. Called on MQTT connect so HA knows
+// which devices are currently unreachable (the hub just restarted).
+void mqtt_client_publish_offline_all() {
+    if (!s_mqtt_connected) return;
+    int count = 0;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (s && s->paired && strlen(s->bridge_device_id) > 0) {
+            mqtt_client_publish_availability(s, false);
+            count++;
+        }
+    }
+    console.printf("[MQTT] Published offline availability for %d sensors\n", count);
 }

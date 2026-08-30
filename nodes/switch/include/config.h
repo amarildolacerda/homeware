@@ -73,8 +73,8 @@
 #define MAX_TIMERS 6
 #endif
 #define TIMER_CHECK_INTERVAL_MS 10000
-#define EEPROM_TIMEZONE_ADDR 160
-#define EEPROM_TIMER_BASE 161
+#define EEPROM_TIMEZONE_ADDR 170
+#define EEPROM_TIMER_BASE 171
 
 /* Pulse (auto-OFF timer like Tuya) */
 #define PULSE_DEFAULT_DURATION_MIN 60
