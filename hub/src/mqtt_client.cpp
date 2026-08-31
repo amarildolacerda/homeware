@@ -250,10 +250,18 @@ bool mqtt_client_connect() {
 
         mqtt_client_publish_all();
 
-        // Publish offline for all paired sensors so HA knows their real
-        // state. Nodes that are actually online will re-register/state
-        // shortly and get marked online again.
-        mqtt_client_publish_offline_all();
+        // Publish online availability for all paired sensors
+        {
+            int avail_count = 0;
+            for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+                virtual_sensor_t *s = sensor_registry_get(i);
+                if (s && s->paired && strlen(s->bridge_device_id) > 0) {
+                    mqtt_client_publish_availability(s, true);
+                    avail_count++;
+                }
+            }
+            console.printf("[MQTT] Published online availability for %d sensors\n", avail_count);
+        }
     } else {
         s_should_reconnect = false;
         s_consecutive_fails++;

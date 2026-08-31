@@ -629,6 +629,16 @@ static void handle_api_wifi(void)
         doc["channel"] = mywifi_configured_channel();
         doc["wifi_channel"] = WiFi.channel();
         doc["rssi"] = WiFi.RSSI();
+        {
+            int net_mode = 0;
+            char net_ip[16] = {0}, net_gw[16] = {0}, net_mask[16] = {0}, net_dns[16] = {0};
+            mywifi_net_load(&net_mode, net_ip, net_gw, net_mask, net_dns);
+            doc["ip_mode"] = net_mode;
+            doc["ip"] = net_ip;
+            doc["gateway"] = net_gw;
+            doc["subnet"] = net_mask;
+            doc["dns"] = net_dns;
+        }
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -684,6 +694,17 @@ static void handle_api_wifi(void)
                     mywifi_save_channel(ch);
                     console.printf("[%s] WiFi channel changed to %d\n", TAG, ch);
                 }
+            }
+
+            int mode = doc.containsKey("mode") ? doc["mode"].as<int>() : 0;
+            if (doc.containsKey("ip") || doc.containsKey("gateway") || doc.containsKey("subnet") || doc.containsKey("dns") || mode == 1)
+            {
+                const char *ip   = doc.containsKey("ip")     ? doc["ip"].as<const char *>()     : "";
+                const char *gw   = doc.containsKey("gateway") ? doc["gateway"].as<const char *>() : "";
+                const char *mask = doc.containsKey("subnet")  ? doc["subnet"].as<const char *>()  : "255.255.255.0";
+                const char *dns  = doc.containsKey("dns")     ? doc["dns"].as<const char *>()     : "8.8.8.8";
+                mywifi_save_net(mode, ip, gw, mask, dns);
+                console.printf("[%s] Net config saved: mode=%d ip=%s gw=%s mask=%s dns=%s\n", TAG, mode, ip, gw, mask, dns);
             }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
@@ -1360,7 +1381,7 @@ static void handle_api_devices(void)
 #ifdef TCP_ENABLED
     // TCP mode: fetch device list directly from hub's /api/sensors
     {
-        char buf[2048];
+        char buf[1024];
         if (s_radio.fetch_hub_devices(buf, sizeof(buf)))
         {
             // Filtrar device atual da lista (evita sync para si mesmo)
@@ -2120,7 +2141,7 @@ void loop(void)
         int8_t pulse_action = pulse_check(now);
         if (pulse_action == -1)
         {
-            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
+            console.printf("[%s] Pulse timeout (now=%lu), turning OFF\n", TAG, now);
             set_relay(false);
         }
     }

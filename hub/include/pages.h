@@ -941,7 +941,7 @@ async function confirmRename() {
 async function removeSensor(slot) {
   if (!confirm('Remover sensor do slot '+slot+'?')) return;
   try {
-    await api('/api/sensor/'+slot+'/remove', {method:'POST'});
+    await api('/api/sensor/'+slot+'/remove', {method:'POST', body:'{}'});
     showToast('Sensor removido');
     loadData();
   } catch(e) { showToast('Erro: '+e.message, true); }
@@ -950,7 +950,7 @@ async function removeSensor(slot) {
 async function restartSensor(slot) {
   if (!confirm('Reiniciar dispositivo no slot '+slot+'?')) return;
   try {
-    await api('/api/sensor/'+slot+'/restart', {method:'POST'});
+    await api('/api/sensor/'+slot+'/restart', {method:'POST', body:'{}'});
     showToast('Restart enviado');
   } catch(e) { showToast('Erro: '+e.message, true); }
 }

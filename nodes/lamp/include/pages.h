@@ -212,6 +212,16 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">Senha</span><input type="password" id="wifiPass" maxlength="63" style="width:160px" placeholder="Senha WiFi"></div>
 <div class="row"><span class="label">Canal</span><input type="number" id="wifiChannel" min="0" max="13" style="width:60px" placeholder="auto"></div>
 <div style="font-size:.68rem;color:var(--muted-subtle);margin-top:2px">0 = automático</div>
+<div style="margin-top:10px;display:flex;gap:0" id="ipModeSeg">
+<button class="btn btn-sm" id="btn-dhcp" style="border-radius:8px 0 0 8px;flex:1" onclick="setIpMode(0)">DHCP</button>
+<button class="btn btn-sm" id="btn-static" style="border-radius:0 8px 8px 0;flex:1" onclick="setIpMode(1)">IP Fixo</button>
+</div>
+<div id="netFields" style="display:none;margin-top:8px">
+<div class="row"><span class="label">IP</span><input type="text" id="ipAddr" maxlength="15" style="width:120px" placeholder="192.168.1.50"></div>
+<div class="row"><span class="label">Gateway</span><input type="text" id="ipGw" maxlength="15" style="width:120px" placeholder="192.168.1.1"></div>
+<div class="row"><span class="label">Máscara</span><input type="text" id="ipMask" maxlength="15" style="width:120px" placeholder="255.255.255.0"></div>
+<div class="row"><span class="label">DNS</span><input type="text" id="ipDns" maxlength="15" style="width:120px" placeholder="8.8.8.8"></div>
+</div>
 <div id="wifiMsg" style="display:none;margin-top:6px;padding:6px;border-radius:8px;font-size:.78rem;text-align:center"></div>
 </div>
 </div>
@@ -301,7 +311,7 @@ const fbUptime=document.getElementById('fbUptime');
 let loading=false,cicloOpen=false,currentSection='home';
 function toggleCard(id){const el=document.getElementById(id);const wasCollapsed=el.classList.contains('collapsed');document.querySelectorAll('.card.collapsible').forEach(function(c){c.classList.add('collapsed')});if(wasCollapsed)el.classList.remove('collapsed')}
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
-document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers()}
+document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers();if(s==='config'){fetchSettings();fetchWifi();fetchOpMode()}}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
@@ -309,9 +319,9 @@ async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch(
 async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();footerEl.textContent=d.status==='pairing'?'Pareando...':'Falha ao parear'}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value),multihub:!!document.getElementById('multihubCheck').checked};if(nm)body.device_name=nm;
-try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+try{let sr=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let sd=await sr.json();
 let ssid=document.getElementById('wifiSsid').value.trim();let pass=document.getElementById('wifiPass').value;let ch=parseInt(document.getElementById('wifiChannel').value)||0;
-if(ssid){let wb={ssid:ssid,password:pass};if(ch>=0&&ch<=13)wb.channel=ch;let wr=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wb)});let wd=await wr.json();if(wd.status==='ok'){showWifiMsg('Conectando a '+ssid+'...','ok');setTimeout(function(){fetchWifi()},3000)}else{showWifiMsg('Erro: '+(wd.error||''),'err')}}
+if(ssid){let wb={ssid:ssid,password:pass,mode:_ipMode};if(_ipMode===1){wb.ip=document.getElementById('ipAddr').value.trim();wb.gateway=document.getElementById('ipGw').value.trim();wb.subnet=document.getElementById('ipMask').value.trim();wb.dns=document.getElementById('ipDns').value.trim()}if(ch>=0&&ch<=13)wb.channel=ch;let wr=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wb)});let wd=await wr.json();if(wd.status==='ok'){showWifiMsg('Configurações salvas. Conectando a '+ssid+'...','ok');setTimeout(function(){fetchWifi()},3000)}else{showWifiMsg('WiFi erro: '+(wd.error||''),'err')}}else{showWifiMsg('Configurações salvas','ok')}
 fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
   const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';badge.className='badge '+(on?'on':'off');
@@ -392,7 +402,9 @@ let div=document.createElement('div');div.className='row';div.innerHTML='<span c
 async function toggleRepeater(){try{let cur=await fetch('/api/repeater');let cd=await cur.json();let en=!cd.enabled;let r=await fetch('/api/repeater',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en})});let d=await r.json();let rb=document.getElementById('repBtn');if(rb){rb.textContent=d.enabled?'DESATIVAR':'ATIVAR';rb.className='btn '+(d.enabled?'btn-danger':'btn-primary')}fetchRepeater(d)}catch(e){if(rb)rb.textContent='ERRO'}}
 async function loadDevices(){try{let r=await fetch('/api/devices');let arr=await r.json();let sel=document.getElementById('syncDeviceSelect');let curVal=sel.value;while(sel.options.length>2)sel.remove(2);arr.forEach(function(d){let o=document.createElement('option');o.value=d.id;o.text=d.name||d.id;sel.appendChild(o)});if(curVal!='__manual__'){let match=sel.querySelector('option[value="'+curVal+'"]');if(match)sel.value=curVal}}catch(e){}}
 function doUpdate(){let f=document.getElementById('otaFile').files[0];let st=document.getElementById('otaStatus');if(!f){st.textContent='Selecione um .bin';return;}st.textContent='Enviando 0%...';let fd=new FormData();fd.append('firmware',f);let xhr=new XMLHttpRequest();xhr.open('POST','/api/ota');xhr.upload.onprogress=function(e){if(e.lengthComputable){let pct=Math.round(e.loaded*100/e.total);st.textContent='Enviando '+pct+'%...';}};xhr.onload=function(){try{let d=JSON.parse(xhr.responseText);if(d.status==='ok'){st.textContent='Concluído! Reiniciando...';}else{st.textContent='Erro: '+d.status;}}catch(e){st.textContent='Concluído! Reiniciando...';}};xhr.onerror=function(){st.textContent='Concluído! Reiniciando... (dispositivo vai voltar)';};xhr.send(fd);}
-async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){let txt=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';if(d.rssi!==undefined)txt+=' | RSSI: '+d.rssi+' dBm';st.textContent=txt;st.className='value'+(d.status==='connected'?' green':'')}if(d.ssid)document.getElementById('wifiSsid').value=d.ssid;if(d.password)document.getElementById('wifiPass').value=d.password;if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json();let st=document.getElementById('wifiStatus');if(st){let txt=d.status==='connected'?'Conectado ('+d.ssid+')':'Desconectado';if(d.rssi!==undefined)txt+=' | RSSI: '+d.rssi+' dBm';st.textContent=txt;st.className='value'+(d.status==='connected'?' green':'')}if(d.ssid)document.getElementById('wifiSsid').value=d.ssid;if(d.password)document.getElementById('wifiPass').value=d.password;if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel;setIpMode(d.ip_mode||0);if(d.ip)document.getElementById('ipAddr').value=d.ip;if(d.gateway)document.getElementById('ipGw').value=d.gateway;if(d.subnet)document.getElementById('ipMask').value=d.subnet;if(d.dns)document.getElementById('ipDns').value=d.dns}catch(e){}}
+let _ipMode=0;
+function setIpMode(m){_ipMode=m;document.getElementById('btn-dhcp').style.background=m===0?'var(--primary)':'';document.getElementById('btn-dhcp').style.color=m===0?'#fff':'';document.getElementById('btn-static').style.background=m===1?'var(--primary)':'';document.getElementById('btn-static').style.color=m===1?'#fff':'';document.getElementById('netFields').style.display=m===1?'block':'none'}
 function showWifiMsg(t,c){let m=document.getElementById('wifiMsg');if(!m)return;m.textContent=t;m.className='';m.style.display='block';m.style.background=c==='ok'?'#dcfce7':'#fef2f2';m.style.color=c==='ok'?'var(--success)':'var(--danger)';setTimeout(function(){m.style.display='none'},3000)}
 async function saveOpMode(){let sel=document.getElementById('opModeSelect');let mode=parseInt(sel.value);if(!confirm('Alterar modo para '+(['Terminal','AP','Híbrido'])[mode]+'? Reiniciando...')){sel.value=String(window._curOpMode||0);return;}try{let r=await fetch('/api/config/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});let d=await r.json();if(d.status==='ok'){footerEl.textContent='Modo alterado, reiniciando...';setTimeout(function(){location.reload()},3000)}}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function fetchOpMode(){try{let r=await fetch('/api/config/mode');let d=await r.json();window._curOpMode=d.mode;document.getElementById('opModeSelect').value=String(d.mode)}catch(e){}}
@@ -405,12 +417,12 @@ let div=document.createElement('div');div.className='row';
 div.innerHTML='<span class="label">GPIO '+p.gpio+'</span><span class="value">'+(p.state?'HIGH':'LOW')+'</span>';
 list.appendChild(div)})}catch(e){}}
 setInterval(function(){fetchState();if(currentSection==='pins')fetchPins()},3000);
-fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();fetchOpMode();if(currentSection==='pins')fetchPins();
+fetchState();setTimeout(function(){fetchSettings()},200);setTimeout(function(){fetchTimers()},400);setTimeout(function(){loadDevices()},600);setTimeout(function(){fetchWifi()},800);setTimeout(function(){fetchOpMode()},1000);if(currentSection==='pins')fetchPins();
 )=====";
 #else
 static const char PAGE_SCRIPT_PINS[] PROGMEM = R"=====(
 setInterval(function(){fetchState()},3000);
-fetchState();fetchSettings();fetchTimers();loadDevices();fetchWifi();fetchOpMode();
+fetchState();setTimeout(function(){fetchSettings()},200);setTimeout(function(){fetchTimers()},400);setTimeout(function(){loadDevices()},600);setTimeout(function(){fetchWifi()},800);setTimeout(function(){fetchOpMode()},1000);
 )=====";
 #endif
 static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(
@@ -476,6 +488,13 @@ h1{text-align:center;font-size:1.2rem;color:var(--primary);margin-bottom:16px}
 label{display:block;color:var(--muted);font-size:.82rem;margin-top:12px;margin-bottom:4px}
 input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:.85rem;outline:none}
 input:focus{border-color:var(--primary)}
+.seg{display:flex;gap:0;margin-top:12px}
+.seg button{flex:1;padding:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.net-fields{display:none}
+.net-fields.show{display:block}
 .btn{width:100%;padding:10px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-size:.9rem;font-weight:500;cursor:pointer;margin-top:20px}
 .hint{color:var(--muted-subtle);font-size:.72rem;margin-top:4px}
 .msg{margin-top:12px;padding:8px;border-radius:8px;font-size:.82rem;text-align:center}
@@ -493,7 +512,22 @@ input:focus{border-color:var(--primary)}
 <input type="password" id="password" placeholder="Senha">
 <label for="wifiChannel">Canal WiFi (0=auto)</label>
 <input type="number" id="wifiChannel" min="0" max="13" placeholder="0 = auto">
-<div class="hint">0 = automático (descobre sozinho). 1-13 = força canal específico.</div>
+<div class="hint">0 = automático. 1-13 = força canal específico.</div>
+<label>IP</label>
+<div class="seg">
+<button type="button" id="btn-dhcp" class="active" onclick="setIpMode(0)">DHCP</button>
+<button type="button" id="btn-static" onclick="setIpMode(1)">IP Fixo</button>
+</div>
+<div id="netFields" class="net-fields">
+<label for="ipAddr">IP</label>
+<input type="text" id="ipAddr" placeholder="192.168.1.50">
+<label for="ipGw">Gateway</label>
+<input type="text" id="ipGw" placeholder="192.168.1.1">
+<label for="ipMask">Máscara</label>
+<input type="text" id="ipMask" placeholder="255.255.255.0">
+<label for="ipDns">DNS</label>
+<input type="text" id="ipDns" placeholder="8.8.8.8">
+</div>
 <label for="devName">Nome do Dispositivo</label>
 <input type="text" id="devName" placeholder="Ex: Sala">
 <label for="repeaterMac">Repeater MAC (opcional)</label>
@@ -504,12 +538,16 @@ input:focus{border-color:var(--primary)}
 <div id="msg" class="msg" style="display:none"></div>
 </div>
 <script>
-async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+let ipMode=0;
+function setIpMode(m){ipMode=m;document.getElementById('btn-dhcp').className=m===0?'active':'';document.getElementById('btn-static').className=m===1?'active':'';document.getElementById('netFields').className=m===1?'net-fields show':'net-fields'}
+async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel;if(d.ip_mode!==undefined)setIpMode(d.ip_mode);if(d.ip)document.getElementById('ipAddr').value=d.ip;if(d.gateway)document.getElementById('ipGw').value=d.gateway;if(d.subnet)document.getElementById('ipMask').value=d.subnet;if(d.dns)document.getElementById('ipDns').value=d.dns}catch(e){}}
 function showMsg(t,c){let m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
 function loading(v){document.getElementById('submitBtn').style.opacity=v?0.5:1;document.getElementById('submitBtn').disabled=v}
 async function submitForm(){let ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}
 let pass=document.getElementById('password').value;let name=document.getElementById('devName').value.trim();let rep=document.getElementById('repeaterMac').value.trim();let ch=parseInt(document.getElementById('wifiChannel').value)||0;loading(true);
-let body={ssid:ssid,password:pass};if(name)body.device_name=name;if(rep)body.repeater_mac=rep;if(ch>=0&&ch<=13)body.channel=ch;
+let body={ssid:ssid,password:pass,mode:ipMode};
+if(ipMode===1){body.ip=document.getElementById('ipAddr').value.trim();body.gateway=document.getElementById('ipGw').value.trim();body.subnet=document.getElementById('ipMask').value.trim();body.dns=document.getElementById('ipDns').value.trim()}
+if(name)body.device_name=name;if(rep)body.repeater_mac=rep;if(ch>=0&&ch<=13)body.channel=ch;
 try{let r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();
 if(d.status==='ok'){showMsg('Conectando...','ok');setTimeout(function(){showMsg('AP reativado se falhar','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
 catch(e){showMsg('Erro: '+e.message,'err');loading(false)}return false}
