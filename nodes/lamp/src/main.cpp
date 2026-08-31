@@ -133,14 +133,16 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_GATEWAY_MAC_SIZE 6
 #define EEPROM_NAME_ADDR 10
 #define EEPROM_NAME_MAX 48
-#define EEPROM_RELAY_STATE_ADDR (EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1)
-#define EEPROM_RELAY_PIN_ADDR (EEPROM_RELAY_STATE_ADDR + 1)
-#define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
-#define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
-#define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
-#define EEPROM_REPEATER_EN_ADDR (EEPROM_STARTUP_MODE_ADDR + 1)
-// EEPROM_SSID_ADDR/EEPROM_PASS_ADDR removidos — conflitavam com myWiFiManager
-#define EEPROM_MULTIHUB_ADDR 200
+// ── EEPROM layout after shared WiFi [0..163] ──
+// WiFi: [0..32] SSID, [33..97] PASS, [98] MODE, [99..162] IP/GW/MASK/DNS, [163] CHANNEL
+// ESP-NOW shared: [0..6] MAC, [10..58] name (used only with ESPNOW_ENABLED)
+#define EEPROM_RELAY_STATE_ADDR  164
+#define EEPROM_RELAY_PIN_ADDR    165
+#define EEPROM_BUTTON_PIN_ADDR   166
+#define EEPROM_LED_ENABLED_ADDR  167
+#define EEPROM_STARTUP_MODE_ADDR 168
+#define EEPROM_REPEATER_EN_ADDR  169
+#define EEPROM_MULTIHUB_ADDR     201
 #define EEPROM_MAGIC 0xAA
 
 #define SYNC_LITTLEFS_FILE "/sync.json"
@@ -627,6 +629,16 @@ static void handle_api_wifi(void)
         doc["channel"] = mywifi_configured_channel();
         doc["wifi_channel"] = WiFi.channel();
         doc["rssi"] = WiFi.RSSI();
+        {
+            int net_mode = 0;
+            char net_ip[16] = {0}, net_gw[16] = {0}, net_mask[16] = {0}, net_dns[16] = {0};
+            mywifi_net_load(&net_mode, net_ip, net_gw, net_mask, net_dns);
+            doc["ip_mode"] = net_mode;
+            doc["ip"] = net_ip;
+            doc["gateway"] = net_gw;
+            doc["subnet"] = net_mask;
+            doc["dns"] = net_dns;
+        }
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -682,6 +694,17 @@ static void handle_api_wifi(void)
                     mywifi_save_channel(ch);
                     console.printf("[%s] WiFi channel changed to %d\n", TAG, ch);
                 }
+            }
+
+            int mode = doc.containsKey("mode") ? doc["mode"].as<int>() : 0;
+            if (doc.containsKey("ip") || doc.containsKey("gateway") || doc.containsKey("subnet") || doc.containsKey("dns") || mode == 1)
+            {
+                const char *ip   = doc.containsKey("ip")     ? doc["ip"].as<const char *>()     : "";
+                const char *gw   = doc.containsKey("gateway") ? doc["gateway"].as<const char *>() : "";
+                const char *mask = doc.containsKey("subnet")  ? doc["subnet"].as<const char *>()  : "255.255.255.0";
+                const char *dns  = doc.containsKey("dns")     ? doc["dns"].as<const char *>()     : "8.8.8.8";
+                mywifi_save_net(mode, ip, gw, mask, dns);
+                console.printf("[%s] Net config saved: mode=%d ip=%s gw=%s mask=%s dns=%s\n", TAG, mode, ip, gw, mask, dns);
             }
 
             console.printf("[%s] WiFi credentials received, connecting to %s...\n", TAG, ssid);
@@ -1358,7 +1381,7 @@ static void handle_api_devices(void)
 #ifdef TCP_ENABLED
     // TCP mode: fetch device list directly from hub's /api/sensors
     {
-        char buf[2048];
+        char buf[1024];
         if (s_radio.fetch_hub_devices(buf, sizeof(buf)))
         {
             // Filtrar device atual da lista (evita sync para si mesmo)
@@ -2118,7 +2141,7 @@ void loop(void)
         int8_t pulse_action = pulse_check(now);
         if (pulse_action == -1)
         {
-            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
+            console.printf("[%s] Pulse timeout (now=%lu), turning OFF\n", TAG, now);
             set_relay(false);
         }
     }

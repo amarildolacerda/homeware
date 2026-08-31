@@ -75,13 +75,14 @@ static unsigned long get_synced_epoch(void) {
 #define EEPROM_GATEWAY_MAC_SIZE 6
 #define EEPROM_NAME_ADDR 10
 #define EEPROM_NAME_MAX 48
-#define EEPROM_RELAY_STATE_ADDR (EEPROM_NAME_ADDR + EEPROM_NAME_MAX + 1)
-#define EEPROM_RELAY_PIN_ADDR (EEPROM_RELAY_STATE_ADDR + 1)
-#define EEPROM_BUTTON_PIN_ADDR (EEPROM_RELAY_PIN_ADDR + 1)
-#define EEPROM_LED_ENABLED_ADDR (EEPROM_BUTTON_PIN_ADDR + 1)
-#define EEPROM_STARTUP_MODE_ADDR (EEPROM_LED_ENABLED_ADDR + 1)
-/* EEPROM_SSID_ADDR/EEPROM_PASS_ADDR removidos — conflitavam com myWiFiManager
-   (shared/src/shared_config.h usa offset 0 para SSID e 33 para PASS). */
+// ── EEPROM layout after shared WiFi [0..163] ──
+// WiFi: [0..32] SSID, [33..97] PASS, [98] MODE, [99..162] IP/GW/MASK/DNS, [163] CHANNEL
+// ESP-NOW shared: [0..6] MAC, [10..58] name (used only with ESPNOW_ENABLED)
+#define EEPROM_RELAY_STATE_ADDR  164
+#define EEPROM_RELAY_PIN_ADDR    165
+#define EEPROM_BUTTON_PIN_ADDR   166
+#define EEPROM_LED_ENABLED_ADDR  167
+#define EEPROM_STARTUP_MODE_ADDR 168
 #define EEPROM_MAGIC 0xAA
 
 static bool s_pulse_enabled = false;

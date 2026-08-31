@@ -60,9 +60,13 @@
 
 #define EEPROM_PAIRING_EN_OFFSET (EEPROM_WIFI_DNS_OFFSET + EEPROM_WIFI_DNS_SIZE)
 #define EEPROM_OP_MODE_OFFSET (EEPROM_PAIRING_EN_OFFSET + 1)
-#define EEPROM_SIZE (EEPROM_OP_MODE_OFFSET + 1)
 
-#define WIFI_CONFIG_PORTAL_SSID "ESPNOW_Gateway_Setup"
+// Telegram config now stored in LittleFS (config_store.h)
+// EEPROM offsets for Telegram are no longer used
+
+#define EEPROM_SIZE (EEPROM_OP_MODE_OFFSET + 2)
+
+#define WIFI_CONFIG_PORTAL_SSID "AgroHub_Setup"
 #define WIFI_CONFIG_PORTAL_PASS "password123"
 
 // Operation modes

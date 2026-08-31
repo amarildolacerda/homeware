@@ -1,8 +1,8 @@
 #include "mqtt_client.h"
 #include "config.h"
-#include "config_store.h"
 #include "sensor_registry.h"
 #include "platform.h"
+#include <EEPROM.h>
 #define MQTT_MAX_PACKET_SIZE 768
 #include "log_buffer.h"
 #include "common_console.h"
@@ -118,6 +118,9 @@ static void publish_entity_config(const char *component, const char *entity_id,
         doc["unit_of_measurement"] = unit;
     }
 
+    // Availability: each entity gets an availability topic so HA knows when
+    // the physical node goes offline. The availability_topic is derived from
+    // the entity_id (same pattern used by publish_availability).
     {
         char avail_topic[128];
         snprintf(avail_topic, sizeof(avail_topic), "%s/%s/%s/availability",
@@ -143,38 +146,66 @@ static void publish_entity_state(const char *component, const char *entity_id, c
     s_mqtt.publish(topic, value, false);
 }
 
+// Load a NUL-terminated printable-ASCII string from EEPROM. Returns false
+// (and leaves buf empty) if the region holds garbage: no terminator within
+// buflen, or any non-printable byte before the terminator. This prevents
+// corrupted EEPROM data from leaking control characters into JSON responses.
+static bool eeprom_read_string(uint16_t offset, char *buf, size_t buflen) {
+    bool terminated = false;
+    for (size_t i = 0; i < buflen - 1; i++) {
+        char c = EEPROM.read(offset + i);
+        if (c == 0) { terminated = true; break; }
+        if (c < 0x20 || c > 0x7E) { terminated = false; break; }
+        buf[i] = c;
+    }
+    buf[buflen - 1] = '\0';
+    return terminated && strlen(buf) > 0;
+}
+
 bool mqtt_client_load_config() {
-    MQTTConfig cfg;
-    if (config_mqtt_load(&cfg)) {
-        strncpy(s_mqtt_host, cfg.host, sizeof(s_mqtt_host) - 1);
-        s_mqtt_host[sizeof(s_mqtt_host) - 1] = '\0';
-        s_mqtt_port = cfg.port;
-        strncpy(s_mqtt_user, cfg.user, sizeof(s_mqtt_user) - 1);
-        s_mqtt_user[sizeof(s_mqtt_user) - 1] = '\0';
-        strncpy(s_mqtt_pass, cfg.password, sizeof(s_mqtt_pass) - 1);
-        s_mqtt_pass[sizeof(s_mqtt_pass) - 1] = '\0';
-    } else {
+    EEPROM.begin(EEPROM_SIZE);
+
+    if (!eeprom_read_string(EEPROM_MQTT_HOST_OFFSET, s_mqtt_host, sizeof(s_mqtt_host))) {
         strcpy(s_mqtt_host, MQTT_HOST_DEFAULT);
-        s_mqtt_port = MQTT_PORT_DEFAULT;
+    }
+
+    uint16_t port = 0;
+    EEPROM.get(EEPROM_MQTT_PORT_OFFSET, port);
+    if (port > 0 && port < 65535) {
+        s_mqtt_port = port;
+    }
+
+    if (!eeprom_read_string(EEPROM_MQTT_USER_OFFSET, s_mqtt_user, sizeof(s_mqtt_user))) {
         s_mqtt_user[0] = '\0';
+    }
+
+    if (!eeprom_read_string(EEPROM_MQTT_PASS_OFFSET, s_mqtt_pass, sizeof(s_mqtt_pass))) {
         s_mqtt_pass[0] = '\0';
     }
+
+    EEPROM.end();
 
     console.printf("[MQTT] Config loaded: %s:%d user='%s'\n", s_mqtt_host, s_mqtt_port, s_mqtt_user);
     return true;
 }
 
 bool mqtt_client_save_config(const char *host, uint16_t port, const char *user, const char *pass) {
-    MQTTConfig cfg;
-    strncpy(cfg.host, host, sizeof(cfg.host) - 1);
-    cfg.host[sizeof(cfg.host) - 1] = '\0';
-    cfg.port = port;
-    strncpy(cfg.user, user, sizeof(cfg.user) - 1);
-    cfg.user[sizeof(cfg.user) - 1] = '\0';
-    strncpy(cfg.password, pass, sizeof(cfg.password) - 1);
-    cfg.password[sizeof(cfg.password) - 1] = '\0';
+    EEPROM.begin(EEPROM_SIZE);
 
-    bool ok = config_mqtt_save(&cfg);
+    for (int i = 0; i < 64; i++) {
+        EEPROM.write(EEPROM_MQTT_HOST_OFFSET + i, i < (int)strlen(host) ? host[i] : 0);
+    }
+    EEPROM.put(EEPROM_MQTT_PORT_OFFSET, port);
+
+    for (int i = 0; i < 32; i++) {
+        EEPROM.write(EEPROM_MQTT_USER_OFFSET + i, i < (int)strlen(user) ? user[i] : 0);
+    }
+    for (int i = 0; i < 32; i++) {
+        EEPROM.write(EEPROM_MQTT_PASS_OFFSET + i, i < (int)strlen(pass) ? pass[i] : 0);
+    }
+
+    EEPROM.commit();
+    EEPROM.end();
 
     strcpy(s_mqtt_host, host);
     s_mqtt_port = port;
@@ -219,7 +250,18 @@ bool mqtt_client_connect() {
 
         mqtt_client_publish_all();
 
-        mqtt_client_publish_offline_all();
+        // Publish online availability for all paired sensors
+        {
+            int avail_count = 0;
+            for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+                virtual_sensor_t *s = sensor_registry_get(i);
+                if (s && s->paired && strlen(s->bridge_device_id) > 0) {
+                    mqtt_client_publish_availability(s, true);
+                    avail_count++;
+                }
+            }
+            console.printf("[MQTT] Published online availability for %d sensors\n", avail_count);
+        }
     } else {
         s_should_reconnect = false;
         s_consecutive_fails++;
@@ -521,6 +563,9 @@ bool mqtt_client_publish_all() {
     return count > 0;
 }
 
+// Publish online/offline availability for all entities belonging to a sensor.
+// Home Assistant uses this to show the entity as "unavailable" when the node
+// goes offline. Topics follow: homeassistant/<component>/<entity_id>/availability
 bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
     if (!s_mqtt_connected || !sensor || !sensor->paired) return false;
 
@@ -529,11 +574,13 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
     char topic[128];
     int count = 0;
 
+    // Publish availability for each entity type based on sensor type
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM:
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
             snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
+
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
             snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
@@ -553,13 +600,16 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "gas");
             snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
+
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "alm");
             snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
+
             if (sensor->type == SENSOR_TYPE_DHT_GAS) {
                 build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "temp");
                 snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
                 s_mqtt.publish(topic, payload, true); count++;
+
                 build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "hum");
                 snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
                 s_mqtt.publish(topic, payload, true); count++;
@@ -569,6 +619,7 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "rain");
             snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
+
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "raind");
             snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
@@ -594,9 +645,11 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
             s_mqtt.publish(topic, payload, true); count++;
             break;
         case SENSOR_TYPE_REPEATER:
+            // Repeaters don't expose HA entities; skip
             return false;
     }
 
+    // Battery entity (common to all sensor types except repeater)
     build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
     snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
     s_mqtt.publish(topic, payload, true); count++;
@@ -606,6 +659,8 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
     return count > 0;
 }
 
+// Publish offline for all paired sensors. Called on MQTT connect so HA knows
+// which devices are currently unreachable (the hub just restarted).
 void mqtt_client_publish_offline_all() {
     if (!s_mqtt_connected) return;
     int count = 0;

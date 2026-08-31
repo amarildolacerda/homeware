@@ -113,7 +113,15 @@ R"rawliteral(
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--primary-strong:#828fff;--primary-focus:#eef0ff;--border:#e5e7eb;--border-strong:#d1d5db;--success:#16a34a;--danger:#dc2626;--warn:#f59e0b;--info:#2563eb}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-.sidebar{width:200px;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:10}
+.sidebar{width:240px;max-width:85vw;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 12px rgba(0,0,0,.08)}
+.sidebar.open{transform:translateX(0)}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
+.sidebar-backdrop.open{display:block}
+.topbar{display:flex;align-items:center;gap:12px;margin:-24px -24px 16px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30}
+.hamburger{background:none;border:1px solid var(--border);border-radius:8px;width:40px;height:40px;font-size:1.2rem;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;line-height:1}
+.hamburger:hover{background:var(--surface-2)}
+.topbar .topbar-title{font-weight:600;color:var(--primary);font-size:0.95rem}
+.topbar .topbar-sub{color:var(--muted-subtle);font-size:0.75rem;margin-left:4px}
 .sidebar .logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:8px}
 .sidebar .logo h1{font-size:1rem;font-weight:700;color:var(--primary)}
 .sidebar .logo span{font-size:0.75rem;color:var(--muted)}
@@ -140,9 +148,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .nav-group-list a:hover{color:var(--text);background:var(--primary-focus)}
 .sidebar .nav-group-list .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
 .sidebar .nav-group-list .empty{font-size:0.72rem;color:var(--muted-subtle);padding:6px 20px 6px 44px}
-.main{margin-left:200px;flex:1;padding:24px;max-width:960px}
+.main{margin-left:0;flex:1;padding:24px;max-width:960px}
 #page{min-height:calc(100vh - 80px)}
-.mqtt-footer{position:fixed;bottom:0;right:0;left:200px;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
+.mqtt-footer{position:fixed;bottom:0;right:0;left:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
 .mqtt-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .mqtt-footer .dot.on{background:var(--success)}
 .mqtt-footer .dot.off{background:var(--danger)}
@@ -153,18 +161,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .toast.show{display:block;animation:slideIn .3s}
 @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){
-.sidebar{width:60px}
-.sidebar .logo h1,.sidebar .logo span,.sidebar .logo .signal,.sidebar nav a span:last-child,.sidebar .footer-nav,.sidebar .nav-group-head .chev,.sidebar .nav-group-head span:not(.icon){display:none}
-.sidebar nav a{justify-content:center;padding:14px;border-left:none}
-.sidebar nav a.active{border-left:none;background:var(--primary-focus)}
-.sidebar .nav-group-head{justify-content:center;padding:14px;border-left:none}
-.main{margin-left:60px;padding:16px}
-.mqtt-footer{left:60px}
+.sidebar{width:80%}
+.topbar{padding:10px 12px;margin:-16px -16px 12px}
+.main{padding:16px}
+.mqtt-footer{padding:8px 16px;font-size:0.72rem;gap:8px}
 }
 </style>
 </head>
 <body>
-<div class="sidebar">
+<div class="sidebar-backdrop" id="sbBackdrop" onclick="closeSidebar()"></div>
+<div class="sidebar" id="sidebar">
 <div class="logo">
 <div class="logo-row">
 <div class="logo-title">
@@ -198,7 +204,7 @@ R"rawliteral(
 </nav>
 <div class="footer-nav" id="fw-sidebar">v--</div>
 </div>
-<div class="main"><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
+<div class="main"><div class="topbar"><button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button><span class="topbar-title">Gateway</span><span class="topbar-sub" id="sbVersion-top">v--</span></div><div id="page"><div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div></div></div>
 <div class="mqtt-footer" id="mqtt-footer"><div style="display:flex;align-items:center;gap:6px"><span class="dot off" id="mqtt-dot"></span><span id="mqtt-footer-text">MQTT: desconectado</span><span class="pairing-dot" id="pairing-dot"></span><span id="pairing-text" style="font-size:0.78rem;color:var(--warn)"></span></div><span style="display:flex;align-items:center;gap:12px"><span id="footer-clock" style="color:var(--muted-subtle)">--:--:--</span><span id="footer-uptime" style="color:var(--muted-subtle)">--</span></span></div>
 <div class="toast" id="toast"></div>
 <script>
@@ -218,6 +224,7 @@ function navigate(page) {
   document.querySelectorAll('.sidebar nav a').forEach(function(a) { a.classList.remove('active'); });
   var link = document.getElementById('nav-'+page);
   if (link) link.classList.add('active');
+  closeSidebar();
   var el = document.getElementById('page');
   el.innerHTML = '<div class="loading" style="text-align:center;padding:60px 20px;color:var(--muted)">carregando...</div>';
   fetch('/'+page).then(function(r) { return r.text(); }).then(function(html) {
@@ -375,6 +382,21 @@ function toggleRepeaterNav() {
   var g = document.getElementById('repeater-nav');
   if (g) g.classList.toggle('collapsed');
 }
+function toggleSidebar() {
+  var s = document.getElementById('sidebar');
+  var b = document.getElementById('sbBackdrop');
+  if (!s) return;
+  var open = s.classList.toggle('open');
+  if (b) b.classList.toggle('open', open);
+  try { localStorage.setItem('hub_drawer_open', open ? '1' : '0'); } catch(e) {}
+}
+function closeSidebar() {
+  var s = document.getElementById('sidebar');
+  var b = document.getElementById('sbBackdrop');
+  if (s) s.classList.remove('open');
+  if (b) b.classList.remove('open');
+  try { localStorage.setItem('hub_drawer_open', '0'); } catch(e) {}
+}
 async function loadRepeaterNav(sensors) {
   var list = document.getElementById('repeater-nav-list');
   var nav = document.getElementById('repeater-nav');
@@ -407,7 +429,10 @@ function syncBrowserTime() {
 
 startRepeaterNavPoll();
 syncBrowserTime();
-navigate('overview');
+(function(){
+  try { if (localStorage.getItem('hub_drawer_open') === '1') { var s=document.getElementById('sidebar'), b=document.getElementById('sbBackdrop'); if(s)s.classList.add('open'); if(b)b.classList.add('open'); } } catch(e) {}
+  navigate('overview');
+})();
 </script>
 </body>
 </html>
@@ -506,7 +531,7 @@ const char PAGE_OVERVIEW[] PROGMEM = R"rawliteral(
 }
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
 .modal.show{display:flex}
-.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px}
+.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto}
 .props-section{margin-bottom:14px}
 .props-section-title{font-size:0.75rem;font-weight:600;color:var(--muted-subtle);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .props-section .row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.82rem}
@@ -916,7 +941,7 @@ async function confirmRename() {
 async function removeSensor(slot) {
   if (!confirm('Remover sensor do slot '+slot+'?')) return;
   try {
-    await api('/api/sensor/'+slot+'/remove', {method:'POST'});
+    await api('/api/sensor/'+slot+'/remove', {method:'POST', body:'{}'});
     showToast('Sensor removido');
     loadData();
   } catch(e) { showToast('Erro: '+e.message, true); }
@@ -925,7 +950,7 @@ async function removeSensor(slot) {
 async function restartSensor(slot) {
   if (!confirm('Reiniciar dispositivo no slot '+slot+'?')) return;
   try {
-    await api('/api/sensor/'+slot+'/restart', {method:'POST'});
+    await api('/api/sensor/'+slot+'/restart', {method:'POST', body:'{}'});
     showToast('Restart enviado');
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
@@ -962,7 +987,7 @@ async function loadData() {
     document.getElementById('stat-online').textContent = info.online_count;
     document.getElementById('stat-offline').textContent = info.paired_count - info.online_count;
     document.getElementById('stat-rx').textContent = info.rx_total;
-    if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.fw_version) { document.getElementById('fw-sidebar').textContent = info.fw_version; var tv=document.getElementById('sbVersion-top'); if(tv) tv.textContent=info.fw_version; }
     if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
@@ -1050,7 +1075,7 @@ const char PAGE_SETTINGS[] PROGMEM = R"rawliteral(
 .btn-secondary:hover{background:var(--border-strong)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
 .modal.show{display:flex}
-.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px}
+.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto}
 .form-group{margin-bottom:14px}
 .form-group label{display:block;margin-bottom:4px;font-size:0.82rem;color:var(--muted)}
 .form-group input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text)}
@@ -1126,6 +1151,20 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 </div>
 </div>
 </div>
+
+<div class="card collapsible collapsed" id="card-telegram" style="margin-top:12px">
+<div class="card-head" onclick="toggleCard('card-telegram')">
+<h2>Telegram</h2>
+<div class="summary"><span id="telegram-sum" class="badge badge-off">--</span><span class="chev">&#9662;</span></div>
+</div>
+<div class="card-body">
+<div class="row"><span class="label">Status</span><span class="value" id="s-telegram-status">--</span></div>
+<div class="row"><span class="label">Chat ID</span><span class="value" id="s-telegram-chatid">--</span></div>
+<div class="row"><span class="label">Poll Interval</span><span class="value" id="s-telegram-poll">--</span></div>
+<button class="btn btn-primary" onclick="showTelegramForm()" style="margin-top:12px;width:100%">Configurar Telegram</button>
+</div>
+</div>
+
 <div class="modal" id="mqtt-modal">
 <div class="modal-content">
 <h3>Configurar MQTT</h3>
@@ -1158,6 +1197,45 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <div style="display:flex;gap:8px;margin-top:16px">
 <button class="btn btn-primary" onclick="saveWifiConfig()">Salvar</button>
 <button class="btn btn-secondary" onclick="closeWifiForm()">Cancelar</button>
+</div>
+</div>
+</div>
+
+<div class="modal" id="telegram-modal">
+<div class="modal-content">
+<h3>Configurar Telegram Bot</h3>
+<div class="form-group"><label>Habilitado</label>
+<div class="toggle-row">
+<button type="button" class="seg" id="tg-seg-off" onclick="setTelegramEnabled(false)">Desligado</button>
+<button type="button" class="seg" id="tg-seg-on" onclick="setTelegramEnabled(true)">Ligado</button>
+</div></div>
+<div class="form-group"><label>Bot Token</label><input type="text" id="telegram-token-input" placeholder="1234567890:ABCdef..." maxlength="64"></div>
+<div class="form-group"><label>Chat ID</label><input type="text" id="telegram-chatid-input" placeholder="987654321" maxlength="20"></div>
+<div class="form-group"><label>Poll Interval (ms)</label><input type="number" id="telegram-poll-input" placeholder="2000" min="1000" max="60000"></div>
+<div class="form-group"><label>Níveis de Alerta</label>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+<label style="display:flex;align-items:center;gap:4px;font-size:0.82rem"><input type="checkbox" id="tg-alert-critical" checked> 🔴 Critical</label>
+<label style="display:flex;align-items:center;gap:4px;font-size:0.82rem"><input type="checkbox" id="tg-alert-alert" checked> ⚠️ Alert</label>
+<label style="display:flex;align-items:center;gap:4px;font-size:0.82rem"><input type="checkbox" id="tg-alert-warning" checked> 🟡 Warning</label>
+<label style="display:flex;align-items:center;gap:4px;font-size:0.82rem"><input type="checkbox" id="tg-alert-info" checked> 🟢 Info</label>
+</div></div>
+<div class="form-group"><label>Tipos de Alerta</label>
+<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-gas" checked> 🔥 Gás (alarme)</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-smoke" checked> 💨 Fumaça</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-offline" checked> ❌ Device Offline</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-reconnect" checked> ✅ Device Reconectou</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-battery" checked> 🔋 Bateria Baixa/Crítica</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-temperature" checked> 🌡️ Temperatura Alta/Baixa</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-humidity" checked> 💧 Umidade Fora do Normal</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-rssi"> 📶 RSSI Fraco</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-heap"> 💾 Memória Baixa</label>
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem"><input type="checkbox" id="tg-type-daily" checked> 📊 Relatório Diário (08:00)</label>
+</div></div>
+<div style="font-size:.72rem;color:var(--muted-subtle);margin-top:6px">Obtenha o token via @BotFather no Telegram. O Chat ID pode ser obtido enviando /start para @userinfobot.</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-primary" onclick="saveTelegramConfig()">Salvar</button>
+<button class="btn btn-secondary" onclick="closeTelegramForm()">Cancelar</button>
 </div>
 </div>
 </div>
@@ -1224,7 +1302,7 @@ async function loadSettings() {
     document.getElementById('s-uptime').textContent = fmtUptime(info.uptime_ms);
     document.getElementById('s-free-heap').textContent = info.free_heap !== undefined ? fmtBytes(info.free_heap) : '--';
     document.getElementById('bridge-sum').textContent = info.ip || '--';
-    if (info.fw_version) document.getElementById('fw-sidebar').textContent = info.fw_version;
+    if (info.fw_version) { document.getElementById('fw-sidebar').textContent = info.fw_version; var tv=document.getElementById('sbVersion-top'); if(tv) tv.textContent=info.fw_version; }
     if (info.wifi_rssi!==undefined) updateHubSignal(info.wifi_rssi);
     updateMqttFooter(info.mqtt_connected, info.mqtt_host, info.mqtt_port);
     updateFooterUptime(info.uptime_ms);
@@ -1320,6 +1398,99 @@ async function saveWifiConfig() {
   } catch(e) { showToast('Erro: '+e.message, true); }
 }
 
+window.s_telegramEnabled = false;
+
+function setTelegramEnabled(enabled) {
+  window.s_telegramEnabled = enabled;
+  document.getElementById('tg-seg-off').classList.toggle('active', !enabled);
+  document.getElementById('tg-seg-on').classList.toggle('active', enabled);
+}
+
+async function loadTelegramConfig() {
+  try {
+    var data = await api('/api/config/telegram');
+    document.getElementById('s-telegram-status').textContent = data.enabled ? 'Habilitado' : 'Desabilitado';
+    document.getElementById('s-telegram-chatid').textContent = data.chat_id || '--';
+    document.getElementById('s-telegram-poll').textContent = (data.poll_interval_ms || 2000) + 'ms';
+    document.getElementById('telegram-sum').textContent = data.enabled ? 'Telegram ON' : 'Telegram OFF';
+    document.getElementById('telegram-sum').className = 'badge ' + (data.enabled ? 'badge-ok' : 'badge-off');
+  } catch(e) {}
+}
+
+async function showTelegramForm() {
+  try {
+    var data = await api('/api/config/telegram');
+    setTelegramEnabled(data.enabled || false);
+    document.getElementById('telegram-token-input').value = data.token || '';
+    document.getElementById('telegram-chatid-input').value = data.chat_id || '';
+    document.getElementById('telegram-poll-input').value = data.poll_interval_ms || 2000;
+    // Alert levels
+    document.getElementById('tg-alert-critical').checked = data.alert_critical !== false;
+    document.getElementById('tg-alert-alert').checked = data.alert_alert !== false;
+    document.getElementById('tg-alert-warning').checked = data.alert_warning !== false;
+    document.getElementById('tg-alert-info').checked = data.alert_info !== false;
+    // Alert types
+    document.getElementById('tg-type-gas').checked = data.alert_gas !== false;
+    document.getElementById('tg-type-smoke').checked = data.alert_smoke !== false;
+    document.getElementById('tg-type-offline').checked = data.alert_offline !== false;
+    document.getElementById('tg-type-reconnect').checked = data.alert_reconnect !== false;
+    document.getElementById('tg-type-battery').checked = data.alert_battery !== false;
+    document.getElementById('tg-type-temperature').checked = data.alert_temperature !== false;
+    document.getElementById('tg-type-humidity').checked = data.alert_humidity !== false;
+    document.getElementById('tg-type-rssi').checked = data.alert_rssi === true;
+    document.getElementById('tg-type-heap').checked = data.alert_heap === true;
+    document.getElementById('tg-type-daily').checked = data.alert_daily_report !== false;
+    document.getElementById('telegram-modal').classList.add('show');
+    document.getElementById('telegram-token-input').focus();
+  } catch(e) { showToast('Erro: '+e.message, true); }
+}
+
+function closeTelegramForm() {
+  document.getElementById('telegram-modal').classList.remove('show');
+}
+
+async function saveTelegramConfig() {
+  var enabled = window.s_telegramEnabled;
+  var token = document.getElementById('telegram-token-input').value.trim();
+  var chatid = document.getElementById('telegram-chatid-input').value.trim();
+  var poll = parseInt(document.getElementById('telegram-poll-input').value) || 2000;
+  // Alert levels
+  var alertCritical = document.getElementById('tg-alert-critical').checked;
+  var alertAlert = document.getElementById('tg-alert-alert').checked;
+  var alertWarning = document.getElementById('tg-alert-warning').checked;
+  var alertInfo = document.getElementById('tg-alert-info').checked;
+  // Alert types
+  var alertGas = document.getElementById('tg-type-gas').checked;
+  var alertSmoke = document.getElementById('tg-type-smoke').checked;
+  var alertOffline = document.getElementById('tg-type-offline').checked;
+  var alertReconnect = document.getElementById('tg-type-reconnect').checked;
+  var alertBattery = document.getElementById('tg-type-battery').checked;
+  var alertTemperature = document.getElementById('tg-type-temperature').checked;
+  var alertHumidity = document.getElementById('tg-type-humidity').checked;
+  var alertRssi = document.getElementById('tg-type-rssi').checked;
+  var alertHeap = document.getElementById('tg-type-heap').checked;
+  var alertDaily = document.getElementById('tg-type-daily').checked;
+  
+  if (enabled && !token) { showToast('Bot Token obrigatório', true); return; }
+  if (enabled && !chatid) { showToast('Chat ID obrigatório', true); return; }
+  if (poll < 1000 || poll > 60000) poll = 2000;
+  
+  try {
+    await api('/api/config/telegram', {method:'POST', body:JSON.stringify({
+      enabled:enabled, token:token, chat_id:chatid, poll_interval_ms:poll,
+      alert_critical:alertCritical, alert_alert:alertAlert, 
+      alert_warning:alertWarning, alert_info:alertInfo,
+      alert_gas:alertGas, alert_smoke:alertSmoke, alert_offline:alertOffline,
+      alert_reconnect:alertReconnect, alert_battery:alertBattery,
+      alert_temperature:alertTemperature, alert_humidity:alertHumidity,
+      alert_rssi:alertRssi, alert_heap:alertHeap, alert_daily_report:alertDaily
+    })});
+    showToast('Telegram configurado!');
+    closeTelegramForm();
+    loadTelegramConfig();
+  } catch(e) { showToast('Erro: '+e.message, true); }
+}
+
 async function doRestart() {
   if (!confirm('Reiniciar o gateway?')) return;
   try {
@@ -1338,6 +1509,7 @@ async function doReregister() {
 
 loadSettings();
 loadOpMode();
+loadTelegramConfig();
 </script>
 )rawliteral";
 

@@ -5,6 +5,7 @@
 extern RadioManager s_radio_mgr;
 #include "mqtt_client.h"
 #include "config.h"
+#include "config_store.h"
 #include "pages.h"
 #include "log_buffer.h"
 #include "common_console.h"
@@ -594,6 +595,82 @@ void web_server_init() {
         }
         bool enabled = doc["enabled"];
         pairing_config_save(enabled);
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
+
+    // Telegram config endpoints
+    s_server.on("/api/config/telegram", HTTP_GET, [](AsyncWebServerRequest *request) {
+        TelegramConfig cfg;
+        config_telegram_load(&cfg);
+        
+        JsonDocument doc;
+        doc["enabled"] = cfg.enabled;
+        doc["token"] = cfg.token;
+        doc["chat_id"] = cfg.chat_id;
+        doc["poll_interval_ms"] = cfg.poll_interval;
+        // Alert levels
+        doc["alert_critical"] = (cfg.alerts_level & 0x01) != 0;
+        doc["alert_alert"] = (cfg.alerts_level & 0x02) != 0;
+        doc["alert_warning"] = (cfg.alerts_level & 0x04) != 0;
+        doc["alert_info"] = (cfg.alerts_level & 0x08) != 0;
+        // Alert types
+        doc["alert_gas"] = (cfg.alerts_type & 0x0001) != 0;
+        doc["alert_smoke"] = (cfg.alerts_type & 0x0002) != 0;
+        doc["alert_offline"] = (cfg.alerts_type & 0x0004) != 0;
+        doc["alert_reconnect"] = (cfg.alerts_type & 0x0008) != 0;
+        doc["alert_battery"] = (cfg.alerts_type & 0x0010) != 0;
+        doc["alert_temperature"] = (cfg.alerts_type & 0x0020) != 0;
+        doc["alert_humidity"] = (cfg.alerts_type & 0x0040) != 0;
+        doc["alert_rssi"] = (cfg.alerts_type & 0x0080) != 0;
+        doc["alert_heap"] = (cfg.alerts_type & 0x0100) != 0;
+        doc["alert_daily_report"] = (cfg.alerts_type & 0x0200) != 0;
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/telegram", [](AsyncWebServerRequest *request, JsonVariant json) {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, json.as<String>());
+        if (err) {
+            request->send(400, "application/json", "{\"error\":\"invalid json\"}");
+            return;
+        }
+        
+        TelegramConfig cfg;
+        cfg.enabled = doc["enabled"] | false;
+        strncpy(cfg.token, doc["token"] | "", sizeof(cfg.token) - 1);
+        cfg.token[sizeof(cfg.token) - 1] = '\0';
+        strncpy(cfg.chat_id, doc["chat_id"] | "", sizeof(cfg.chat_id) - 1);
+        cfg.chat_id[sizeof(cfg.chat_id) - 1] = '\0';
+        cfg.poll_interval = doc["poll_interval_ms"] | 2000;
+        if (cfg.poll_interval < 1000 || cfg.poll_interval > 60000) cfg.poll_interval = 2000;
+        
+        // Alert levels
+        uint8_t lvl = 0;
+        if (doc["alert_critical"] | true)  lvl |= 0x01;
+        if (doc["alert_alert"] | true)    lvl |= 0x02;
+        if (doc["alert_warning"] | true)  lvl |= 0x04;
+        if (doc["alert_info"] | true)     lvl |= 0x08;
+        cfg.alerts_level = lvl;
+        
+        // Alert types
+        uint16_t type_mask = 0;
+        if (doc["alert_gas"] | true)           type_mask |= 0x0001;
+        if (doc["alert_smoke"] | true)         type_mask |= 0x0002;
+        if (doc["alert_offline"] | true)       type_mask |= 0x0004;
+        if (doc["alert_reconnect"] | true)     type_mask |= 0x0008;
+        if (doc["alert_battery"] | true)       type_mask |= 0x0010;
+        if (doc["alert_temperature"] | true)   type_mask |= 0x0020;
+        if (doc["alert_humidity"] | true)      type_mask |= 0x0040;
+        if (doc["alert_rssi"] | false)         type_mask |= 0x0080;
+        if (doc["alert_heap"] | false)         type_mask |= 0x0100;
+        if (doc["alert_daily_report"] | true)  type_mask |= 0x0200;
+        cfg.alerts_type = type_mask;
+        
+        config_telegram_save(&cfg);
+        
+        console.printf("[TELEGRAM] Config salva: enabled=%d, chat_id=%s, lvl=0x%02X, type=0x%04X\n", cfg.enabled, cfg.chat_id, cfg.alerts_level, cfg.alerts_type);
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }));
 

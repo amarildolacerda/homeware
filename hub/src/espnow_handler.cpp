@@ -506,7 +506,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             } else {
                 if (slot >= 0) {
                     virtual_sensor_t *s = sensor_registry_get(slot);
-                    bool was_offline = !s->online;
+                    bool was_offline = s && !s->online;
                     s->last_seen = millis();
                     s->online = true;
                     if (was_offline && mqtt_client_is_connected()) {

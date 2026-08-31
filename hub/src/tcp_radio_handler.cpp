@@ -181,6 +181,9 @@ void TcpRadioHandler::loop() {
     cleanup_expired_commands();
     process_bridge_queue();
 
+    // Check for TCP nodes that haven't reported in and mark them offline.
+    // TCP nodes poll for commands every ~1s and send heartbeat/state every
+    // 30-60s, so SENSOR_TIMEOUT_MS (300s) is a safe threshold.
     static unsigned long s_last_timeout_check = 0;
     unsigned long now = millis();
     if (now - s_last_timeout_check > 30000) {
@@ -343,6 +346,7 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
 
     console.printf("[tcp] Device %s registered at slot %d (type %d, fw=%s)\n", device_id, slot, sensor_type, fw_version ? fw_version : "unknown");
 
+    // Publish discovery + online availability for the new sensor
     if (mqtt_client_is_connected()) {
         mqtt_client_publish_discovery(sensor_registry_get(slot));
         mqtt_client_publish_availability(sensor_registry_get(slot), true);
@@ -367,10 +371,25 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
         if (sscanf(ip_str, "%d.%d.%d.%d", &a, &b, &c, &d) == 4 &&
             a >= 0 && a <= 255 && b >= 0 && b <= 255 &&
             c >= 0 && c <= 255 && d >= 0 && d <= 255) {
-            sensor->ip[0] = (uint8_t)a;
-            sensor->ip[1] = (uint8_t)b;
-            sensor->ip[2] = (uint8_t)c;
-            sensor->ip[3] = (uint8_t)d;
+            uint8_t new_ip[4] = { (uint8_t)a, (uint8_t)b, (uint8_t)c, (uint8_t)d };
+            // Detect IP change
+            if (sensor->ip[0] != new_ip[0] || sensor->ip[1] != new_ip[1] ||
+                sensor->ip[2] != new_ip[2] || sensor->ip[3] != new_ip[3]) {
+                bool has_old = (sensor->ip[0] | sensor->ip[1] | sensor->ip[2] | sensor->ip[3]) != 0;
+                if (has_old) {
+                    console.printf("[tcp] %s IP changed: %d.%d.%d.%d -> %d.%d.%d.%d\n",
+                                   device_id,
+                                   sensor->ip[0], sensor->ip[1], sensor->ip[2], sensor->ip[3],
+                                   new_ip[0], new_ip[1], new_ip[2], new_ip[3]);
+                } else {
+                    console.printf("[tcp] %s IP: %d.%d.%d.%d\n",
+                                   device_id, new_ip[0], new_ip[1], new_ip[2], new_ip[3]);
+                }
+            }
+            sensor->ip[0] = new_ip[0];
+            sensor->ip[1] = new_ip[1];
+            sensor->ip[2] = new_ip[2];
+            sensor->ip[3] = new_ip[3];
         }
     }
     if (state["free_heap"].is<uint32_t>()) {
