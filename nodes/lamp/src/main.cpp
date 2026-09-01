@@ -2141,7 +2141,7 @@ void loop(void)
         int8_t pulse_action = pulse_check(now);
         if (pulse_action == -1)
         {
-            console.printf("[%s] Pulse timeout (now=%lu), turning OFF\n", TAG, now);
+            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
             set_relay(false);
         }
     }
