@@ -25,6 +25,11 @@ void sensor_registry_lock() {
     xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100));
 }
 
+bool sensor_registry_try_lock(uint32_t timeout_ms) {
+    ensure_mutex();
+    return xSemaphoreTake(s_mutex, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+
 void sensor_registry_unlock() {
     xSemaphoreGive(s_mutex);
 }

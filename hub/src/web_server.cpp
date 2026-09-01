@@ -308,9 +308,10 @@ void web_server_init() {
 
     s_server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (ESP.getFreeHeap() < 15000) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
-        // Snapshot registry under lock to avoid tearing with recv_cb
-        virtual_sensor_t snap[MAX_VIRTUAL_SENSORS];
-        sensor_registry_lock();
+        // Snapshot registry under try-lock (async task must not block) - heap alloc to avoid async_tcp stack overflow
+        virtual_sensor_t *snap = (virtual_sensor_t*)malloc(sizeof(virtual_sensor_t) * MAX_VIRTUAL_SENSORS);
+        if (!snap) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
+        if (!sensor_registry_try_lock(20)) { free(snap); request->send(503, "application/json", "{\"error\":\"busy\"}"); return; }
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *src = sensor_registry_get(i);
             if (src) memcpy(&snap[i], src, sizeof(virtual_sensor_t));
@@ -403,7 +404,7 @@ void web_server_init() {
                 }
             }
         }
-
+        free(snap);
         String json;
         serializeJson(doc, json);
         AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
