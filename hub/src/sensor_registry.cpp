@@ -2,11 +2,37 @@
 #include "config.h"
 #include "config_store.h"
 #include <Arduino.h>
+#ifdef ESP32
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#else
+#include "FreeRTOS.h"
+#include "semphr.h"
+#endif
 #include "common_console.h"
+
+// FreeRTOS mutex protecting s_sensors[] from concurrent writes
+// (ESP-NOW recv_cb task + main loop + web server async tasks)
+static SemaphoreHandle_t s_mutex = NULL;
+
+static void ensure_mutex() {
+    if (!s_mutex) s_mutex = xSemaphoreCreateMutex();
+}
+
+void sensor_registry_lock() {
+    ensure_mutex();
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+}
+
+void sensor_registry_unlock() {
+    xSemaphoreGive(s_mutex);
+}
 
 static virtual_sensor_t s_sensors[MAX_VIRTUAL_SENSORS];
 static bool s_initialized = false;
 static bool s_dirty = false;
+
+void sensor_registry_mark_dirty() { s_dirty = true; }
 
 bool sensor_registry_init() {
     config_store_init();
@@ -70,7 +96,8 @@ int sensor_registry_count_online() {
 
 bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip, uint8_t radio_type) {
     if (slot >= MAX_VIRTUAL_SENSORS) return false;
-    if (sensor_registry_find_by_mac(mac) >= 0) return false;
+    sensor_registry_lock();
+    if (sensor_registry_find_by_mac(mac) >= 0) { sensor_registry_unlock(); return false; }
 
     virtual_sensor_t *s = &s_sensors[slot];
     mac_copy(s->mac, mac);
@@ -94,6 +121,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->name[sizeof(s->name) - 1] = '\0';
 
     s_dirty = true;
+    sensor_registry_unlock();
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
     console.printf("[Gateway] Added sensor slot %d: MAC=%s type=%d\n",
@@ -106,7 +134,9 @@ bool sensor_registry_remove(int slot) {
         console.printf("[Gateway] Remove slot %d: invalid (max=%d)\n", slot, MAX_VIRTUAL_SENSORS);
         return false;
     }
+    sensor_registry_lock();
     if (!s_sensors[slot].paired) {
+        sensor_registry_unlock();
         console.printf("[Gateway] Remove slot %d: not paired (name=%s bid=%s)\n",
                        slot, s_sensors[slot].name, s_sensors[slot].bridge_device_id);
         return false;
@@ -116,13 +146,15 @@ bool sensor_registry_remove(int slot) {
                    slot, s_sensors[slot].name, s_sensors[slot].bridge_device_id);
     memset(&s_sensors[slot], 0, sizeof(virtual_sensor_t));
     s_dirty = true;
+    sensor_registry_unlock();
     return true;
 }
 
 bool sensor_registry_update_state(int slot, const espnow_header_t *header, const uint8_t *payload, size_t payload_len) {
     if (slot < 0 || slot >= MAX_VIRTUAL_SENSORS) return false;
+    sensor_registry_lock();
     virtual_sensor_t *s = &s_sensors[slot];
-    if (!s->paired) return false;
+    if (!s->paired) { sensor_registry_unlock(); return false; }
 
     s->sequence = header->sequence;
     s->battery_pct = header->battery_pct;
@@ -213,7 +245,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         }
         case SENSOR_TYPE_SOIL_MOISTURE:
         {
-            if (payload_len < sizeof(payload_soil_moisture_t)) return false;
+            if (payload_len < sizeof(payload_soil_moisture_t)) { sensor_registry_unlock(); return false; }
             payload_soil_moisture_t *pl = (payload_soil_moisture_t *)payload;
             s->state.soil_moisture.raw_adc = pl->raw_adc;
             s->state.soil_moisture.moisture_pct = pl->moisture_pct;
@@ -242,10 +274,12 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         memcpy(s->ip, payload + payload_len - 4, 4);
     }
 
+    sensor_registry_unlock();
     return true;
 }
 
 bool sensor_registry_save() {
+    sensor_registry_lock();
     SensorSlot slots[MAX_VIRTUAL_SENSORS];
     memset(slots, 0, sizeof(slots));
 
@@ -260,6 +294,7 @@ bool sensor_registry_save() {
         strncpy(slots[i].bridge_device_id, s_sensors[i].bridge_device_id, sizeof(slots[i].bridge_device_id) - 1);
     }
 
+    sensor_registry_unlock();
     bool ok = config_sensors_save(slots, MAX_VIRTUAL_SENSORS);
     console.printf("[CFG] Sensors saved: %s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
     s_dirty = false;
@@ -307,10 +342,12 @@ void sensor_registry_load() {
 }
 
 void sensor_registry_clear_all() {
+    sensor_registry_lock();
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         memset(&s_sensors[i], 0, sizeof(virtual_sensor_t));
     }
     s_dirty = true;
+    sensor_registry_unlock();
     console.println("[Gateway] All sensors cleared");
 }
 

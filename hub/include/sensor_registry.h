@@ -70,4 +70,9 @@ void sensor_registry_print_all();
 const char* sensor_type_to_string(uint8_t type);
 const char* sensor_type_friendly_name(uint8_t type);
 
+// Thread-safe write access — caller must NOT hold the lock across yield points.
+void sensor_registry_lock();
+void sensor_registry_unlock();
+void sensor_registry_mark_dirty();
+
 #endif

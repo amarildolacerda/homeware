@@ -3,26 +3,9 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
-// --- Init ---
-
-void config_store_init() {
-    if (!LittleFS.begin()) {
-        console.println("[CONFIG] LittleFS mount failed, formatting...");
-        LittleFS.format();
-        LittleFS.begin();
-    }
-    console.println("[CONFIG] LittleFS mounted");
-}
-
-// --- Generic helpers ---
-
-bool config_file_exists(const char *path) {
-    return LittleFS.exists(path);
-}
-
-bool config_file_remove(const char *path) {
-    return LittleFS.remove(path);
-}
+// NOTE: config_store_init(), config_file_exists(), config_file_remove()
+// are provided by the shared library (shared/src/config_store.cpp).
+// Only hub-specific Telegram functions live here.
 
 // --- Telegram Config ---
 

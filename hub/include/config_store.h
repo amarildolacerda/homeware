@@ -1,13 +1,12 @@
-#ifndef CONFIG_STORE_H
-#define CONFIG_STORE_H
+#ifndef HUB_CONFIG_STORE_H
+#define HUB_CONFIG_STORE_H
 
-#include <Arduino.h>
+// Include shared config_store (SensorSlot, config_sensors_*, config_mqtt_*, etc.)
+#include "../../shared/src/config_store.h"
 
-// Config file paths on LittleFS
-#define CONFIG_FILE_HUB     "/hub_config.json"
+// --- Telegram Config (hub-only) ---
 #define CONFIG_FILE_TELEGRAM "/telegram.json"
 
-// --- Telegram Config ---
 struct TelegramConfig {
     bool     enabled;
     char     token[64];
@@ -17,16 +16,9 @@ struct TelegramConfig {
     uint16_t alerts_type;     // bitmask: bit0=gas, bit1=smoke, bit2=offline, bit3=reconnect, ...
 };
 
-// Initialize LittleFS and load config
-void config_store_init();
-
 // Telegram config
 bool config_telegram_load(TelegramConfig *cfg);
 bool config_telegram_save(const TelegramConfig *cfg);
 bool config_telegram_load_defaults(TelegramConfig *cfg);
-
-// Generic helpers
-bool config_file_exists(const char *path);
-bool config_file_remove(const char *path);
 
 #endif

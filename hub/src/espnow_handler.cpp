@@ -425,13 +425,13 @@ void EspnowHandler::broadcast_device_list() {
 }
 
 void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
-    if (!data || len < 1) { m_crc_errors++; console.printf("[ESPNOW] RX null/empty, len=%d\n", len); return; }
+    if (!data || len < 1) { m_crc_errors++; log_add("warn", "ESPNOW RX null/empty len=%d", len); return; }
     m_rx_count++;
     uint8_t msg_type = data[0];
 
     char mac_str[18];
     mac_to_str(mac, mac_str, sizeof(mac_str));
-    console.printf("[ESPNOW] RX msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
+    log_add("info", "ESPNOW RX type=0x%02X len=%d from %s", msg_type, len, mac_str);
 
     switch (msg_type) {
         case MSG_PAIR_REQUEST: {
@@ -527,7 +527,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
             const espnow_gw_announce_t *ann = (const espnow_gw_announce_t*)data;
             char ann_mac[18];
             mac_to_str(ann->gateway_mac, ann_mac, sizeof(ann_mac));
-            console.printf("[ESPNOW] GW_ANNOUNCE from extender %s (src %s)\n", ann_mac, mac_str);
+            log_add("info", "ESPNOW GW_ANNOUNCE from %s", ann_mac);
             break;
         }
 
@@ -544,7 +544,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                     s->type = SENSOR_TYPE_REPEATER;
                     strncpy(s->name, "Repeater", sizeof(s->name) - 1);
                     s->name[sizeof(s->name) - 1] = '\0';
-                    sensor_registry_save();
+                    sensor_registry_mark_dirty();
                 }
             }
             send_gw_announce(mac);
@@ -570,7 +570,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
                     s->type = SENSOR_TYPE_REPEATER;
                     strncpy(s->name, "Repeater", sizeof(s->name) - 1);
                     s->name[sizeof(s->name) - 1] = '\0';
-                    sensor_registry_save();
+                    sensor_registry_mark_dirty();
                 }
             }
             sensor_registry_update_state(slot, hdr, hdr->payload, hdr->payload_len);
@@ -607,7 +607,7 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
         }
 
         default:
-            console.printf("[ESPNOW] UNKNOWN msg_type=0x%02X len=%d from %s\n", msg_type, len, mac_str);
+            log_add("warn", "ESPNOW UNKNOWN type=0x%02X len=%d from %s", msg_type, len, mac_str);
             m_crc_errors++;
             break;
     }
