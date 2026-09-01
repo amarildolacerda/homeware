@@ -260,7 +260,7 @@ bool mqtt_client_connect() {
                 if (s && s->paired && strlen(s->bridge_device_id) > 0) {
                     mqtt_client_publish_availability(s, true);
                     avail_count++;
-                    yield(); delay(10);
+                    yield();
                 }
             }
             console.printf("[MQTT] Published online availability for %d sensors\n", avail_count);
@@ -561,7 +561,7 @@ bool mqtt_client_publish_all() {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) > 0) {
             if (mqtt_client_publish_discovery(s)) count++;
-            yield(); delay(10);
+            yield();
         }
     }
     console.printf("[MQTT] Published %d sensors to MQTT\n", count);
