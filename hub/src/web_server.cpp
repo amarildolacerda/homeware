@@ -237,6 +237,7 @@ void web_server_init() {
     });
 
     s_server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (ESP.getFreeHeap() < 12000) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
         JsonDocument doc;
         doc["paired_count"] = sensor_registry_count_paired();
         doc["online_count"] = sensor_registry_count_online();
@@ -306,11 +307,21 @@ void web_server_init() {
 
 
     s_server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (ESP.getFreeHeap() < 15000) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
+        // Snapshot registry under lock to avoid tearing with recv_cb
+        virtual_sensor_t snap[MAX_VIRTUAL_SENSORS];
+        sensor_registry_lock();
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *src = sensor_registry_get(i);
+            if (src) memcpy(&snap[i], src, sizeof(virtual_sensor_t));
+            else memset(&snap[i], 0, sizeof(virtual_sensor_t));
+        }
+        sensor_registry_unlock();
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
 
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-            virtual_sensor_t *s = sensor_registry_get(i);
+            virtual_sensor_t *s = &snap[i];
             if (s && s->paired) {
                 JsonObject obj = arr.add<JsonObject>();
                 obj["slot"] = s->slot;
