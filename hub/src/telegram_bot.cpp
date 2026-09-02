@@ -6,6 +6,8 @@
 #include "mqtt_client.h"
 #include "common_console.h"
 #include "platform.h"
+#include <ctype.h>
+#include <strings.h>
 
 #if defined(TELEGRAM_ENABLED)
 
@@ -176,8 +178,8 @@ static void handle_list(long chat_id) {
             }
             
             pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s %d. %s (%s) - %s\n",
-                status, s->slot + 1, s->name, radio,
+                "%s [%d] %s (%s) - %s\n",
+                status, s->slot, s->name, radio,
                 s->online ? sensor_type_friendly_name(s->type) : "offline"
             );
             count++;
@@ -198,14 +200,36 @@ static void handle_list(long chat_id) {
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
+// Helper: resolve slot by numeric id or case-insensitive name
+static int find_slot_by_arg(const char* args) {
+    if (!args || strlen(args) == 0) return -1;
+    // numeric slot?
+    bool is_num = true;
+    for (const char* p = args; *p; p++) if (!isdigit((unsigned char)*p)) { is_num = false; break; }
+    if (is_num) {
+        int slot = atoi(args);
+        if (slot < 0 || slot >= MAX_VIRTUAL_SENSORS) return -1;
+        virtual_sensor_t *s = sensor_registry_get(slot);
+        if (s && s->paired) return slot;
+        return -1;
+    }
+    // case-insensitive name exact match
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (!s || !s->paired) continue;
+        if (strcasecmp(s->name, args) == 0) return i;
+    }
+    return -1;
+}
+
 // Handle /on command
 static void handle_on(long chat_id, const char* args) {
     if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /on <nome_do_node>", "");
+        s_tg_bot->sendMessage(String(chat_id), "Uso: /on <slot>", "");
         return;
     }
     
-    int slot = sensor_registry_find_by_name(args);
+    int slot = find_slot_by_arg(args);
     if (slot < 0) {
         s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
         return;
@@ -235,11 +259,11 @@ static void handle_on(long chat_id, const char* args) {
 // Handle /off command
 static void handle_off(long chat_id, const char* args) {
     if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /off <nome_do_node>", "");
+        s_tg_bot->sendMessage(String(chat_id), "Uso: /off <slot>", "");
         return;
     }
     
-    int slot = sensor_registry_find_by_name(args);
+    int slot = find_slot_by_arg(args);
     if (slot < 0) {
         s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
         return;
@@ -307,14 +331,15 @@ static void handle_help(long chat_id) {
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
         "/status - Status geral do hub\n"
-        "/list - Listar todos os nodes\n"
-        "/on <node> - Lig relé\n"
-        "/off <node> - Desligar relé\n"
+        "/list - Listar todos os nodes [slot]\n"
+        "/on <slot> - Liga relé\n"
+        "/off <slot> - Desliga relé\n"
         "/battery - Níveis de bateria\n"
         "/help - Esta mensagem\n\n"
         "*Exemplos:*\n"
-        "`/on bomba_1`\n"
-        "`/off bomba_1`\n\n"
+        "`/on 0`\n"
+        "`/off 0`\n"
+        "`/on Entrada` (case-insensitive)\n\n"
         "Configure alertas via dashboard: http://<hub-ip>/settings";
     
     s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
