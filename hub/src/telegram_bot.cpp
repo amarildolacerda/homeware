@@ -325,6 +325,23 @@ static void handle_battery(long chat_id) {
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
+static String buildLampKeyboard() {
+    String kb = "[";
+    bool first = true;
+    int cnt = 0;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (!s || !s->paired) continue;
+        if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
+        if (!first) kb += ",";
+        kb += "[\"toggle_" + String(s->slot) + " " + String(s->name) + " [" + (s->state.onoff.state ? "ON" : "OFF") + "]\"]";
+        first = false;
+        if (++cnt >= 6) break;
+    }
+    kb += "]";
+    return kb;
+}
+
 // Handle toggle via inline button
 static void handle_toggle(long chat_id, int slot) {
     virtual_sensor_t *s = sensor_registry_get(slot);
@@ -340,7 +357,10 @@ static void handle_toggle(long chat_id, int slot) {
     if (device_send_command(s->mac, s->slot, new_state)) {
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
-        s_tg_bot->sendMessage(String(chat_id), buf, "");
+        // optimistic update for keyboard feedback
+        s->state.onoff.state = new_state;
+        String kb = buildLampKeyboard();
+        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), buf, "", kb, true, false, false);
         console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
     } else {
         s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
@@ -365,22 +385,9 @@ static void handle_help(long chat_id) {
        // "`/on Entrada` (case-insensitive)\n\n"
        // "Configure alertas via dashboard: http://<hub-ip>/settings";
     
-    // Build reply keyboard for lamps (toggle único) - more reliable than inline callback
-    String keyboard = "[";
-    bool first = true;
-    int lamp_count = 0;
-    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        virtual_sensor_t *s = sensor_registry_get(i);
-        if (!s || !s->paired) continue;
-        if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
-        if (!first) keyboard += ",";
-        keyboard += "[\"toggle_" + String(s->slot) + " " + String(s->name) + "\"]";
-        first = false;
-        lamp_count++;
-        if (lamp_count >= 6) break;
-    }
-    keyboard += "]";
-    if (lamp_count > 0) {
+    String keyboard = buildLampKeyboard();
+    bool has_lamps = (keyboard != "[]");
+    if (has_lamps) {
         s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), help, "Markdown", keyboard, true, false, false);
     } else {
         s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
