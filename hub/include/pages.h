@@ -1150,7 +1150,6 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <button class="btn btn-secondary" onclick="doReregister()" style="margin-top:8px;width:100%">Forçar re-registro</button>
 </div>
 </div>
-</div>
 
 <div class="card collapsible collapsed" id="card-telegram" style="margin-top:12px">
 <div class="card-head" onclick="toggleCard('card-telegram')">
@@ -1162,6 +1161,7 @@ h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
 <div class="row"><span class="label">Chat ID</span><span class="value" id="s-telegram-chatid">--</span></div>
 <div class="row"><span class="label">Poll Interval</span><span class="value" id="s-telegram-poll">--</span></div>
 <button class="btn btn-primary" onclick="showTelegramForm()" style="margin-top:12px;width:100%">Configurar Telegram</button>
+</div>
 </div>
 </div>
 
