@@ -25,7 +25,9 @@
 #include "common_console.h"
 #include "common_watchdog.h"
 #include "device_router.h"
+#ifdef TELEGRAM_ENABLED
 #include "telegram_bot.h"
+#endif
 #include "config_store.h"
 
 static const char *TAG = PLATFORM_PREFIX "_gateway";
@@ -436,7 +438,10 @@ void loop() {
     if (op_mode_load() != OP_MODE_AP) {
         mqtt_client_loop();
     }
+
+#ifdef TELEGRAM_ENABLED    
     telegram_bot_loop();
+    #endif
 
     /* LED pisca durante o modo de pareamento */
     {
