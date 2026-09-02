@@ -334,12 +334,24 @@ static String buildLampKeyboard() {
         if (!s || !s->paired) continue;
         if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
         if (!first) kb += ",";
-        kb += "[\"toggle_" + String(s->slot) + " " + String(s->name) + " [" + (s->state.onoff.state ? "ON" : "OFF") + "]\"]";
+        kb += "[\"[" + String(s->state.onoff.state ? "ON" : "OFF") + "]" + String(s->slot) + " " + String(s->name) + "\"]";
         first = false;
         if (++cnt >= 6) break;
     }
     kb += "]";
     return kb;
+}
+
+static int parseSlotFromButton(const String& txt) {
+    if (txt.startsWith("toggle_")) return txt.substring(7).toInt();
+    if (txt.startsWith("[ON]") || txt.startsWith("[OFF]")) {
+        int close = txt.indexOf(']');
+        if (close < 0) return -1;
+        String rest = txt.substring(close + 1);
+        rest.trim();
+        return rest.toInt();
+    }
+    return -1;
 }
 
 // Handle toggle via reply keyboard (command, feedback via node)
@@ -423,18 +435,18 @@ static void process_messages(int num_new_messages) {
             continue;
         }
         
-        // Inline button callback (toggle_<slot>) - comes as callback_query type
-        if (text.startsWith("toggle_") || s_tg_bot->messages[i].type == "callback_query") {
-            String data = text;
-            if (data.startsWith("toggle_")) {
-                int slot = data.substring(7).toInt();
-                handle_toggle(chat_id_long, slot);
-                // Answer callback to dismiss loading spinner
-                if (s_tg_bot->messages[i].query_id.length() > 0) {
-                    s_tg_bot->answerCallbackQuery(s_tg_bot->messages[i].query_id, "");
-                }
-                continue;
+        // Reply keyboard toggle: "[ON]0 Entrada" / "[OFF]0 Entrada" or legacy "toggle_0" or inline callback
+        int btnSlot = parseSlotFromButton(text);
+        if (btnSlot >= 0) {
+            handle_toggle(chat_id_long, btnSlot);
+            if (s_tg_bot->messages[i].query_id.length() > 0) {
+                s_tg_bot->answerCallbackQuery(s_tg_bot->messages[i].query_id, "");
             }
+            continue;
+        }
+        // Fallback for callback_query where text may be empty but data is in query
+        if (s_tg_bot->messages[i].type == "callback_query" && s_tg_bot->messages[i].query_id.length() > 0) {
+            // try again with callback data already handled above; if not parsed, ignore
         }
         // Parse command and args
         String cmd = text;
