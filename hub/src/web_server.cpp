@@ -237,6 +237,7 @@ void web_server_init() {
     });
 
     s_server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (ESP.getFreeHeap() < 12000) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
         JsonDocument doc;
         doc["paired_count"] = sensor_registry_count_paired();
         doc["online_count"] = sensor_registry_count_online();
@@ -278,6 +279,11 @@ void web_server_init() {
 #endif
         doc["free_heap"] = ESP.getFreeHeap();
         doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
+#ifdef TELEGRAM_ENABLED
+        doc["telegram_enabled"] = true;
+#else
+        doc["telegram_enabled"] = false;
+#endif
         doc["ntp_synced"] = gateway_ntp_synced();
         doc["epoch"] = (uint32_t)gateway_ntp_epoch();
         doc["ip"] = WiFi.localIP().toString();
@@ -306,11 +312,22 @@ void web_server_init() {
 
 
     s_server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (ESP.getFreeHeap() < 15000) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
+        // Snapshot registry under try-lock (async task must not block) - heap alloc to avoid async_tcp stack overflow
+        virtual_sensor_t *snap = (virtual_sensor_t*)malloc(sizeof(virtual_sensor_t) * MAX_VIRTUAL_SENSORS);
+        if (!snap) { request->send(503, "application/json", "{\"error\":\"low memory\"}"); return; }
+        if (!sensor_registry_try_lock(20)) { free(snap); request->send(503, "application/json", "{\"error\":\"busy\"}"); return; }
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *src = sensor_registry_get(i);
+            if (src) memcpy(&snap[i], src, sizeof(virtual_sensor_t));
+            else memset(&snap[i], 0, sizeof(virtual_sensor_t));
+        }
+        sensor_registry_unlock();
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
 
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-            virtual_sensor_t *s = sensor_registry_get(i);
+            virtual_sensor_t *s = &snap[i];
             if (s && s->paired) {
                 JsonObject obj = arr.add<JsonObject>();
                 obj["slot"] = s->slot;
@@ -392,7 +409,7 @@ void web_server_init() {
                 }
             }
         }
-
+        free(snap);
         String json;
         serializeJson(doc, json);
         AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);

@@ -89,9 +89,10 @@ static void mqtt_callback(char *topic, byte *payload, unsigned int length) {
 }
 
 static void publish_entity_config(const char *component, const char *entity_id,
-                                  const char *sensor_name, const char *entity_label,
-                                  const char *device_class, const char *unit, bool is_binary,
-                                  const char *bridge_id, const char *model) {
+                                   const char *sensor_name, const char *entity_label,
+                                   const char *device_class, const char *unit, bool is_binary,
+                                   const char *bridge_id, const char *model) {
+    if (ESP.getFreeHeap() < 12000) { console.printf("[MQTT] heap low %u, skip config %s\n", ESP.getFreeHeap(), entity_id); return; }
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/%s/%s/config", MQTT_TOPIC_PREFIX, component, entity_id);
 
@@ -250,14 +251,16 @@ bool mqtt_client_connect() {
 
         mqtt_client_publish_all();
 
-        // Publish online availability for all paired sensors
+        // Publish online availability for all paired sensors (guard heap + yield to avoid WDT/heap frag)
         {
             int avail_count = 0;
             for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+                if (ESP.getFreeHeap() < 15000) { console.printf("[MQTT] heap low %u, skip availability\n", ESP.getFreeHeap()); break; }
                 virtual_sensor_t *s = sensor_registry_get(i);
                 if (s && s->paired && strlen(s->bridge_device_id) > 0) {
                     mqtt_client_publish_availability(s, true);
                     avail_count++;
+                    yield();
                 }
             }
             console.printf("[MQTT] Published online availability for %d sensors\n", avail_count);
@@ -551,12 +554,14 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
 
 bool mqtt_client_publish_all() {
     if (!s_mqtt_connected) return false;
-
+    if (ESP.getFreeHeap() < 15000) { console.printf("[MQTT] heap low %u, skip publish_all\n", ESP.getFreeHeap()); return false; }
     int count = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        if (ESP.getFreeHeap() < 12000) break;
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired && strlen(s->bridge_device_id) > 0) {
             if (mqtt_client_publish_discovery(s)) count++;
+            yield();
         }
     }
     console.printf("[MQTT] Published %d sensors to MQTT\n", count);

@@ -6,6 +6,8 @@
 #include "mqtt_client.h"
 #include "common_console.h"
 #include "platform.h"
+#include <ctype.h>
+#include <strings.h>
 
 #if defined(TELEGRAM_ENABLED)
 
@@ -176,9 +178,10 @@ static void handle_list(long chat_id) {
             }
             
             pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s %d. %s (%s) - %s\n",
-                status, s->slot + 1, s->name, radio,
-                s->online ? sensor_type_friendly_name(s->type) : "offline"
+                "%s [%d] %s (%s) - %s 🔋 %d%%\n",
+                status, s->slot, s->name, radio,
+                s->online ? sensor_type_friendly_name(s->type) : "offline",
+                s->battery_pct
             );
             count++;
             
@@ -198,107 +201,69 @@ static void handle_list(long chat_id) {
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
-// Handle /on command
-static void handle_on(long chat_id, const char* args) {
-    if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /on <nome_do_node>", "");
-        return;
-    }
-    
-    int slot = sensor_registry_find_by_name(args);
-    if (slot < 0) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
-        return;
-    }
-    
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    if (!s || !s->paired) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado", "");
-        return;
-    }
-    
-    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo de sensor não suporta comando ON/OFF", "");
-        return;
-    }
-    
-    if (device_send_command(s->mac, s->slot, 1)) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "✅ %s ligado!", s->name);
-        s_tg_bot->sendMessage(String(chat_id), buf, "");
-        console.printf("[TELEGRAM] ON command sent to %s\n", s->name);
-    } else {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar comando", "");
-    }
-}
 
-// Handle /off command
-static void handle_off(long chat_id, const char* args) {
-    if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /off <nome_do_node>", "");
-        return;
-    }
-    
-    int slot = sensor_registry_find_by_name(args);
-    if (slot < 0) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
-        return;
-    }
-    
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    if (!s || !s->paired) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado", "");
-        return;
-    }
-    
-    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo de sensor não suporta comando ON/OFF", "");
-        return;
-    }
-    
-    if (device_send_command(s->mac, s->slot, 0)) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "❌ %s desligado!", s->name);
-        s_tg_bot->sendMessage(String(chat_id), buf, "");
-        console.printf("[TELEGRAM] OFF command sent to %s\n", s->name);
-    } else {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar comando", "");
-    }
-}
 
-// Handle /battery command
-static void handle_battery(long chat_id) {
-    char buf[512];
-    int pos = 0;
-    int count = 0;
-    
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "🔋 *Níveis de Bateria*\n\n");
-    
+static String buildLampKeyboard() {
+    String kb = "[";
+    bool first = true;
+    int cnt = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
-        if (s && s->paired) {
-            const char* icon = "✅";
-            if (s->battery_pct < 20) icon = "🔴";
-            else if (s->battery_pct < 50) icon = "🟡";
-            
-            pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s %s: %d%%\n",
-                icon, s->name, s->battery_pct
-            );
-            count++;
-            
-            if (pos > 900) {
-                pos += snprintf(buf + pos, sizeof(buf) - pos, "\n... e mais nodes\n");
-                break;
-            }
-        }
+        if (!s || !s->paired) continue;
+        if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
+        if (!first) kb += ",";
+        kb += "[\"[" + String(s->state.onoff.state ? "ON" : "OFF") + "]" + String(s->slot) + " " + String(s->name) + "\"]";
+        first = false;
+        if (++cnt >= 6) break;
     }
-    
-    if (count == 0) {
-        pos += snprintf(buf + pos, sizeof(buf) - pos, "Nenhum sensor com bateria.\n");
+    kb += "]";
+    return kb;
+}
+
+static int parseSlotFromButton(const String& txt) {
+    if (txt.startsWith("toggle_")) return txt.substring(7).toInt();
+    if (txt.startsWith("[ON]") || txt.startsWith("[OFF]")) {
+        int close = txt.indexOf(']');
+        if (close < 0) return -1;
+        String rest = txt.substring(close + 1);
+        rest.trim();
+        return rest.toInt();
     }
-    
-    s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
+    return -1;
+}
+
+// Handle toggle via reply keyboard (command, feedback via node)
+static void handle_toggle(long chat_id, int slot) {
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || !s->paired) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não encontrado", "");
+        return;
+    }
+    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo não suporta toggle", "");
+        return;
+    }
+    uint8_t new_state = s->state.onoff.state ? 0 : 1;
+    if (device_send_command(s->mac, s->slot, new_state)) {
+        // feedback via node state report -> telegram_on_lamp_state_change()
+        console.printf("[TELEGRAM] Toggle cmd slot %d -> %d (aguardando feedback)\n", slot, new_state);
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
+    }
+}
+
+void telegram_on_lamp_state_change(int slot) {
+    if (!s_tg_initialized || !s_tg_enabled) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+    static unsigned long last_kb = 0;
+    if (millis() - last_kb < 2000) return; // throttle 2s
+    last_kb = millis();
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT)) return;
+    String kb = buildLampKeyboard();
+    char buf[128];
+    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
+    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
 }
 
 // Handle /start and /help commands
@@ -306,18 +271,23 @@ static void handle_help(long chat_id) {
     const char* help = 
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
+        "/start - Menu com botões toggle\n"
         "/status - Status geral do hub\n"
-        "/list - Listar todos os nodes\n"
-        "/on <node> - Lig relé\n"
-        "/off <node> - Desligar relé\n"
-        "/battery - Níveis de bateria\n"
-        "/help - Esta mensagem\n\n"
-        "*Exemplos:*\n"
-        "`/on bomba_1`\n"
-        "`/off bomba_1`\n\n"
-        "Configure alertas via dashboard: http://<hub-ip>/settings";
+        "/list - Listar nodes [slot] 🔋\n"
+        "/help - Esta mensagem\n\n";
+       // "*Exemplos:*\n"
+       // "`/on 0`\n"
+       // "`/off 0`\n"
+       // "`/on Entrada` (case-insensitive)\n\n"
+       // "Configure alertas via dashboard: http://<hub-ip>/settings";
     
-    s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
+    String keyboard = buildLampKeyboard();
+    bool has_lamps = (keyboard != "[]");
+    if (has_lamps) {
+        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), help, "Markdown", keyboard, true, false, false);
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
+    }
 }
 
 // Process incoming messages
@@ -340,6 +310,19 @@ static void process_messages(int num_new_messages) {
             continue;
         }
         
+        // Reply keyboard toggle: "[ON]0 Entrada" / "[OFF]0 Entrada" or legacy "toggle_0" or inline callback
+        int btnSlot = parseSlotFromButton(text);
+        if (btnSlot >= 0) {
+            handle_toggle(chat_id_long, btnSlot);
+            if (s_tg_bot->messages[i].query_id.length() > 0) {
+                s_tg_bot->answerCallbackQuery(s_tg_bot->messages[i].query_id, "");
+            }
+            continue;
+        }
+        // Fallback for callback_query where text may be empty but data is in query
+        if (s_tg_bot->messages[i].type == "callback_query" && s_tg_bot->messages[i].query_id.length() > 0) {
+            // try again with callback data already handled above; if not parsed, ignore
+        }
         // Parse command and args
         String cmd = text;
         String args = "";
@@ -351,7 +334,7 @@ static void process_messages(int num_new_messages) {
         }
         cmd.toLowerCase();
         
-        // Handle commands
+        // Handle commands (teclado resolve toggle; /on|/off|/battery removidos)
         if (cmd == "/start" || cmd == "/help") {
             handle_help(chat_id_long);
         }
@@ -360,15 +343,6 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
-        }
-        else if (cmd == "/on") {
-            handle_on(chat_id_long, args.c_str());
-        }
-        else if (cmd == "/off") {
-            handle_off(chat_id_long, args.c_str());
-        }
-        else if (cmd == "/battery") {
-            handle_battery(chat_id_long);
         }
         else {
             s_tg_bot->sendMessage(String(chat_id_long), 
@@ -414,17 +388,8 @@ void telegram_bot_init() {
     
     console.printf("[TELEGRAM] Bot initialized, polling every %ums\n", s_tg_poll_interval);
     
-    // Send startup message
-    char buf[256];
-    snprintf(buf, sizeof(buf), 
-        "🟢 *Hub AgriSense Online*\n\n"
-        "Device: `%s`\n"
-        "IP: `%s`\n"
-        "Uptime: 0s",
-        get_gateway_device_id(),
-        WiFi.localIP().toString().c_str()
-    );
-    s_tg_bot->sendMessage(String(s_tg_chatid), buf, "Markdown");
+    // Send startup welcome (same as /start with toggle buttons)
+    handle_help(atol(s_tg_chatid));
 }
 
 // Main loop
@@ -442,6 +407,35 @@ void telegram_bot_loop() {
     if (num_new_messages > 0) {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
+    }
+
+    // Poll lamp feedback for reply keyboard (decoupled from radio)
+    static uint8_t last_state[MAX_VIRTUAL_SENSORS];
+    static bool last_init = false;
+    static unsigned long last_kb_push = 0;
+    if (!last_init) {
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *s = sensor_registry_get(i);
+            last_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
+        }
+        last_init = true;
+    } else {
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *s = sensor_registry_get(i);
+            if (!s || !s->paired) continue;
+            if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
+            if (last_state[i] != s->state.onoff.state) {
+                last_state[i] = s->state.onoff.state;
+                if (millis() - last_kb_push > 2000) {
+                    last_kb_push = millis();
+                    String kb = buildLampKeyboard();
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
+                    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
+                }
+                break;
+            }
+        }
     }
 }
 

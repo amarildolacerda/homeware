@@ -21,7 +21,13 @@ static void ensure_mutex() {
 
 void sensor_registry_lock() {
     ensure_mutex();
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    // 100ms timeout to avoid deadlock in WiFi/ESP-NOW task (recv_cb) — see rule 23
+    xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100));
+}
+
+bool sensor_registry_try_lock(uint32_t timeout_ms) {
+    ensure_mutex();
+    return xSemaphoreTake(s_mutex, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
 void sensor_registry_unlock() {
@@ -76,21 +82,28 @@ virtual_sensor_t* sensor_registry_get(int slot) {
 }
 
 int sensor_registry_count_paired() {
+    ensure_mutex();
+    // heap-safe: copy under lock with timeout
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(20)) != pdTRUE) return 0;
     int count = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         if (s_sensors[i].paired) count++;
     }
+    xSemaphoreGive(s_mutex);
     return count;
 }
 
 int sensor_registry_count_online() {
-    int count = 0;
+    ensure_mutex();
     unsigned long now = millis();
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(20)) != pdTRUE) return 0;
+    int count = 0;
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         if (s_sensors[i].paired && s_sensors[i].online && (now - s_sensors[i].last_seen < SENSOR_TIMEOUT_MS)) {
             count++;
         }
     }
+    xSemaphoreGive(s_mutex);
     return count;
 }
 

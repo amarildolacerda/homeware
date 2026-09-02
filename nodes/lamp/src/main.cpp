@@ -814,6 +814,9 @@ static void handle_api_state(void)
         doc["rx_count"] = s_radio.rx_count();
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
+#ifdef TCP_ENABLED
+        doc["hub_ip"] = s_radio.gateway_ip().toString();
+#endif
 #ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
         doc["repeater_active"] = (repeater_get_fwd_count() > 0) || repeater_is_enabled();
@@ -2141,7 +2144,7 @@ void loop(void)
         int8_t pulse_action = pulse_check(now);
         if (pulse_action == -1)
         {
-            console.printf("[%s] Pulse timeout (now=%lu), turning OFF\n", TAG, now);
+            console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
             set_relay(false);
         }
     }

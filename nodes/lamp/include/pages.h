@@ -255,6 +255,7 @@ static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <h1>Propriedades</h1>
 <div class="row"><span class="label">Alexa</span><span class="value" id="alexaStatus">-</span></div>
 <div class="row"><span class="label">IP</span><span class="value" id="ipStatus">-</span></div>
+<div class="row" id="hubIpRow"><span class="label">Hub IP</span><span class="value" id="hubIpStatus">-</span></div>
 <div class="row"><span class="label">Bateria</span><span class="value" id="batteryStatus">-</span></div>
 <div class="row"><span class="label">Versão</span><span class="value" id="fwVersion">-</span></div>
 <div class="row"><span class="label">Slot</span><span class="value" id="slotStatus">-</span></div>
@@ -298,6 +299,8 @@ const memVal=document.getElementById('memVal');
 const onVal=document.getElementById('onVal');
 const alexaEl=document.getElementById('alexaStatus');
 const ipEl=document.getElementById('ipStatus');
+const hubIpEl=document.getElementById('hubIpStatus');
+const hubIpRow=document.getElementById('hubIpRow');
 const batteryEl=document.getElementById('batteryStatus');
 const fwEl=document.getElementById('fwVersion');
 const slotEl=document.getElementById('slotStatus');
@@ -334,7 +337,9 @@ async function fetchState(){try{let r=await fetch('/api/state');let d=await r.js
   let u=d.uptime_s||0;let dd=Math.floor(u/86400);let hh=Math.floor((u%86400)/3600);let mm=Math.floor((u%3600)/60);
   let uptimeStr=(dd?dd+'d ':'')+(hh?hh+'h ':'')+mm+'m';
 alexaEl.textContent=d.alexa_connected?'Conectado':'-';alexaEl.className='value'+(d.alexa_connected?' green':'');
-ipEl.textContent=d.ip||'-';batteryEl.textContent=(d.battery||0)+'%';fwEl.textContent=d.fw_version||'-';
+ipEl.textContent=d.ip||'-';
+if(hubIpEl){hubIpEl.textContent=d.hub_ip||'-'; if(hubIpRow) hubIpRow.style.display=(d.hub_ip && d.hub_ip!=='0.0.0.0')?'':'none'; }
+batteryEl.textContent=(d.battery||0)+'%';fwEl.textContent=d.fw_version||'-';
 slotEl.textContent=d.slot!==undefined&&d.slot!==null?d.slot:'-';
 let name=d.device_name||'Lâmpada';
 document.getElementById('pageTitle').textContent=name;

@@ -437,13 +437,13 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
         mqtt_client_publish_availability(sensor, true);
     }
 
-    /* Feedback to HA: the ESP-NOW path bridges state via queue_bridge_state()
-       -> process_bridge_queue() -> mqtt_client_publish_state(); without the
-       same publish here, TCP nodes never update the MQTT state_topic and HA
-       shows the entity always "off" (non-optimistic light/switch waits for
-       state_topic). Queue instead of publishing synchronously so the HTTP
-       handler never blocks on the broker TCP write. */
-    queue_bridge_state(slot);
+     /* Feedback to HA: the ESP-NOW path bridges state via queue_bridge_state()
+        -> process_bridge_queue() -> mqtt_client_publish_state(); without the
+        same publish here, TCP nodes never update the MQTT state_topic and HA
+        shows the entity always "off" (non-optimistic light/switch waits for
+        state_topic). Queue instead of publishing synchronously so the HTTP
+        handler never blocks on the broker TCP write. */
+     queue_bridge_state(slot);
 }
 
 void TcpRadioHandler::handle_heartbeat(const char* device_id) {
