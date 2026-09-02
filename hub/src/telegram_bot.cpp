@@ -325,6 +325,28 @@ static void handle_battery(long chat_id) {
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
+// Handle toggle via inline button
+static void handle_toggle(long chat_id, int slot) {
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || !s->paired) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não encontrado", "");
+        return;
+    }
+    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo não suporta toggle", "");
+        return;
+    }
+    uint8_t new_state = s->state.onoff.state ? 0 : 1;
+    if (device_send_command(s->mac, s->slot, new_state)) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
+        s_tg_bot->sendMessage(String(chat_id), buf, "");
+        console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
+    }
+}
+
 // Handle /start and /help commands
 static void handle_help(long chat_id) {
     const char* help = 
@@ -342,7 +364,31 @@ static void handle_help(long chat_id) {
         "`/on Entrada` (case-insensitive)\n\n"
         "Configure alertas via dashboard: http://<hub-ip>/settings";
     
-    s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
+    // Build inline keyboard for lamps (toggle único)
+    String keyboard = "[";
+    bool first = true;
+    int lamp_count = 0;
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (!s || !s->paired) continue;
+        if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
+        if (!first) keyboard += ",";
+        keyboard += "[{\"text\":\"";
+        keyboard += (s->state.onoff.state ? "💡 " : "⚫ ");
+        keyboard += s->name;
+        keyboard += " [" + String(s->slot) + "] ";
+        keyboard += (s->state.onoff.state ? "ON" : "OFF");
+        keyboard += "\",\"callback_data\":\"toggle_" + String(s->slot) + "\"}]";
+        first = false;
+        lamp_count++;
+        if (lamp_count >= 8) break; // limit 8 buttons
+    }
+    keyboard += "]";
+    if (lamp_count > 0) {
+        s_tg_bot->sendMessageWithInlineKeyboard(String(chat_id), help, "Markdown", keyboard);
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
+    }
 }
 
 // Process incoming messages
@@ -365,6 +411,12 @@ static void process_messages(int num_new_messages) {
             continue;
         }
         
+        // Inline button callback (toggle_<slot>)
+        if (text.startsWith("toggle_")) {
+            int slot = text.substring(7).toInt();
+            handle_toggle(chat_id_long, slot);
+            continue;
+        }
         // Parse command and args
         String cmd = text;
         String args = "";
