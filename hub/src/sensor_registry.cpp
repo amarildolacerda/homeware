@@ -1,6 +1,7 @@
 #include "sensor_registry.h"
 #include "config.h"
 #include "config_store.h"
+#include "telegram_bot.h"
 #include <Arduino.h>
 #ifdef ESP32
 #include "freertos/FreeRTOS.h"
@@ -169,6 +170,9 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
     virtual_sensor_t *s = &s_sensors[slot];
     if (!s->paired) { sensor_registry_unlock(); return false; }
 
+    bool is_lamp = (s->type == SENSOR_TYPE_ONOFF || s->type == SENSOR_TYPE_LIGHT);
+    uint8_t old_lamp_state = is_lamp ? s->state.onoff.state : 0;
+
     s->sequence = header->sequence;
     s->battery_pct = header->battery_pct;
     s->last_rssi = header->rssi;
@@ -287,7 +291,10 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         memcpy(s->ip, payload + payload_len - 4, 4);
     }
 
+    bool lamp_changed = is_lamp && (old_lamp_state != s->state.onoff.state);
+    int cb_slot = slot;
     sensor_registry_unlock();
+    if (lamp_changed) telegram_on_lamp_state_change(cb_slot);
     return true;
 }
 

@@ -342,7 +342,7 @@ static String buildLampKeyboard() {
     return kb;
 }
 
-// Handle toggle via inline button
+// Handle toggle via reply keyboard (command, feedback via node)
 static void handle_toggle(long chat_id, int slot) {
     virtual_sensor_t *s = sensor_registry_get(slot);
     if (!s || !s->paired) {
@@ -355,16 +355,25 @@ static void handle_toggle(long chat_id, int slot) {
     }
     uint8_t new_state = s->state.onoff.state ? 0 : 1;
     if (device_send_command(s->mac, s->slot, new_state)) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
-        // optimistic update for keyboard feedback
-        s->state.onoff.state = new_state;
-        String kb = buildLampKeyboard();
-        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), buf, "", kb, true, false, false);
-        console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
+        // feedback via node state report -> telegram_on_lamp_state_change()
+        console.printf("[TELEGRAM] Toggle cmd slot %d -> %d (aguardando feedback)\n", slot, new_state);
     } else {
         s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
     }
+}
+
+void telegram_on_lamp_state_change(int slot) {
+    if (!s_tg_initialized || !s_tg_enabled) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+    static unsigned long last_kb = 0;
+    if (millis() - last_kb < 2000) return; // throttle 2s
+    last_kb = millis();
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT)) return;
+    String kb = buildLampKeyboard();
+    char buf[128];
+    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
+    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
 }
 
 // Handle /start and /help commands
