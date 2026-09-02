@@ -411,11 +411,18 @@ static void process_messages(int num_new_messages) {
             continue;
         }
         
-        // Inline button callback (toggle_<slot>)
-        if (text.startsWith("toggle_")) {
-            int slot = text.substring(7).toInt();
-            handle_toggle(chat_id_long, slot);
-            continue;
+        // Inline button callback (toggle_<slot>) - comes as callback_query type
+        if (text.startsWith("toggle_") || s_tg_bot->messages[i].type == "callback_query") {
+            String data = text;
+            if (data.startsWith("toggle_")) {
+                int slot = data.substring(7).toInt();
+                handle_toggle(chat_id_long, slot);
+                // Answer callback to dismiss loading spinner
+                if (s_tg_bot->messages[i].query_id.length() > 0) {
+                    s_tg_bot->answerCallbackQuery(s_tg_bot->messages[i].query_id, "");
+                }
+                continue;
+            }
         }
         // Parse command and args
         String cmd = text;
