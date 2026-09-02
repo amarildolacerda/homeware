@@ -352,19 +352,20 @@ static void handle_help(long chat_id) {
     const char* help = 
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
+        "/start - Mensagem de boas-vindas\n"
         "/status - Status geral do hub\n"
         "/list - Listar todos os nodes [slot]\n"
         "/on <slot> - Liga relé\n"
         "/off <slot> - Desliga relé\n"
         "/battery - Níveis de bateria\n"
-        "/help - Esta mensagem\n\n"
-        "*Exemplos:*\n"
-        "`/on 0`\n"
-        "`/off 0`\n"
-        "`/on Entrada` (case-insensitive)\n\n"
-        "Configure alertas via dashboard: http://<hub-ip>/settings";
+        "/help - Esta mensagem\n\n";
+       // "*Exemplos:*\n"
+       // "`/on 0`\n"
+       // "`/off 0`\n"
+       // "`/on Entrada` (case-insensitive)\n\n"
+       // "Configure alertas via dashboard: http://<hub-ip>/settings";
     
-    // Build inline keyboard for lamps (toggle único)
+    // Build reply keyboard for lamps (toggle único) - more reliable than inline callback
     String keyboard = "[";
     bool first = true;
     int lamp_count = 0;
@@ -373,19 +374,14 @@ static void handle_help(long chat_id) {
         if (!s || !s->paired) continue;
         if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
         if (!first) keyboard += ",";
-        keyboard += "[{\"text\":\"";
-        keyboard += (s->state.onoff.state ? "💡 " : "⚫ ");
-        keyboard += s->name;
-        keyboard += " [" + String(s->slot) + "] ";
-        keyboard += (s->state.onoff.state ? "ON" : "OFF");
-        keyboard += "\",\"callback_data\":\"toggle_" + String(s->slot) + "\"}]";
+        keyboard += "[\"toggle_" + String(s->slot) + " " + String(s->name) + "\"]";
         first = false;
         lamp_count++;
-        if (lamp_count >= 8) break; // limit 8 buttons
+        if (lamp_count >= 6) break;
     }
     keyboard += "]";
     if (lamp_count > 0) {
-        s_tg_bot->sendMessageWithInlineKeyboard(String(chat_id), help, "Markdown", keyboard);
+        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), help, "Markdown", keyboard, true, false, false);
     } else {
         s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
     }
