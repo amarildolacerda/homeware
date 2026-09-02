@@ -491,17 +491,8 @@ void telegram_bot_init() {
     
     console.printf("[TELEGRAM] Bot initialized, polling every %ums\n", s_tg_poll_interval);
     
-    // Send startup message
-    char buf[256];
-    snprintf(buf, sizeof(buf), 
-        "🟢 *Hub AgriSense Online*\n\n"
-        "Device: `%s`\n"
-        "IP: `%s`\n"
-        "Uptime: 0s",
-        get_gateway_device_id(),
-        WiFi.localIP().toString().c_str()
-    );
-    s_tg_bot->sendMessage(String(s_tg_chatid), buf, "Markdown");
+    // Send startup welcome (same as /start with toggle buttons)
+    handle_help(atol(s_tg_chatid));
 }
 
 // Main loop
