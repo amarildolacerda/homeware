@@ -279,6 +279,11 @@ void web_server_init() {
 #endif
         doc["free_heap"] = ESP.getFreeHeap();
         doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
+#ifdef TELEGRAM_ENABLED
+        doc["telegram_enabled"] = true;
+#else
+        doc["telegram_enabled"] = false;
+#endif
         doc["ntp_synced"] = gateway_ntp_synced();
         doc["epoch"] = (uint32_t)gateway_ntp_epoch();
         doc["ip"] = WiFi.localIP().toString();

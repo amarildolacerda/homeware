@@ -1510,6 +1510,7 @@ async function doReregister() {
 loadSettings();
 loadOpMode();
 loadTelegramConfig();
+fetch('/api/info').then(function(r){return r.json()}).then(function(info){ if(!info.telegram_enabled){ var c=document.getElementById('card-telegram'); if(c) c.style.display='none'; var m=document.getElementById('telegram-modal'); if(m) m.style.display='none'; }});
 </script>
 )rawliteral";
 
