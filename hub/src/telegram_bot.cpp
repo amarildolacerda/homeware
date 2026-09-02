@@ -178,9 +178,10 @@ static void handle_list(long chat_id) {
             }
             
             pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s [%d] %s (%s) - %s\n",
+                "%s [%d] %s (%s) - %s 🔋 %d%%\n",
                 status, s->slot, s->name, radio,
-                s->online ? sensor_type_friendly_name(s->type) : "offline"
+                s->online ? sensor_type_friendly_name(s->type) : "offline",
+                s->battery_pct
             );
             count++;
             
@@ -200,130 +201,7 @@ static void handle_list(long chat_id) {
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
-// Helper: resolve slot by numeric id or case-insensitive name
-static int find_slot_by_arg(const char* args) {
-    if (!args || strlen(args) == 0) return -1;
-    // numeric slot?
-    bool is_num = true;
-    for (const char* p = args; *p; p++) if (!isdigit((unsigned char)*p)) { is_num = false; break; }
-    if (is_num) {
-        int slot = atoi(args);
-        if (slot < 0 || slot >= MAX_VIRTUAL_SENSORS) return -1;
-        virtual_sensor_t *s = sensor_registry_get(slot);
-        if (s && s->paired) return slot;
-        return -1;
-    }
-    // case-insensitive name exact match
-    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        virtual_sensor_t *s = sensor_registry_get(i);
-        if (!s || !s->paired) continue;
-        if (strcasecmp(s->name, args) == 0) return i;
-    }
-    return -1;
-}
 
-// Handle /on command
-static void handle_on(long chat_id, const char* args) {
-    if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /on <slot>", "");
-        return;
-    }
-    
-    int slot = find_slot_by_arg(args);
-    if (slot < 0) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
-        return;
-    }
-    
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    if (!s || !s->paired) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado", "");
-        return;
-    }
-    
-    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo de sensor não suporta comando ON/OFF", "");
-        return;
-    }
-    
-    if (device_send_command(s->mac, s->slot, 1)) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "✅ %s ligado!", s->name);
-        s_tg_bot->sendMessage(String(chat_id), buf, "");
-        console.printf("[TELEGRAM] ON command sent to %s\n", s->name);
-    } else {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar comando", "");
-    }
-}
-
-// Handle /off command
-static void handle_off(long chat_id, const char* args) {
-    if (!args || strlen(args) == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "Uso: /off <slot>", "");
-        return;
-    }
-    
-    int slot = find_slot_by_arg(args);
-    if (slot < 0) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado: " + String(args), "");
-        return;
-    }
-    
-    virtual_sensor_t *s = sensor_registry_get(slot);
-    if (!s || !s->paired) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Node não encontrado", "");
-        return;
-    }
-    
-    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Tipo de sensor não suporta comando ON/OFF", "");
-        return;
-    }
-    
-    if (device_send_command(s->mac, s->slot, 0)) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "❌ %s desligado!", s->name);
-        s_tg_bot->sendMessage(String(chat_id), buf, "");
-        console.printf("[TELEGRAM] OFF command sent to %s\n", s->name);
-    } else {
-        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar comando", "");
-    }
-}
-
-// Handle /battery command
-static void handle_battery(long chat_id) {
-    char buf[512];
-    int pos = 0;
-    int count = 0;
-    
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "🔋 *Níveis de Bateria*\n\n");
-    
-    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
-        virtual_sensor_t *s = sensor_registry_get(i);
-        if (s && s->paired) {
-            const char* icon = "✅";
-            if (s->battery_pct < 20) icon = "🔴";
-            else if (s->battery_pct < 50) icon = "🟡";
-            
-            pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s %s: %d%%\n",
-                icon, s->name, s->battery_pct
-            );
-            count++;
-            
-            if (pos > 900) {
-                pos += snprintf(buf + pos, sizeof(buf) - pos, "\n... e mais nodes\n");
-                break;
-            }
-        }
-    }
-    
-    if (count == 0) {
-        pos += snprintf(buf + pos, sizeof(buf) - pos, "Nenhum sensor com bateria.\n");
-    }
-    
-    s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
-}
 
 static String buildLampKeyboard() {
     String kb = "[";
@@ -393,12 +271,9 @@ static void handle_help(long chat_id) {
     const char* help = 
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
-        "/start - Mensagem de boas-vindas\n"
+        "/start - Menu com botões toggle\n"
         "/status - Status geral do hub\n"
-        "/list - Listar todos os nodes [slot]\n"
-        "/on <slot> - Liga relé\n"
-        "/off <slot> - Desliga relé\n"
-        "/battery - Níveis de bateria\n"
+        "/list - Listar nodes [slot] 🔋\n"
         "/help - Esta mensagem\n\n";
        // "*Exemplos:*\n"
        // "`/on 0`\n"
@@ -459,7 +334,7 @@ static void process_messages(int num_new_messages) {
         }
         cmd.toLowerCase();
         
-        // Handle commands
+        // Handle commands (teclado resolve toggle; /on|/off|/battery removidos)
         if (cmd == "/start" || cmd == "/help") {
             handle_help(chat_id_long);
         }
@@ -468,15 +343,6 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
-        }
-        else if (cmd == "/on") {
-            handle_on(chat_id_long, args.c_str());
-        }
-        else if (cmd == "/off") {
-            handle_off(chat_id_long, args.c_str());
-        }
-        else if (cmd == "/battery") {
-            handle_battery(chat_id_long);
         }
         else {
             s_tg_bot->sendMessage(String(chat_id_long), 
