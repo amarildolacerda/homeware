@@ -8,7 +8,6 @@
 #include "web_server.h"
 #include "platform.h"
 #include "mqtt_client.h"
-#include "telegram_bot.h"
 #include "AsyncJson.h"
 #include <algorithm>
 
@@ -404,9 +403,6 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
         }
     }
 
-    bool is_lamp = (sensor->type == SENSOR_TYPE_ONOFF || sensor->type == SENSOR_TYPE_LIGHT);
-    uint8_t old_lamp = is_lamp ? sensor->state.onoff.state : 0;
-
     switch (sensor->type) {
         case SENSOR_TYPE_TEMP_HUM:
             if (state["temperature"].is<float>()) sensor->state.temp_hum.temperature = state["temperature"];
@@ -432,7 +428,6 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             break;
     }
 
-    bool lamp_changed = is_lamp && (old_lamp != sensor->state.onoff.state);
     bool was_offline = !sensor->online;
     sensor->last_seen = millis();
     sensor->online = true;
@@ -449,7 +444,6 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
         state_topic). Queue instead of publishing synchronously so the HTTP
         handler never blocks on the broker TCP write. */
      queue_bridge_state(slot);
-    if (lamp_changed) telegram_on_lamp_state_change(slot);
 }
 
 void TcpRadioHandler::handle_heartbeat(const char* device_id) {

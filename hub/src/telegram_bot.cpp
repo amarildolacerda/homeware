@@ -530,6 +530,35 @@ void telegram_bot_loop() {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
     }
+
+    // Poll lamp feedback for reply keyboard (decoupled from radio)
+    static uint8_t last_state[MAX_VIRTUAL_SENSORS];
+    static bool last_init = false;
+    static unsigned long last_kb_push = 0;
+    if (!last_init) {
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *s = sensor_registry_get(i);
+            last_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
+        }
+        last_init = true;
+    } else {
+        for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+            virtual_sensor_t *s = sensor_registry_get(i);
+            if (!s || !s->paired) continue;
+            if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
+            if (last_state[i] != s->state.onoff.state) {
+                last_state[i] = s->state.onoff.state;
+                if (millis() - last_kb_push > 2000) {
+                    last_kb_push = millis();
+                    String kb = buildLampKeyboard();
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
+                    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
+                }
+                break;
+            }
+        }
+    }
 }
 
 // Send alert notification
