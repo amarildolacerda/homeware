@@ -292,9 +292,10 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
 }
 
 bool sensor_registry_save() {
+    SensorSlot *slots = (SensorSlot*)malloc(sizeof(SensorSlot) * MAX_VIRTUAL_SENSORS);
+    if (!slots) { console.printf("[CFG] save fail: heap low\n"); return false; }
+    memset(slots, 0, sizeof(SensorSlot) * MAX_VIRTUAL_SENSORS);
     sensor_registry_lock();
-    SensorSlot slots[MAX_VIRTUAL_SENSORS];
-    memset(slots, 0, sizeof(slots));
 
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         slots[i].paired      = s_sensors[i].paired;
@@ -309,6 +310,7 @@ bool sensor_registry_save() {
 
     sensor_registry_unlock();
     bool ok = config_sensors_save(slots, MAX_VIRTUAL_SENSORS);
+    free(slots);
     console.printf("[CFG] Sensors saved: %s (%d paired)\n", ok ? "OK" : "FAIL", sensor_registry_count_paired());
     s_dirty = false;
     return ok;
