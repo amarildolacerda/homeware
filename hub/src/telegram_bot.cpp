@@ -270,6 +270,49 @@ void telegram_on_lamp_state_change(int slot) {
     s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
 }
 
+// Handle /on and /off with slot or all
+static void handle_on_off(long chat_id, const char* args, uint8_t state) {
+    if (!args || strlen(args)==0) {
+        s_tg_bot->sendMessage(String(chat_id), state ? "Uso: /on <slot|all>" : "Uso: /off <slot|all>", "");
+        return;
+    }
+    if (strcasecmp(args, "all")==0) {
+        int cnt=0;
+        for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
+            virtual_sensor_t *s=sensor_registry_get(i);
+            if (!s||!s->paired) continue;
+            if (s->type!=SENSOR_TYPE_ONOFF && s->type!=SENSOR_TYPE_LIGHT) continue;
+            if (device_send_command(s->mac,s->slot,state)) cnt++;
+        }
+        char buf[64];
+        snprintf(buf,sizeof(buf), "%s %d lâmpada(s)", state?"✅ Ligando":"❌ Desligando", cnt);
+        s_tg_bot->sendMessage(String(chat_id), buf, "");
+        console.printf("[TELEGRAM] /%s all -> %d\n", state?"on":"off", cnt);
+        return;
+    }
+    int slot = atoi(args);
+    if (slot <0 || slot >= MAX_VIRTUAL_SENSORS) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot inválido", "");
+        return;
+    }
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || !s->paired) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não encontrado", "");
+        return;
+    }
+    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não é lâmpada", "");
+        return;
+    }
+    if (device_send_command(s->mac, s->slot, state)) {
+        char buf[64];
+        snprintf(buf,sizeof(buf), "%s %s!", s->name, state?"ligado":"desligado");
+        s_tg_bot->sendMessage(String(chat_id), buf, "");
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar", "");
+    }
+}
+
 // Handle /start and /help commands
 static void handle_help(long chat_id) {
     const char* help = 
@@ -278,6 +321,8 @@ static void handle_help(long chat_id) {
         "/start - Menu com botões toggle\n"
         "/status - Status geral do hub\n"
         "/list - Listar nodes [slot] 🔋\n"
+        "/on <slot|all> - Liga\n"
+        "/off <slot|all> - Desliga\n"
         "/help - Esta mensagem\n\n";
        // "*Exemplos:*\n"
        // "`/on 0`\n"
@@ -338,7 +383,7 @@ static void process_messages(int num_new_messages) {
         }
         cmd.toLowerCase();
         
-        // Handle commands (teclado resolve toggle; /on|/off|/battery removidos)
+        // Handle commands
         if (cmd == "/start" || cmd == "/help") {
             handle_help(chat_id_long);
         }
@@ -347,6 +392,12 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
+        }
+        else if (cmd == "/on") {
+            handle_on_off(chat_id_long, args.c_str(), 1);
+        }
+        else if (cmd == "/off") {
+            handle_on_off(chat_id_long, args.c_str(), 0);
         }
         else {
             s_tg_bot->sendMessage(String(chat_id_long), 
