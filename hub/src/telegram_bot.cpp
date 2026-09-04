@@ -232,7 +232,7 @@ static int parseSlotFromButton(const String& txt) {
     return -1;
 }
 
-// Handle toggle via reply keyboard (command, feedback via node)
+// Handle toggle via reply keyboard (optimistic feedback + polling backup)
 static void handle_toggle(long chat_id, int slot) {
     virtual_sensor_t *s = sensor_registry_get(slot);
     if (!s || !s->paired) {
@@ -245,8 +245,12 @@ static void handle_toggle(long chat_id, int slot) {
     }
     uint8_t new_state = s->state.onoff.state ? 0 : 1;
     if (device_send_command(s->mac, s->slot, new_state)) {
-        // feedback via node state report -> telegram_on_lamp_state_change()
-        console.printf("[TELEGRAM] Toggle cmd slot %d -> %d (aguardando feedback)\n", slot, new_state);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
+        s->state.onoff.state = new_state; // optimistic for immediate keyboard
+        String kb = buildLampKeyboard();
+        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), buf, "", kb, true, false, false);
+        console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
     } else {
         s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
     }
@@ -420,19 +424,13 @@ void telegram_bot_loop() {
         }
         last_init = true;
     } else {
+        // just track, no auto push (reply keyboard updated on toggle via handle_toggle)
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
             if (!s || !s->paired) continue;
             if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
             if (last_state[i] != s->state.onoff.state) {
                 last_state[i] = s->state.onoff.state;
-                if (millis() - last_kb_push > 2000) {
-                    last_kb_push = millis();
-                    String kb = buildLampKeyboard();
-                    char buf[128];
-                    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
-                    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
-                }
                 break;
             }
         }
