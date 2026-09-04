@@ -744,7 +744,7 @@ void web_server_init() {
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
             if (!index) {
                 console.printf("[OTA] Update started: %s (%d bytes)\n", filename.c_str(), request->contentLength());
-                if (!Update.begin(request->contentLength())) {
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
                     Update.printError(console);
                     console.printf("[OTA] Begin failed (no OTA partition space?)\n");
                 }
