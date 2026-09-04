@@ -447,6 +447,43 @@ void telegram_bot_init() {
     handle_help(atol(s_tg_chatid));
 }
 
+static void check_alerts() {
+    if (!s_tg_enabled || !s_tg_initialized) return;
+    if (ESP.getFreeHeap() < 15000) return;
+    static unsigned long last_check = 0;
+    if (millis() - last_check < 30000) return;
+    last_check = millis();
+    // Offline / battery / gas / heap
+    for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (!s||!s->paired) continue;
+        unsigned long offline_ms = s->online ? 0 : (millis() - s->last_seen);
+        if (offline_ms > 300000 && is_alert_type_enabled(2) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_offline, THROTTLE_OFFLINE_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"Node '%s' offline há %lu min", s->name, offline_ms/60000);
+            telegram_send_alert("⚠️", b);
+        }
+        if (s->battery_pct < 10 && s->battery_pct >0 && is_alert_type_enabled(4) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_battery, THROTTLE_CRITICAL_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🔴 Bateria CRÍTICA %d%% em %s", s->battery_pct, s->name);
+            telegram_send_alert("🔴", b);
+        } else if (s->battery_pct < 20 && is_alert_type_enabled(4) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_battery, THROTTLE_BATTERY_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🟡 Bateria baixa %d%% em %s", s->battery_pct, s->name);
+            telegram_send_alert("🟡", b);
+        }
+        if ((s->type==SENSOR_TYPE_GAS||s->type==SENSOR_TYPE_DHT_GAS) && s->state.dht_gas.gas_level > 400 && is_alert_type_enabled(0) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_gas, THROTTLE_GAS_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"⚠️ Gás %u ppm em %s", s->state.dht_gas.gas_level, s->name);
+            telegram_send_alert("⚠️", b);
+        }
+        if (s->last_rssi < -80 && s->last_rssi != -127 && is_alert_type_enabled(7) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_rssi, THROTTLE_WARNING_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🟡 RSSI fraco %d dBm em %s", s->last_rssi, s->name);
+            telegram_send_alert("🟡", b);
+        }
+    }
+    if (ESP.getFreeHeap() < 50000 && is_alert_type_enabled(8) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_heap, THROTTLE_WARNING_MS)) {
+        char b[64]; snprintf(b,sizeof(b),"🟡 Heap baixo %u bytes", ESP.getFreeHeap());
+        telegram_send_alert("🟡", b);
+    }
+}
+
 // Main loop
 void telegram_bot_loop() {
     if (!s_tg_initialized || !s_tg_enabled) return;
@@ -463,6 +500,7 @@ void telegram_bot_loop() {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
     }
+    check_alerts();
 
     // Poll lamp feedback for reply keyboard (decoupled from radio)
     static uint8_t last_state[MAX_VIRTUAL_SENSORS];
