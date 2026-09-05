@@ -36,6 +36,11 @@ static unsigned long s_tg_throttle_rssi = 0;
 static unsigned long s_tg_throttle_heap = 0;
 static unsigned long s_tg_throttle_daily = 0;
 
+// Lamp keyboard feedback tracking (for hub-initiated changes)
+static uint8_t s_last_lamp_state[MAX_VIRTUAL_SENSORS];
+static bool s_last_lamp_init = false;
+static unsigned long s_last_kb_push = 0;
+
 // Throttle intervals (ms)
 #define THROTTLE_CRITICAL_MS    0       // No throttle for critical
 #define THROTTLE_ALERT_MS       300000  // 5 min
@@ -247,7 +252,9 @@ static void handle_toggle(long chat_id, int slot) {
     if (device_send_command(s->mac, s->slot, new_state)) {
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
-        s->state.onoff.state = new_state; // optimistic for immediate keyboard
+        s->state.onoff.state = new_state;
+        s_last_lamp_state[slot] = new_state;
+        s_last_kb_push = millis();
         String kb = buildLampKeyboard();
         s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), buf, "", kb, true, false, false);
         console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
@@ -503,23 +510,26 @@ void telegram_bot_loop() {
     check_alerts();
 
     // Poll lamp feedback for reply keyboard (decoupled from radio)
-    static uint8_t last_state[MAX_VIRTUAL_SENSORS];
-    static bool last_init = false;
-    static unsigned long last_kb_push = 0;
-    if (!last_init) {
+    if (!s_last_lamp_init) {
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
-            last_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
+            s_last_lamp_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
         }
-        last_init = true;
+        s_last_lamp_init = true;
     } else {
-        // just track, no auto push (reply keyboard updated on toggle via handle_toggle)
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
             if (!s || !s->paired) continue;
             if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
-            if (last_state[i] != s->state.onoff.state) {
-                last_state[i] = s->state.onoff.state;
+            if (s_last_lamp_state[i] != s->state.onoff.state) {
+                s_last_lamp_state[i] = s->state.onoff.state;
+                if (ESP.getFreeHeap() > 20000 && millis() - s_last_kb_push > 3000) {
+                    s_last_kb_push = millis();
+                    String kb = buildLampKeyboard();
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");
+                    s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
+                }
                 break;
             }
         }
