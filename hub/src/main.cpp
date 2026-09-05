@@ -30,6 +30,9 @@
 #endif
 #include "config_store.h"
 
+time_t gateway_ntp_epoch();
+bool gateway_ntp_synced();
+
 static const char *TAG = PLATFORM_PREFIX "_gateway";
 
 static unsigned long s_start_time = 0;
@@ -487,6 +490,35 @@ void loop() {
     /* Update s_ntp_epoch every loop tick while synced */
     if (s_ntp_synced) {
         s_ntp_epoch = time(nullptr);
+    }
+
+    // Agenda de reinício (usa NTP ou epoch do browser)
+    {
+        static unsigned long s_last_agenda_check = 0;
+        static uint32_t s_last_agenda_fired_min = 0;
+        if (millis() - s_last_agenda_check > 15000) {
+            s_last_agenda_check = millis();
+            AgendaConfig ag;
+            config_agenda_load(&ag);
+            if (ag.enabled) {
+                time_t epoch = gateway_ntp_epoch();
+                if (epoch > 100000) {
+                    struct tm *tm = localtime(&epoch);
+                    uint8_t mask = ag.days_mask ? ag.days_mask : 0x7F;
+                    bool day_ok = (mask & (1 << tm->tm_wday)) != 0;
+                    if (day_ok && tm->tm_hour == ag.hour && tm->tm_min == ag.minute) {
+                        uint32_t cur_min = (uint32_t)(epoch / 60);
+                        if (cur_min != s_last_agenda_fired_min) {
+                            s_last_agenda_fired_min = cur_min;
+                            console.printf("[AGENDA] Horario %02d:%02d atingido (wday %d), reiniciando hub...\n", ag.hour, ag.minute, tm->tm_wday);
+                            log_add("warn", "Agenda: reinicio %02d:%02d", ag.hour, ag.minute);
+                            delay(500);
+                            ESP.restart();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (s_ntp_synced && millis() - s_last_time_sync > TIME_SYNC_INTERVAL_MS) {

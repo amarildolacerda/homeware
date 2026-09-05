@@ -173,7 +173,13 @@ static void handle_list(long chat_id) {
     for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (s && s->paired) {
-            const char* status = s->online ? "🟢" : "🔴";
+            const char* status;
+            const char* state_str;
+            if (!s->online) { status = "🔴"; state_str = "offline"; }
+            else if (s->type == SENSOR_TYPE_ONOFF || s->type == SENSOR_TYPE_LIGHT) {
+                status = s->state.onoff.state ? "🟢" : "⚫";
+                state_str = s->state.onoff.state ? "LIGADO" : "DESLIGADO";
+            } else { status = "🟢"; state_str = sensor_type_friendly_name(s->type); }
             const char* radio = "";
             switch (s->radio_type) {
                 case RADIO_ESPNOW: radio = "ESP-NOW"; break;
@@ -185,7 +191,7 @@ static void handle_list(long chat_id) {
             pos += snprintf(buf + pos, sizeof(buf) - pos,
                 "%s [%d] %s (%s) - %s 🔋 %d%%\n",
                 status, s->slot, s->name, radio,
-                s->online ? sensor_type_friendly_name(s->type) : "offline",
+                state_str,
                 s->battery_pct
             );
             count++;

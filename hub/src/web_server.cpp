@@ -223,6 +223,10 @@ void web_server_init() {
         request->send_P(200, "text/html", PAGE_UPDATE);
     });
 
+    s_server.on("/agenda", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", PAGE_AGENDA);
+    });
+
     s_server.on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", log_get_json());
     });
@@ -688,6 +692,32 @@ void web_server_init() {
         config_telegram_save(&cfg);
         
         console.printf("[TELEGRAM] Config salva: enabled=%d, chat_id=%s, lvl=0x%02X, type=0x%04X\n", cfg.enabled, cfg.chat_id, cfg.alerts_level, cfg.alerts_type);
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    }));
+
+    s_server.on("/api/config/agenda", HTTP_GET, [](AsyncWebServerRequest *request) {
+        AgendaConfig cfg;
+        config_agenda_load(&cfg);
+        JsonDocument doc;
+        doc["enabled"] = cfg.enabled;
+        doc["hour"] = cfg.hour;
+        doc["minute"] = cfg.minute;
+        doc["days_mask"] = cfg.days_mask;
+        String json; serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    s_server.addHandler(new AsyncCallbackJsonWebHandler("/api/config/agenda", [](AsyncWebServerRequest *request, JsonVariant json) {
+        AgendaConfig cfg;
+        config_agenda_load(&cfg);
+        cfg.enabled = json["enabled"] | cfg.enabled;
+        if (json["hour"].is<uint8_t>() || json["hour"].is<int>()) cfg.hour = json["hour"].as<uint8_t>();
+        if (json["minute"].is<uint8_t>() || json["minute"].is<int>()) cfg.minute = json["minute"].as<uint8_t>();
+        if (json["days_mask"].is<uint8_t>() || json["days_mask"].is<int>()) cfg.days_mask = json["days_mask"].as<uint8_t>();
+        if (cfg.hour > 23) cfg.hour = 23;
+        if (cfg.minute > 59) cfg.minute = 59;
+        if (cfg.days_mask == 0) cfg.days_mask = 0x7F;
+        config_agenda_save(&cfg);
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }));
 
