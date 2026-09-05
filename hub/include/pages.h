@@ -1635,8 +1635,9 @@ const char PAGE_LOGS[] PROGMEM = R"rawliteral(
 .log-empty{text-align:center;padding:40px;color:var(--muted-subtle)}
 </style>
 <div>
-<div style="margin-bottom:16px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
 <h2 style="font-size:0.95rem;font-weight:600;color:var(--primary)">Logs</h2>
+<button class="clear-btn" onclick="clearLogs()" style="font-size:0.75rem;padding:4px 12px;border-radius:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer">Limpar</button>
 </div>
 <div id="log-table"><div class="log-loading">carregando...</div></div>
 </div>
