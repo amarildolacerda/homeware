@@ -512,6 +512,9 @@ static void handle_api_state(void)
         doc["tx_count"] = s_radio.tx_count();
         doc["rx_count"] = s_radio.rx_count();
         doc["free_heap"] = ESP.getFreeHeap();
+#ifdef TCP_ENABLED
+        doc["hub_ip"] = s_radio.gateway_ip().toString();
+#endif
         doc["on_count"] = s_on_count;
 #ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
