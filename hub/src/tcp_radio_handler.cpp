@@ -483,7 +483,6 @@ void TcpRadioHandler::process_bridge_queue() {
 bool TcpRadioHandler::handle_command_get(const char* device_id, JsonObject& response) {
     auto it = m_pending_commands.find(device_id);
     if (it == m_pending_commands.end() || it->second.empty()) {
-        log_add("info", "[tcp] Command poll: %s -> no pending commands (map_size=%d)", device_id, (int)m_pending_commands.size());
         return false;
     }
 
