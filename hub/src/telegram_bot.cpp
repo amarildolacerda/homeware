@@ -36,6 +36,11 @@ static unsigned long s_tg_throttle_rssi = 0;
 static unsigned long s_tg_throttle_heap = 0;
 static unsigned long s_tg_throttle_daily = 0;
 
+// Lamp keyboard feedback tracking (for hub-initiated changes)
+static uint8_t s_last_lamp_state[MAX_VIRTUAL_SENSORS];
+static bool s_last_lamp_init = false;
+static unsigned long s_last_kb_push = 0;
+
 // Throttle intervals (ms)
 #define THROTTLE_CRITICAL_MS    0       // No throttle for critical
 #define THROTTLE_ALERT_MS       300000  // 5 min
@@ -232,7 +237,7 @@ static int parseSlotFromButton(const String& txt) {
     return -1;
 }
 
-// Handle toggle via reply keyboard (command, feedback via node)
+// Handle toggle via reply keyboard (optimistic feedback + polling backup)
 static void handle_toggle(long chat_id, int slot) {
     virtual_sensor_t *s = sensor_registry_get(slot);
     if (!s || !s->paired) {
@@ -245,8 +250,14 @@ static void handle_toggle(long chat_id, int slot) {
     }
     uint8_t new_state = s->state.onoff.state ? 0 : 1;
     if (device_send_command(s->mac, s->slot, new_state)) {
-        // feedback via node state report -> telegram_on_lamp_state_change()
-        console.printf("[TELEGRAM] Toggle cmd slot %d -> %d (aguardando feedback)\n", slot, new_state);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
+        s->state.onoff.state = new_state;
+        s_last_lamp_state[slot] = new_state;
+        s_last_kb_push = millis();
+        String kb = buildLampKeyboard();
+        s_tg_bot->sendMessageWithReplyKeyboard(String(chat_id), buf, "", kb, true, false, false);
+        console.printf("[TELEGRAM] Toggle slot %d -> %d\n", slot, new_state);
     } else {
         s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar toggle", "");
     }
@@ -266,6 +277,49 @@ void telegram_on_lamp_state_change(int slot) {
     s_tg_bot->sendMessageWithReplyKeyboard(String(s_tg_chatid), buf, "", kb, true, false, false);
 }
 
+// Handle /on and /off with slot or all
+static void handle_on_off(long chat_id, const char* args, uint8_t state) {
+    if (!args || strlen(args)==0) {
+        s_tg_bot->sendMessage(String(chat_id), state ? "Uso: /on <slot|all>" : "Uso: /off <slot|all>", "");
+        return;
+    }
+    if (strcasecmp(args, "all")==0) {
+        int cnt=0;
+        for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
+            virtual_sensor_t *s=sensor_registry_get(i);
+            if (!s||!s->paired) continue;
+            if (s->type!=SENSOR_TYPE_ONOFF && s->type!=SENSOR_TYPE_LIGHT) continue;
+            if (device_send_command(s->mac,s->slot,state)) cnt++;
+        }
+        char buf[64];
+        snprintf(buf,sizeof(buf), "%s %d lâmpada(s)", state?"✅ Ligando":"❌ Desligando", cnt);
+        s_tg_bot->sendMessage(String(chat_id), buf, "");
+        console.printf("[TELEGRAM] /%s all -> %d\n", state?"on":"off", cnt);
+        return;
+    }
+    int slot = atoi(args);
+    if (slot <0 || slot >= MAX_VIRTUAL_SENSORS) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot inválido", "");
+        return;
+    }
+    virtual_sensor_t *s = sensor_registry_get(slot);
+    if (!s || !s->paired) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não encontrado", "");
+        return;
+    }
+    if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Slot não é lâmpada", "");
+        return;
+    }
+    if (device_send_command(s->mac, s->slot, state)) {
+        char buf[64];
+        snprintf(buf,sizeof(buf), "%s %s!", s->name, state?"ligado":"desligado");
+        s_tg_bot->sendMessage(String(chat_id), buf, "");
+    } else {
+        s_tg_bot->sendMessage(String(chat_id), "❌ Falha ao enviar", "");
+    }
+}
+
 // Handle /start and /help commands
 static void handle_help(long chat_id) {
     const char* help = 
@@ -274,6 +328,8 @@ static void handle_help(long chat_id) {
         "/start - Menu com botões toggle\n"
         "/status - Status geral do hub\n"
         "/list - Listar nodes [slot] 🔋\n"
+        "/on <slot|all> - Liga\n"
+        "/off <slot|all> - Desliga\n"
         "/help - Esta mensagem\n\n";
        // "*Exemplos:*\n"
        // "`/on 0`\n"
@@ -334,7 +390,7 @@ static void process_messages(int num_new_messages) {
         }
         cmd.toLowerCase();
         
-        // Handle commands (teclado resolve toggle; /on|/off|/battery removidos)
+        // Handle commands
         if (cmd == "/start" || cmd == "/help") {
             handle_help(chat_id_long);
         }
@@ -343,6 +399,12 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
+        }
+        else if (cmd == "/on") {
+            handle_on_off(chat_id_long, args.c_str(), 1);
+        }
+        else if (cmd == "/off") {
+            handle_on_off(chat_id_long, args.c_str(), 0);
         }
         else {
             s_tg_bot->sendMessage(String(chat_id_long), 
@@ -392,6 +454,43 @@ void telegram_bot_init() {
     handle_help(atol(s_tg_chatid));
 }
 
+static void check_alerts() {
+    if (!s_tg_enabled || !s_tg_initialized) return;
+    if (ESP.getFreeHeap() < 15000) return;
+    static unsigned long last_check = 0;
+    if (millis() - last_check < 30000) return;
+    last_check = millis();
+    // Offline / battery / gas / heap
+    for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
+        virtual_sensor_t *s = sensor_registry_get(i);
+        if (!s||!s->paired) continue;
+        unsigned long offline_ms = s->online ? 0 : (millis() - s->last_seen);
+        if (offline_ms > 300000 && is_alert_type_enabled(2) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_offline, THROTTLE_OFFLINE_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"Node '%s' offline há %lu min", s->name, offline_ms/60000);
+            telegram_send_alert("⚠️", b);
+        }
+        if (s->battery_pct < 10 && s->battery_pct >0 && is_alert_type_enabled(4) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_battery, THROTTLE_CRITICAL_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🔴 Bateria CRÍTICA %d%% em %s", s->battery_pct, s->name);
+            telegram_send_alert("🔴", b);
+        } else if (s->battery_pct < 20 && is_alert_type_enabled(4) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_battery, THROTTLE_BATTERY_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🟡 Bateria baixa %d%% em %s", s->battery_pct, s->name);
+            telegram_send_alert("🟡", b);
+        }
+        if ((s->type==SENSOR_TYPE_GAS||s->type==SENSOR_TYPE_DHT_GAS) && s->state.dht_gas.gas_level > 400 && is_alert_type_enabled(0) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_gas, THROTTLE_GAS_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"⚠️ Gás %u ppm em %s", s->state.dht_gas.gas_level, s->name);
+            telegram_send_alert("⚠️", b);
+        }
+        if (s->last_rssi < -80 && s->last_rssi != -127 && is_alert_type_enabled(7) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_rssi, THROTTLE_WARNING_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🟡 RSSI fraco %d dBm em %s", s->last_rssi, s->name);
+            telegram_send_alert("🟡", b);
+        }
+    }
+    if (ESP.getFreeHeap() < 50000 && is_alert_type_enabled(8) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_heap, THROTTLE_WARNING_MS)) {
+        char b[64]; snprintf(b,sizeof(b),"🟡 Heap baixo %u bytes", ESP.getFreeHeap());
+        telegram_send_alert("🟡", b);
+    }
+}
+
 // Main loop
 void telegram_bot_loop() {
     if (!s_tg_initialized || !s_tg_enabled) return;
@@ -408,26 +507,24 @@ void telegram_bot_loop() {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
     }
+    check_alerts();
 
     // Poll lamp feedback for reply keyboard (decoupled from radio)
-    static uint8_t last_state[MAX_VIRTUAL_SENSORS];
-    static bool last_init = false;
-    static unsigned long last_kb_push = 0;
-    if (!last_init) {
+    if (!s_last_lamp_init) {
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
-            last_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
+            s_last_lamp_state[i] = (s && s->paired && (s->type==SENSOR_TYPE_ONOFF||s->type==SENSOR_TYPE_LIGHT)) ? s->state.onoff.state : 0xFF;
         }
-        last_init = true;
+        s_last_lamp_init = true;
     } else {
         for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
             virtual_sensor_t *s = sensor_registry_get(i);
             if (!s || !s->paired) continue;
             if (s->type != SENSOR_TYPE_ONOFF && s->type != SENSOR_TYPE_LIGHT) continue;
-            if (last_state[i] != s->state.onoff.state) {
-                last_state[i] = s->state.onoff.state;
-                if (millis() - last_kb_push > 2000) {
-                    last_kb_push = millis();
+            if (s_last_lamp_state[i] != s->state.onoff.state) {
+                s_last_lamp_state[i] = s->state.onoff.state;
+                if (ESP.getFreeHeap() > 20000 && millis() - s_last_kb_push > 3000) {
+                    s_last_kb_push = millis();
                     String kb = buildLampKeyboard();
                     char buf[128];
                     snprintf(buf, sizeof(buf), "🔄 %s → %s", s->name, s->state.onoff.state ? "ON" : "OFF");

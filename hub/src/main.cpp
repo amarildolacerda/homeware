@@ -365,7 +365,9 @@ void setup() {
         console.println("[MQTT] Desabilitado no modo AP");
     }
     
+#ifdef TELEGRAM_ENABLED
     telegram_bot_init();
+#endif
     
     console.printf("============================================\n");
     console.printf("  Pronto! 'h' para ajuda\n");
