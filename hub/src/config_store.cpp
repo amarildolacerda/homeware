@@ -90,3 +90,54 @@ bool config_telegram_load_defaults(TelegramConfig *cfg) {
     cfg->alerts_type   = 0x03FF; // all alert types enabled
     return true;
 }
+
+// --- Agenda ---
+bool config_agenda_load(AgendaConfig *cfg) {
+    config_agenda_load_defaults(cfg);
+    if (!LittleFS.exists(CONFIG_FILE_AGENDA)) {
+        return false;
+    }
+    File f = LittleFS.open(CONFIG_FILE_AGENDA, "r");
+    if (!f) return false;
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) {
+        console.printf("[CONFIG] Failed to parse agenda.json: %s\n", err.c_str());
+        return false;
+    }
+    cfg->enabled   = doc["enabled"] | false;
+    cfg->hour      = doc["hour"] | 3;
+    cfg->minute    = doc["minute"] | 0;
+    cfg->days_mask = doc["days_mask"] | 0x7F;
+    if (cfg->hour > 23) cfg->hour = 3;
+    if (cfg->minute > 59) cfg->minute = 0;
+    return true;
+}
+
+bool config_agenda_save(const AgendaConfig *cfg) {
+    JsonDocument doc;
+    doc["enabled"]   = cfg->enabled;
+    doc["hour"]      = cfg->hour;
+    doc["minute"]    = cfg->minute;
+    doc["days_mask"] = cfg->days_mask;
+    File f = LittleFS.open(CONFIG_FILE_AGENDA, "w");
+    if (!f) {
+        console.println("[CONFIG] Failed to write agenda.json");
+        return false;
+    }
+    serializeJson(doc, f);
+    f.close();
+    console.printf("[CONFIG] Agenda saved: %02d:%02d mask=0x%02X enabled=%d\n",
+                   cfg->hour, cfg->minute, cfg->days_mask, cfg->enabled);
+    return true;
+}
+
+bool config_agenda_load_defaults(AgendaConfig *cfg) {
+    memset(cfg, 0, sizeof(AgendaConfig));
+    cfg->enabled   = false;
+    cfg->hour      = 3;
+    cfg->minute    = 0;
+    cfg->days_mask = 0x7F; // todos os dias
+    return true;
+}

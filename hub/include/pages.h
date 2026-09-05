@@ -194,6 +194,7 @@ R"rawliteral(
 <nav>
 <a href="#" onclick="navigate('overview');return false" class="active" id="nav-overview"><span class="icon">&#x1F3E0;</span><span>Dispositivos</span></a>
 <a href="#" onclick="navigate('settings');return false" id="nav-settings"><span class="icon">&#x2699;</span><span>Configurações</span></a>
+<a href="#" onclick="navigate('agenda');return false" id="nav-agenda"><span class="icon">&#x1F4C5;</span><span>Agenda</span></a>
 <a href="#" onclick="navigate('logs');return false" id="nav-logs"><span class="icon">&#x1F4CB;</span><span>Logs</span></a>
 <a href="#" onclick="navigate('update');return false" id="nav-update"><span class="icon">&#x1F4E6;</span><span>Atualização</span></a>
 
@@ -1511,6 +1512,113 @@ loadSettings();
 loadOpMode();
 loadTelegramConfig();
 fetch('/api/info').then(function(r){return r.json()}).then(function(info){ if(!info.telegram_enabled){ var c=document.getElementById('card-telegram'); if(c) c.style.display='none'; var m=document.getElementById('telegram-modal'); if(m) m.style.display='none'; }});
+</script>
+)rawliteral";
+
+const char PAGE_AGENDA[] PROGMEM = R"rawliteral(
+<style>
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card.collapsed{padding:0;overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer;user-select:none}
+.card-head h2{font-size:0.95rem;font-weight:600;color:var(--primary);margin:0}
+.chev{transition:transform .2s;color:var(--muted);font-size:0.9rem}
+.card.collapsed .chev{transform:rotate(-90deg)}
+.card-body{padding:0 16px 16px}
+.card.collapsed .card-body{display:none}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.85rem}
+.label{color:var(--muted-subtle)}
+.value{font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600}
+.badge-ok{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-off{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-info{background:rgba(94,106,210,.15);color:var(--primary)}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;min-height:44px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-secondary{background:var(--border);color:var(--text)}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;margin-bottom:4px;font-size:0.82rem;color:var(--muted)}
+.form-group input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text)}
+.toggle-row{display:flex;gap:8px;margin:10px 0}
+.seg{flex:1;padding:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem}
+.seg.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.days{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.days label{display:flex;align-items:center;gap:4px;font-size:0.78rem;background:var(--surface-2);border:1px solid var(--border);border-radius:9999px;padding:6px 10px;cursor:pointer}
+.days label.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.time-row{display:flex;gap:8px}
+.time-row input{flex:1}
+</style>
+<div style="max-width:500px">
+<div class="card" id="card-agenda-main">
+<div class="card-head"><h2>Reinício Agendado</h2><span id="agenda-sum" class="badge badge-off">--</span></div>
+<div class="card-body">
+<div class="row"><span class="label">Status</span><span class="value" id="a-status">--</span></div>
+<div class="row"><span class="label">Horário</span><span class="value" id="a-time">--</span></div>
+<div class="row"><span class="label">Dias</span><span class="value" id="a-days" style="font-size:0.75rem">--</span></div>
+<div class="row"><span class="label">Próximo</span><span class="value" id="a-next" style="font-size:0.75rem">--</span></div>
+</div>
+</div>
+<div class="card" style="margin-top:12px">
+<div class="card-head"><h2>Configurar Agenda</h2></div>
+<div class="card-body">
+<div class="form-group"><label>Ativo</label>
+<div class="toggle-row">
+<button type="button" class="seg" id="ag-seg-off" onclick="setAgEnabled(false)">Desligado</button>
+<button type="button" class="seg" id="ag-seg-on" onclick="setAgEnabled(true)">Ligado</button>
+</div></div>
+<div class="form-group"><label>Horário (HH:MM)</label>
+<div class="time-row">
+<input type="number" id="ag-hour" min="0" max="23" placeholder="HH">
+<input type="number" id="ag-minute" min="0" max="59" placeholder="MM">
+</div></div>
+<div class="form-group"><label>Dias da semana</label>
+<div class="days" id="ag-days">
+<label><input type="checkbox" value="0" checked> Dom</label>
+<label><input type="checkbox" value="1" checked> Seg</label>
+<label><input type="checkbox" value="2" checked> Ter</label>
+<label><input type="checkbox" value="3" checked> Qua</label>
+<label><input type="checkbox" value="4" checked> Qui</label>
+<label><input type="checkbox" value="5" checked> Sex</label>
+<label><input type="checkbox" value="6" checked> Sáb</label>
+</div>
+<div style="font-size:0.72rem;color:var(--muted-subtle);margin-top:6px">Desmarque para desativar dias específicos. Todos marcados = todos os dias.</div>
+</div>
+<div style="font-size:0.72rem;color:var(--muted-subtle);margin:6px 0">Requer hora NTP ou navegador sincronizado. Reinício ocorre no minuto exato.</div>
+<button class="btn btn-primary" onclick="saveAgenda()" style="width:100%;margin-top:8px">Salvar Agenda</button>
+</div>
+</div>
+</div>
+<script>
+let s_agEnabled=false;
+function setAgEnabled(v){s_agEnabled=v;document.getElementById('ag-seg-off').classList.toggle('active',!v);document.getElementById('ag-seg-on').classList.toggle('active',v);}
+function maskToStr(m){if(m===0x7F||m===0) return 'Todos os dias';const n=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];let a=[];for(let i=0;i<7;i++) if(m&(1<<i)) a.push(n[i]);return a.join(', ')||'Nenhum';}
+function nextStr(cfg){if(!cfg.enabled) return '--';const now=new Date();for(let d=0;d<8;d++){let dt=new Date(now);dt.setDate(now.getDate()+d);dt.setHours(cfg.hour,cfg.minute,0,0);if(dt<=now) continue;let w=dt.getDay();let m=cfg.days_mask||0x7F;if(m===0) m=0x7F;if(!(m&(1<<w))) continue;const p=n=>n<10?'0'+n:n;return p(dt.getDate())+'/'+p(dt.getMonth()+1)+' '+p(dt.getHours())+':'+p(dt.getMinutes());}return '--';}
+async function loadAgenda(){
+ try{
+  const cfg=await api('/api/config/agenda');
+  s_agEnabled=!!cfg.enabled;
+  setAgEnabled(s_agEnabled);
+  document.getElementById('ag-hour').value=cfg.hour;
+  document.getElementById('ag-minute').value=cfg.minute;
+  let mask=cfg.days_mask;if(mask===0) mask=0x7F;
+  document.querySelectorAll('#ag-days input').forEach(c=>{let v=parseInt(c.value);c.checked=!!(mask&(1<<v));c.parentElement.classList.toggle('on',c.checked);});
+  document.getElementById('a-status').textContent=cfg.enabled?'Ativo':'Desativado';
+  document.getElementById('a-time').textContent=(cfg.hour<10?'0':'')+cfg.hour+':'+(cfg.minute<10?'0':'')+cfg.minute;
+  document.getElementById('a-days').textContent=maskToStr(mask);
+  document.getElementById('agenda-sum').textContent=cfg.enabled?( (cfg.hour<10?'0':'')+cfg.hour+':'+(cfg.minute<10?'0':'')+cfg.minute ):'OFF';
+  document.getElementById('agenda-sum').className='badge '+(cfg.enabled?'badge-ok':'badge-off');
+  document.getElementById('a-next').textContent=nextStr(cfg);
+  document.querySelectorAll('#ag-days label').forEach(l=>{l.onclick=()=>{const cb=l.querySelector('input');setTimeout(()=>l.classList.toggle('on',cb.checked),0);}});
+ }catch(e){showToast('Erro agenda: '+e.message,true);}
+}
+async function saveAgenda(){
+ let h=parseInt(document.getElementById('ag-hour').value);let m=parseInt(document.getElementById('ag-minute').value);
+ if(isNaN(h)||h<0||h>23){showToast('Hora 0-23',true);return;}
+ if(isNaN(m)||m<0||m>59){showToast('Minuto 0-59',true);return;}
+ let mask=0;document.querySelectorAll('#ag-days input:checked').forEach(c=>mask|=(1<<parseInt(c.value)));
+ if(mask===0x7F) {} // ok keep 0x7F
+ try{await api('/api/config/agenda',{method:'POST',body:JSON.stringify({enabled:s_agEnabled,hour:h,minute:m,days_mask:mask})});showToast('Agenda salva');loadAgenda();}catch(e){showToast('Erro: '+e.message,true);}
+}
+loadAgenda();
 </script>
 )rawliteral";
 

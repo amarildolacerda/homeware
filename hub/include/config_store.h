@@ -21,4 +21,18 @@ bool config_telegram_load(TelegramConfig *cfg);
 bool config_telegram_save(const TelegramConfig *cfg);
 bool config_telegram_load_defaults(TelegramConfig *cfg);
 
+// --- Agenda (restart schedule) ---
+#define CONFIG_FILE_AGENDA "/agenda.json"
+
+struct AgendaConfig {
+    bool    enabled;
+    uint8_t hour;      // 0..23
+    uint8_t minute;    // 0..59
+    uint8_t days_mask; // bit0=Dom ... bit6=Sab; 0x7F=todos, 0=todos (compat)
+};
+
+bool config_agenda_load(AgendaConfig *cfg);
+bool config_agenda_save(const AgendaConfig *cfg);
+bool config_agenda_load_defaults(AgendaConfig *cfg);
+
 #endif
