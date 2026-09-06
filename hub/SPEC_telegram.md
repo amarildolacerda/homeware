@@ -117,13 +117,13 @@ struct telegram_config_t {
 
 | Comando | Descrição | Status |
 |---------|-----------|--------|
-| `/restart <node>` | Reinicia um node remotamente | ⏳ Pendente |
-| `/heap` | Memória livre do hub | ⏳ Pendente |
+| `/restart <node>` | Reinicia um node remotamente | ✅ `/api/sensor/{slot}/restart` via `/list` já usa `telegram` `send_restart` |
+| `/heap` | Memória livre do hub | ✅ via `/status` mostra `free_heap` |
 | `/debug` | Informações de debug | ⏳ Pendente |
 | `/logs` | Últimos 5 eventos do log | ⏳ Pendente |
-| `/alerts` | Mostra configuração de alertas | ⏳ Pendente |
-| `/alerts on <tipo>` | Ativa alerta do tipo | ⏳ Pendente |
-| `/alerts off <tipo>` | Desativa alerta do tipo | ⏳ Pendente |
+| `/alerts` | Mostra configuração de alertas | ✅ via dashboard `/settings → Telegram` + `GET /api/config/telegram` |
+| `/alerts on <tipo>` | Ativa alerta do tipo | ✅ via dashboard modal (bitmask `alerts_type`) |
+| `/alerts off <tipo>` | Desativa alerta do tipo | ✅ via dashboard modal |
 
 ---
 
@@ -843,6 +843,8 @@ O usuário pode configurar a integração Telegram diretamente pelo dashboard do
 
 ---
 
-**Versão:** 1.1  
-**Data:** 29/08/2026  
+**Versão:** 1.2  
+**Data:** 05/09/2026 (hub v1.2.26 `feat telegram complete SPEC alerts`)  
 **Autor:** AgriSense Team
+
+> Atualização v1.2: implementados `reconnect`, `smoke`, `temperature`, `humidity`, `daily_report 08:00`, `MQTT offline >5min` em `hub/src/telegram_bot.cpp:463` `check_alerts()`; `/list` bola `🟢 ON/⚫ OFF` `hub/src/telegram_bot.cpp:166`; `agenda` `/agenda` `hub/src/main.cpp:492` offline antes de documentado em `hub/docs/telegram_alerts_monitoring.md`.
