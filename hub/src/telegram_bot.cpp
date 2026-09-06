@@ -466,15 +466,30 @@ static void check_alerts() {
     static unsigned long last_check = 0;
     if (millis() - last_check < 30000) return;
     last_check = millis();
-    // Offline / battery / gas / heap
+    extern time_t gateway_ntp_epoch();
+    extern bool gateway_ntp_synced();
+    time_t epoch = gateway_ntp_epoch();
+    struct tm *tm_now = (epoch > 100000) ? localtime(&epoch) : nullptr;
+    static bool s_prev_online[MAX_VIRTUAL_SENSORS] = {false};
+    static bool s_prev_online_init = false;
+    if (!s_prev_online_init) { for(int i=0;i<MAX_VIRTUAL_SENSORS;i++){ virtual_sensor_t *ps=sensor_registry_get(i); s_prev_online[i]=ps?ps->online:false; } s_prev_online_init=true; }
+    // Per-sensor alerts
     for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
         if (!s||!s->paired) continue;
         unsigned long offline_ms = s->online ? 0 : (millis() - s->last_seen);
+        // Offline
         if (offline_ms > 300000 && is_alert_type_enabled(2) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_offline, THROTTLE_OFFLINE_MS)) {
             char b[128]; snprintf(b,sizeof(b),"Node '%s' offline há %lu min", s->name, offline_ms/60000);
             telegram_send_alert("⚠️", b);
         }
+        // Reconnect (transição offline→online)
+        if (s->online && !s_prev_online[i] && is_alert_type_enabled(3) && is_alert_level_enabled(3) && check_throttle(s_tg_throttle_reconnect, THROTTLE_INFO_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🟢 Node '%s' reconectou", s->name);
+            telegram_send_alert("🟢", b);
+        }
+        s_prev_online[i] = s->online;
+        if (!s->online) continue;
         if (s->battery_pct < 10 && s->battery_pct >0 && is_alert_type_enabled(4) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_battery, THROTTLE_CRITICAL_MS)) {
             char b[128]; snprintf(b,sizeof(b),"🔴 Bateria CRÍTICA %d%% em %s", s->battery_pct, s->name);
             telegram_send_alert("🔴", b);
@@ -486,6 +501,27 @@ static void check_alerts() {
             char b[128]; snprintf(b,sizeof(b),"⚠️ Gás %u ppm em %s", s->state.dht_gas.gas_level, s->name);
             telegram_send_alert("⚠️", b);
         }
+        // Fumaça = alarm flag (CRITICAL)
+        if ((s->type==SENSOR_TYPE_GAS||s->type==SENSOR_TYPE_DHT_GAS) && s->state.dht_gas.alarm && is_alert_type_enabled(1) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_smoke, THROTTLE_CRITICAL_MS)) {
+            char b[128]; snprintf(b,sizeof(b),"🔴 Fumaça detectada em %s", s->name);
+            telegram_send_alert("🔴", b);
+        }
+        // Temperatura alta/baixa (DHT)
+        if ((s->type==SENSOR_TYPE_TEMP_HUM||s->type==SENSOR_TYPE_DHT_GAS) && is_alert_type_enabled(5) && is_alert_level_enabled(1)) {
+            float temp = (s->type==SENSOR_TYPE_DHT_GAS) ? s->state.dht_gas.temperature : s->state.temp_hum.temperature;
+            if ((temp > 35.0f || temp < 10.0f) && !isnan(temp) && check_throttle(s_tg_throttle_temperature, THROTTLE_ALERT_MS)) {
+                char b[128]; snprintf(b,sizeof(b),"⚠️ Temperatura %s: %.1f°C em %s", temp>35?"alta":"baixa", temp, s->name);
+                telegram_send_alert("⚠️", b);
+            }
+        }
+        // Umidade fora do normal
+        if ((s->type==SENSOR_TYPE_TEMP_HUM||s->type==SENSOR_TYPE_DHT_GAS) && is_alert_type_enabled(6) && is_alert_level_enabled(1)) {
+            float hum = (s->type==SENSOR_TYPE_DHT_GAS) ? s->state.dht_gas.humidity : s->state.temp_hum.humidity;
+            if ((hum > 85.0f || hum < 30.0f) && !isnan(hum) && check_throttle(s_tg_throttle_humidity, THROTTLE_ALERT_MS)) {
+                char b[128]; snprintf(b,sizeof(b),"⚠️ Umidade %.0f%% %s em %s", hum, hum>85?"alta":"baixa", s->name);
+                telegram_send_alert("⚠️", b);
+            }
+        }
         if (s->last_rssi < -80 && s->last_rssi != -127 && is_alert_type_enabled(7) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_rssi, THROTTLE_WARNING_MS)) {
             char b[128]; snprintf(b,sizeof(b),"🟡 RSSI fraco %d dBm em %s", s->last_rssi, s->name);
             telegram_send_alert("🟡", b);
@@ -494,6 +530,25 @@ static void check_alerts() {
     if (ESP.getFreeHeap() < 50000 && is_alert_type_enabled(8) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_heap, THROTTLE_WARNING_MS)) {
         char b[64]; snprintf(b,sizeof(b),"🟡 Heap baixo %u bytes", ESP.getFreeHeap());
         telegram_send_alert("🟡", b);
+    }
+    // MQTT desconectado >5min (SPEC 5.2 ALERT)
+    {
+        static unsigned long s_mqtt_down_since = 0;
+        extern const char* mqtt_client_get_host();
+        extern bool mqtt_client_is_connected();
+        if (!mqtt_client_is_connected()) {
+            if (s_mqtt_down_since==0) s_mqtt_down_since=millis();
+            else if (millis()-s_mqtt_down_since > 300000 && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_offline, THROTTLE_OFFLINE_MS)) {
+                char b[96]; snprintf(b,sizeof(b),"⚠️ MQTT offline há %lu min", (millis()-s_mqtt_down_since)/60000);
+                telegram_send_alert("⚠️", b);
+            }
+        } else s_mqtt_down_since=0;
+    }
+    // Relatório diário 08:00
+    if (tm_now && tm_now->tm_hour==8 && tm_now->tm_min==0 && is_alert_type_enabled(9) && is_alert_level_enabled(3) && check_throttle(s_tg_throttle_daily, THROTTLE_DAILY_MS)) {
+        int paired=sensor_registry_count_paired(); int online=sensor_registry_count_online();
+        char b[160]; snprintf(b,sizeof(b),"🟢 Resumo diário: %d/%d online | Heap %u | Uptime %lu min", online, paired, ESP.getFreeHeap(), millis()/60000);
+        telegram_send_alert("🟢", b);
     }
 }
 
