@@ -401,6 +401,10 @@ static void handle_api_wifi(void)
         doc["device_name"] = s_device_name;
         doc["channel"] = mywifi_configured_channel();
         doc["wifi_channel"] = WiFi.channel();
+#ifdef TCP_ENABLED
+        doc["hub_ip"] = s_radio.hub_ip_configured() ? s_radio.hub_ip_str() : "";
+        doc["hub_ip_current"] = s_radio.gateway_ip().toString();
+#endif
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -416,6 +420,12 @@ static void handle_api_wifi(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
+#ifdef TCP_ENABLED
+        if (doc.containsKey("hub_ip")) {
+            const char* hip = doc["hub_ip"];
+            s_radio.set_hub_ip(hip);
+        }
+#endif
         if (doc.containsKey("ssid"))
         {
             const char *ssid = doc["ssid"];
@@ -457,6 +467,10 @@ static void handle_api_wifi(void)
             mywifi_save_creds(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
+        }
+        else if (doc.containsKey("hub_ip"))
+        {
+            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         }
         else
         {
