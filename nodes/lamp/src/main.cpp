@@ -1762,6 +1762,10 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 
 static void on_time_sync(uint32_t epoch_seconds)
 {
+    // Ignorar duplicatas ESP-NOW: só atualizar referência quando o epoch muda.
+    // Senão, cada callback reseta s_sync_millis e get_epoch() fica preso.
+    if (epoch_seconds == s_synced_epoch && s_synced_epoch != 0)
+        return;
     s_synced_epoch = epoch_seconds;
     s_sync_millis = millis();
     console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
@@ -2116,12 +2120,10 @@ void loop(void)
 
     {
         static unsigned long last_timer_check = 0;
+        static unsigned long last_timer_debug = 0;
         if (now - last_timer_check > TIMER_CHECK_INTERVAL_MS)
         {
             last_timer_check = now;
-            // Timer deve funcionar mesmo sem WiFi (principal uso é offline).
-            // Única exceção: relógio ainda não carregado — sem epoch não há
-            // como avaliar a hora corrente.
             unsigned long epoch = get_epoch();
             if (epoch > 0)
             {
@@ -2130,6 +2132,17 @@ void loop(void)
                 {
                     apply_timer(action);
                 }
+            }
+            // Debug dump a cada 60s (6 checks de 10s)
+            if (now - last_timer_debug > 60000)
+            {
+                last_timer_debug = now;
+                unsigned long ep = get_epoch();
+                console.printf("[%s] Timer debug — epoch=%lu synced=%lu tz=%d relay=%s paired=%s\n",
+                               TAG, ep, s_synced_epoch, s_timezone_offset,
+                               s_relay_state ? "ON" : "OFF",
+                               s_radio.is_paired() ? "yes" : "no");
+                timer_debug_dump(ep, s_timezone_offset);
             }
         }
     }

@@ -278,6 +278,9 @@ static void on_restart() {
 }
 
 static void on_time_sync(uint32_t epoch_seconds) {
+    // Ignorar duplicatas ESP-NOW: só atualizar referência quando o epoch muda.
+    if (epoch_seconds == s_synced_epoch && s_synced_epoch != 0)
+        return;
     s_synced_epoch = epoch_seconds;
     s_sync_millis = millis();
     console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
