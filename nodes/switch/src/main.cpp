@@ -85,15 +85,11 @@ static unsigned long get_synced_epoch(void) {
 #define EEPROM_STARTUP_MODE_ADDR 168
 #define EEPROM_MAGIC 0xAA
 
-static bool s_pulse_enabled = false;
-static uint16_t s_pulse_duration_min = PULSE_DEFAULT_DURATION_MIN;
-static unsigned long s_pulse_on_time = 0;
-
-static void set_relay(bool state, bool from_cyclic = false);
+static void set_relay(bool state, bool from_cyclic = false, bool from_timer = false);
 static void on_timer_fire(uint8_t action)
 {
     console.printf("[%s] Timer fired: action=%d\n", TAG, action);
-    set_relay(action ? true : false);
+    set_relay(action ? true : false, false, true);
     if (s_radio.is_paired())
     {
         s_radio.publish_state();
@@ -286,9 +282,10 @@ static void on_time_sync(uint32_t epoch_seconds) {
     console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
 }
 
-static void set_relay(bool state, bool from_cyclic)
+static void set_relay(bool state, bool from_cyclic, bool from_timer)
 {
-    if (state && !s_relay_state)
+    bool was_on = s_relay_state;
+    if (state && !was_on)
         s_on_count++;
     s_relay_state = state;
     digitalWrite(s_relay_pin, state ? RELAY_ON : !RELAY_ON);
@@ -302,10 +299,16 @@ static void set_relay(bool state, bool from_cyclic)
 #endif
 
     save_relay_state();
-    if (state && s_pulse_enabled)
-        s_pulse_on_time = millis();
-    if (!state && !from_cyclic)
-        cyclic_reset();
+    if (state && !was_on)
+    {
+        pulse_start(from_timer);
+    }
+    else
+    {
+        pulse_cancel();
+        if (!from_cyclic)
+            cyclic_reset();
+    }
 
     /* Publicar estado no gateway (regra 14). O publish e guardado pelo radio,
        entao no boot (nao registrado) e no-op. */
@@ -521,10 +524,9 @@ static void handle_api_state(void)
         doc["platform"] = "esp8266";
 #endif
         doc["current_epoch"] = get_synced_epoch();
-        doc["pulse_enabled"] = s_pulse_enabled;
-        doc["pulse_duration_min"] = s_pulse_duration_min;
-        if (s_pulse_enabled && s_relay_state)
-            doc["pulse_remaining_s"] = (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000;
+        doc["pulse_enabled"] = timer_pulse_get_enabled();
+        doc["pulse_duration_min"] = timer_pulse_get_duration();
+        doc["pulse_skip_on_timer"] = timer_pulse_get_skip_on_timer();
         doc["type"] = "onoff";
         doc["tx_count"] = s_radio.tx_count();
         doc["rx_count"] = s_radio.rx_count();
@@ -720,13 +722,13 @@ static void handle_console(char c)
     #endif    
     case 'i':
     case 'I':
-        s_pulse_enabled = !s_pulse_enabled;
-        if (s_pulse_enabled && s_relay_state)
-            s_pulse_on_time = millis();
-        timer_pulse_set_enabled(s_pulse_enabled);
+    {
+        bool en = !timer_pulse_get_enabled();
+        timer_pulse_set_enabled(en);
         timer_save_littlefs();
-        console.printf("[%s] Pulse %s (%d min)\n", TAG, s_pulse_enabled ? "ativado" : "desativado", s_pulse_duration_min);
+        console.printf("[%s] Pulse %s (%d min)\n", TAG, en ? "ativado" : "desativado", timer_pulse_get_duration());
         break;
+    }
     case 's':
     case 'S':
     {
@@ -763,9 +765,8 @@ static void handle_console(char c)
         console.printf("  Uptime:      %lu s\n", up);
         console.printf("  Timers:      %d configurados\n", MAX_TIMERS);
         console.printf("  Epoch:       %lu\n", get_synced_epoch());
-        console.printf("  Pulse:       %s (%d min)\n", s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);
-        if (s_pulse_enabled && s_relay_state)
-            console.printf("  Pulso rest.: %lu s\n", (s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000);
+        console.printf("  Pulse:       %s (%d min)\n", timer_pulse_get_enabled() ? "ON" : "OFF", timer_pulse_get_duration());
+        console.printf("  Skip timer:  %s\n", timer_pulse_get_skip_on_timer() ? "yes" : "no");
         console.printf("---------------\n\n");
         break;
     }
@@ -915,8 +916,9 @@ static void handle_api_timers(void)
         c["enabled"] = cyclic_get_enabled();
         c["duration_min"] = cyclic_get_duration();
         JsonObject p = doc["pulse"].to<JsonObject>();
-        p["enabled"] = s_pulse_enabled;
-        p["duration_min"] = s_pulse_duration_min;
+        p["enabled"] = timer_pulse_get_enabled();
+        p["duration_min"] = timer_pulse_get_duration();
+        p["skip_on_timer"] = timer_pulse_get_skip_on_timer();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -938,18 +940,16 @@ static void handle_api_timers(void)
         }
         if (doc.containsKey("pulse")) {
             JsonObject p = doc["pulse"];
-            if (p.containsKey("enabled")) {
-                s_pulse_enabled = p["enabled"];
-                timer_pulse_set_enabled(s_pulse_enabled);
-                if (s_pulse_enabled && s_relay_state) s_pulse_on_time = millis();
-            }
+            if (p.containsKey("enabled"))
+                timer_pulse_set_enabled(p["enabled"].as<bool>());
             if (p.containsKey("duration_min")) {
                 int val = p["duration_min"];
                 if (val < PULSE_MIN_MINUTES) val = PULSE_MIN_MINUTES;
                 if (val > PULSE_MAX_MINUTES) val = PULSE_MAX_MINUTES;
-                s_pulse_duration_min = (uint16_t)val;
-                timer_pulse_set_duration(s_pulse_duration_min);
+                timer_pulse_set_duration((uint16_t)val);
             }
+            if (p.containsKey("skip_on_timer"))
+                timer_pulse_set_skip_on_timer(p["skip_on_timer"].as<bool>());
         }
         int timer_index = doc["index"] | -1;
         if (doc.containsKey("cyclic") || doc.containsKey("pulse")) {
@@ -1028,10 +1028,9 @@ static void handle_api_pulse(void)
     {
         String json;
         JsonDocument doc;
-        doc["enabled"] = s_pulse_enabled;
-        doc["duration_minutes"] = s_pulse_duration_min;
-        doc["remaining_s"] = (s_pulse_enabled && s_relay_state) ?
-            ((s_pulse_duration_min * 60000 - (millis() - s_pulse_on_time)) / 1000) : 0;
+        doc["enabled"] = timer_pulse_get_enabled();
+        doc["duration_minutes"] = timer_pulse_get_duration();
+        doc["skip_on_timer"] = timer_pulse_get_skip_on_timer();
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
     }
@@ -1042,24 +1041,23 @@ static void handle_api_pulse(void)
         DeserializationError err = deserializeJson(doc, body);
         if (err) { s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}"); return; }
         if (doc.containsKey("enabled"))
-            s_pulse_enabled = doc["enabled"];
+            timer_pulse_set_enabled(doc["enabled"].as<bool>());
         if (doc.containsKey("duration_minutes"))
         {
             int val = doc["duration_minutes"];
             if (val < PULSE_MIN_MINUTES) val = PULSE_MIN_MINUTES;
             if (val > PULSE_MAX_MINUTES) val = PULSE_MAX_MINUTES;
-            s_pulse_duration_min = (uint16_t)val;
+            timer_pulse_set_duration((uint16_t)val);
         }
-        if (s_pulse_enabled && s_relay_state)
-            s_pulse_on_time = millis();
-        timer_pulse_set_enabled(s_pulse_enabled);
-        timer_pulse_set_duration(s_pulse_duration_min);
+        if (doc.containsKey("skip_on_timer"))
+            timer_pulse_set_skip_on_timer(doc["skip_on_timer"].as<bool>());
         timer_save_littlefs();
         String json;
         JsonDocument resp;
         resp["status"] = "ok";
-        resp["enabled"] = s_pulse_enabled;
-        resp["duration_minutes"] = s_pulse_duration_min;
+        resp["enabled"] = timer_pulse_get_enabled();
+        resp["duration_minutes"] = timer_pulse_get_duration();
+        resp["skip_on_timer"] = timer_pulse_get_skip_on_timer();
         serializeJson(resp, json);
         s_server.send(200, "application/json", json);
     }
@@ -1252,9 +1250,10 @@ void setup(void)
     timer_save();
     console.printf("[%s] Timer module initialized (LittleFS)\n", TAG);
 
-    s_pulse_enabled = timer_pulse_get_enabled();
-    s_pulse_duration_min = timer_pulse_get_duration();
-    console.printf("[%s] Pulse: %s (%d min)\n", TAG, s_pulse_enabled ? "ON" : "OFF", s_pulse_duration_min);
+    console.printf("[%s] Pulse: %s (%d min) skip_timer=%s\n", TAG,
+                   timer_pulse_get_enabled() ? "ON" : "OFF",
+                   timer_pulse_get_duration(),
+                   timer_pulse_get_skip_on_timer() ? "yes" : "no");
 
     console.printf("============================================\n");
     console.printf("  Pronto! Pressione 'h' para ajuda\n");
@@ -1333,9 +1332,10 @@ void loop(void)
         else if (ca == -1) { console.printf("[%s] Cyclic OFF\n", TAG); set_relay(false, true); }
     }
 
-    if (s_pulse_enabled && s_relay_state && (now - s_pulse_on_time > (unsigned long)s_pulse_duration_min * 60000))
+    int8_t pulse_action = pulse_check(now);
+    if (pulse_action == -1)
     {
-        console.printf("[%s] Pulse timeout (%d min), turning OFF\n", TAG, s_pulse_duration_min);
+        console.printf("[%s] Pulse timeout, turning OFF\n", TAG);
         set_relay(false);
         if (s_radio.is_paired())
         {

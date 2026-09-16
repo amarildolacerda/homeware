@@ -119,6 +119,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Duração</span><span style="display:flex;gap:4px;align-items:center">
 <input type="number" id="pulseDurationInput" min="1" max="1440" style="width:70px">
 <span style="color:var(--muted-subtle);font-size:.75rem">min</span></span></div>
+<div class="row"><span class="label">Suspender por timer</span><label style="font-size:.82rem;color:var(--text)"><input type="checkbox" id="pulseSkipTimerCheck" onchange="savePulse()"> não desligar quando ativado por timer</label></div>
 <div class="row"><span class="label">Restante</span><span class="value" id="pulseRemaining">-</span></div>
 <div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="savePulse()">Salvar</button></div>
 </div>
@@ -206,8 +207,9 @@ async function savePins(){let nm=document.getElementById('deviceNameInput').valu
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
 try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let hubIp=document.getElementById('hubIp').value.trim();await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hub_ip:hubIp})});fetchSettings();let m=document.getElementById('hubIp');if(m)try{let rw=await fetch('/api/wifi');let dw=await rw.json();m.value=dw.hub_ip||''}catch(e){}}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePulse(){let en=document.getElementById('pulseEnabledCheck').checked;let dur=parseInt(document.getElementById('pulseDurationInput').value)||60;
+let skip=document.getElementById('pulseSkipTimerCheck').checked;
 if(dur<1)dur=1;if(dur>1440)dur=1440;
-try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
+try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur,skip_on_timer:skip})})}catch(e){}}
 async function saveCyclic(){let en=document.getElementById('cyclicEnabledCheck').checked;let dur=parseInt(document.getElementById('cyclicDurationInput').value)||60;
 if(dur<1)dur=1;if(dur>1440)dur=1440;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:en,duration_min:dur}})})}catch(e){}}
@@ -247,6 +249,7 @@ let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.bu
 async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
 document.getElementById('pulseEnabledCheck').checked=d.enabled;
 document.getElementById('pulseDurationInput').value=d.duration_minutes;
+document.getElementById('pulseSkipTimerCheck').checked=!!d.skip_on_timer;
 document.getElementById('pulseRemaining').textContent=d.remaining_s>0?Math.floor(d.remaining_s/60)+'m '+d.remaining_s%60+'s':'-'}catch(e){}}
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});

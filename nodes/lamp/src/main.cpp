@@ -403,7 +403,7 @@ static void load_startup_mode(void)
    Remover save_wifi_credentials e load_wifi_credentials — usar mywifi_save_creds
    e sh_creds_load do shared. */
 
-static void set_relay(bool state, bool from_cyclic = false, bool from_sync = false);
+static void set_relay(bool state, bool from_cyclic = false, bool from_sync = false, bool from_timer = false);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
@@ -429,7 +429,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
    timer, cyclic, console e comando do hub TODOS passam por set_relay().
    Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
    Não alterar s_relay_state diretamente fora daqui. */
-static void set_relay(bool state, bool from_cyclic, bool from_sync)
+static void set_relay(bool state, bool from_cyclic, bool from_sync, bool from_timer)
 {
     bool was_on = s_relay_state;
     s_relay_state = state;
@@ -448,7 +448,7 @@ static void set_relay(bool state, bool from_cyclic, bool from_sync)
     if (state && !was_on)
     {
         s_on_count++;
-        pulse_start();
+        pulse_start(from_timer);
     }
     else
     {
@@ -1381,7 +1381,7 @@ static void handle_api_settings(void)
 static void apply_timer(int action)
 {
     console.printf("[%s] Timer action: %s\n", TAG, action ? "ON" : "OFF");
-    set_relay(action == 1);
+    set_relay(action == 1, false, false, true);
 }
 
 static unsigned long get_epoch(void)
@@ -1463,6 +1463,7 @@ static void handle_api_timers(void)
         JsonObject pulse = doc["pulse"].to<JsonObject>();
         pulse["enabled"] = timer_pulse_get_enabled();
         pulse["duration_min"] = timer_pulse_get_duration();
+        pulse["skip_on_timer"] = timer_pulse_get_skip_on_timer();
         JsonObject sync = doc["sync"].to<JsonObject>();
         sync["enabled"] = s_sync_cfg.enabled;
         sync["target_device_id"] = s_sync_cfg.target_device_id;
@@ -1495,6 +1496,8 @@ static void handle_api_timers(void)
                 timer_pulse_set_enabled(p["enabled"].as<bool>());
             if (p.containsKey("duration_min"))
                 timer_pulse_set_duration(p["duration_min"].as<uint16_t>());
+            if (p.containsKey("skip_on_timer"))
+                timer_pulse_set_skip_on_timer(p["skip_on_timer"].as<bool>());
         }
         if (doc.containsKey("sync"))
         {

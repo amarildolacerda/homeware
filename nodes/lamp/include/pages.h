@@ -81,9 +81,14 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 .card-body{padding:0 16px 16px}
 .card.collapsed .card-body{display:none}
 @media(max-width:600px){.sidebar{width:48px}.sidebar-top .dev-name,.sidebar-top .dev-id,.sidebar-bottom{display:none}.nav-item{justify-content:center;padding:10px 4px}.nav-item span{display:none}.nav-item span:first-child{display:inline;font-size:1.1rem}.nav-sub{display:none}.main{margin-left:48px}.stats-header{padding:5px 10px}.content{padding:12px}.footer-bar{padding:6px 12px;font-size:.7rem;gap:8px}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:8px;font-size:.8rem;font-weight:500;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+.toast.ok{background:var(--success);color:#fff}
+.toast.err{background:var(--danger);color:#fff}
 </style>
 </head>
 <body>
+<div class="toast" id="toast"></div>
 <div class="sidebar">
 <div class="sidebar-top">
 <div class="dev-row">
@@ -161,6 +166,8 @@ static const char PAGE_DASHBOARD_CONT1[] PROGMEM = R"=====(
 <div class="row"><span class="label">Ativado</span><input type="checkbox" id="pulseEnabled"></div>
 <div class="row"><span class="label">Duracao (min)</span><input type="number" id="pulseDuration" min="1" max="3600" style="width:100px"></div>
 <div style="margin-top:2px;font-size:.68rem;color:var(--muted-subtle)">1-3600 min (1min a 60h)</div>
+<div class="row"><span class="label">Suspender por timer</span><input type="checkbox" id="pulseSkipTimer"></div>
+<div style="margin-top:2px;font-size:.68rem;color:var(--muted-subtle)">Se marcado, pulso nao executa quando ativado por timer</div>
 <div style="text-align:center;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="savePulse()">Salvar</button></div>
 </div>
 <div class="section" id="secSync">
@@ -314,20 +321,21 @@ const fbGateway=document.getElementById('fbGateway');
 const fbTime=document.getElementById('fbTime');
 const fbUptime=document.getElementById('fbUptime');
 let loading=false,cicloOpen=false,currentSection='home';
+let _toastTimer=0;function showToast(t,c){let el=document.getElementById('toast');el.textContent=t;el.className='toast '+c+' show';clearTimeout(_toastTimer);_toastTimer=setTimeout(function(){el.className='toast'},3000)}
 function toggleCard(id){const el=document.getElementById(id);const wasCollapsed=el.classList.contains('collapsed');document.querySelectorAll('.card.collapsible').forEach(function(c){c.classList.add('collapsed')});if(wasCollapsed)el.classList.remove('collapsed')}
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
 document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers();if(s==='config'){fetchSettings();fetchWifi();fetchOpMode()}}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
-async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
-async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();footerEl.textContent=d.status==='pairing'?'Pareando...':'Falha ao parear'}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});showToast('Reiniciando...','ok')}catch(e){}}
+async function pairDevice(){try{let r=await fetch('/api/pair',{method:'POST'});let d=await r.json();showToast(d.status==='pairing'?'Pareando...':'Falha ao parear',d.status==='pairing'?'ok':'err')}catch(e){showToast('Erro: '+e.message,'err')}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value),multihub:!!document.getElementById('multihubCheck').checked};if(nm)body.device_name=nm;
 try{let sr=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let sd=await sr.json();
 let ssid=document.getElementById('wifiSsid').value.trim();let pass=document.getElementById('wifiPass').value;let ch=parseInt(document.getElementById('wifiChannel').value)||0;let hubIpEl=document.getElementById('hubIp');let hubIp=hubIpEl?hubIpEl.value.trim():"";
 if(ssid){let wb={ssid:ssid,password:pass,mode:_ipMode,hub_ip:hubIp};if(_ipMode===1){wb.ip=document.getElementById('ipAddr').value.trim();wb.gateway=document.getElementById('ipGw').value.trim();wb.subnet=document.getElementById('ipMask').value.trim();wb.dns=document.getElementById('ipDns').value.trim()}if(ch>=0&&ch<=13)wb.channel=ch;let wr=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wb)});let wd=await wr.json();if(wd.status==='ok'){showWifiMsg('Configurações salvas. Conectando a '+ssid+'...','ok');setTimeout(function(){fetchWifi()},3000)}else{showWifiMsg('WiFi erro: '+(wd.error||''),'err')}}else if(hubIpEl){let wb={hub_ip:hubIp};let wr=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wb)});let wd=await wr.json();if(wd.status==='ok'){showWifiMsg('Hub IP salvo: '+(hubIp||'auto'),'ok');setTimeout(function(){fetchWifi()},1000)}else{showWifiMsg('Erro Hub IP','err')}}else{showWifiMsg('Configurações salvas','ok')}
-fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
+fetchSettings();showToast('Configurações salvas','ok')}catch(e){showToast('Erro: '+e.message,'err')}}
 async function fetchState(){try{let r=await fetch('/api/state');let d=await r.json();
   const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';badge.className='badge '+(on?'on':'off');
   rxVal.textContent=d.rx_count||0;
@@ -381,7 +389,7 @@ let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.bu
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
 let d=await r.json();const on=d.state;btn.classList.toggle('on',on);badge.textContent=on?'LIGADA':'DESLIGADA';badge.className='badge '+(on?'on':'off');
-}catch(e){footerEl.textContent='Erro: '+e.message}finally{loading=false;btn.classList.remove('loading')}}
+}catch(e){showToast('Erro: '+e.message,'err')}finally{loading=false;btn.classList.remove('loading')}}
 async function fetchTimers(){try{let r=await fetch('/api/timers');let d=await r.json();timerList.innerHTML='';
 if(d.timers&&d.timers.length){d.timers.forEach(function(t,i){
 let div=document.createElement('div');div.className='row';
@@ -389,15 +397,15 @@ let lbl=document.createElement('span');lbl.className='label';lbl.textContent=('0
 let cb=document.createElement('input');cb.type='checkbox';cb.checked=t.enabled;cb.onchange=function(){t.enabled=cb.checked;fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,...t})})};
 div.appendChild(lbl);div.appendChild(cb);timerList.appendChild(div)})}else{timerList.innerHTML='<div class="row"><span class="label">Nenhum timer</span></div>'}
 if(d.cyclic){document.getElementById('cyclicEnabled').checked=!!d.cyclic.enabled;document.getElementById('cyclicDuration').value=d.cyclic.duration_min||30}
-if(d.pulse){document.getElementById('pulseEnabled').checked=!!d.pulse.enabled;document.getElementById('pulseDuration').value=d.pulse.duration_min||15}
+if(d.pulse){document.getElementById('pulseEnabled').checked=!!d.pulse.enabled;document.getElementById('pulseDuration').value=d.pulse.duration_min||15;document.getElementById('pulseSkipTimer').checked=!!d.pulse.skip_on_timer}
 if(d.sync){document.getElementById('syncEnabled').checked=!!d.sync.enabled;let sel=document.getElementById('syncDeviceSelect');let tid=d.sync.target_device_id||d.sync.target_id||'';let opt=sel.querySelector('option[value="'+tid+'"]');if(opt){sel.value=tid;document.getElementById('syncManualRow').style.display='none'}else{document.getElementById('syncTargetId').value=tid;sel.value='__manual__';document.getElementById('syncManualRow').style.display=''}}
 let nr=await fetch('/api/timer/next');let nd=await nr.json();
 nextTimerEl.textContent=nd.has_next?new Date(nd.next_epoch*1000).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'-'}catch(e){}}
 async function addTimer(){let h=document.getElementById('timerHour').value;let m=document.getElementById('timerMin').value;let a=document.getElementById('timerAction').value;let d=document.getElementById('timerDays').value;
-try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers()}catch(e){}}
-async function saveCyclic(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:document.getElementById('cyclicEnabled').checked,duration_min:parseInt(document.getElementById('cyclicDuration').value)||30}})});footerEl.textContent='Ciclico salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
-async function savePulse(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulse:{enabled:document.getElementById('pulseEnabled').checked,duration_min:parseInt(document.getElementById('pulseDuration').value)||15}})});footerEl.textContent='Pulso salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
-async function saveSync(){let sel=document.getElementById('syncDeviceSelect');let tid=sel.value==='__manual__'?document.getElementById('syncTargetId').value.trim():sel.value;try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sync:{enabled:document.getElementById('syncEnabled').checked,target_device_id:tid}})});footerEl.textContent='Sync salvo'}catch(e){footerEl.textContent='Erro: '+e.message}}
+try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hour:parseInt(h),minute:parseInt(m),action:parseInt(a),days_mask:parseInt(d),enabled:true})});fetchTimers();showToast('Timer adicionado','ok')}catch(e){showToast('Erro: '+e.message,'err')}}
+async function saveCyclic(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:document.getElementById('cyclicEnabled').checked,duration_min:parseInt(document.getElementById('cyclicDuration').value)||30}})});showToast('Cíclico salvo','ok')}catch(e){showToast('Erro: '+e.message,'err')}}
+async function savePulse(){try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pulse:{enabled:document.getElementById('pulseEnabled').checked,duration_min:parseInt(document.getElementById('pulseDuration').value)||15,skip_on_timer:document.getElementById('pulseSkipTimer').checked}})});showToast('Pulso salvo','ok')}catch(e){showToast('Erro: '+e.message,'err')}}
+async function saveSync(){let sel=document.getElementById('syncDeviceSelect');let tid=sel.value==='__manual__'?document.getElementById('syncTargetId').value.trim():sel.value;try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sync:{enabled:document.getElementById('syncEnabled').checked,target_device_id:tid}})});showToast('Sync salvo','ok')}catch(e){showToast('Erro: '+e.message,'err')}}
 function syncOnDeviceChange(){let sel=document.getElementById('syncDeviceSelect');let manualRow=document.getElementById('syncManualRow');if(sel.value==='__manual__'){manualRow.style.display=''}else{manualRow.style.display='none'}}
 async function fetchRepeater(d){try{if(!d){let r=await fetch('/api/state');d=await r.json();}
 let nav=document.getElementById('navRepeater');let en=d.repeater_enabled;
@@ -413,7 +421,7 @@ async function fetchWifi(){try{let r=await fetch('/api/wifi');let d=await r.json
 let _ipMode=0;
 function setIpMode(m){_ipMode=m;document.getElementById('btn-dhcp').style.background=m===0?'var(--primary)':'';document.getElementById('btn-dhcp').style.color=m===0?'#fff':'';document.getElementById('btn-static').style.background=m===1?'var(--primary)':'';document.getElementById('btn-static').style.color=m===1?'#fff':'';document.getElementById('netFields').style.display=m===1?'block':'none'}
 function showWifiMsg(t,c){let m=document.getElementById('wifiMsg');if(!m)return;m.textContent=t;m.className='';m.style.display='block';m.style.background=c==='ok'?'#dcfce7':'#fef2f2';m.style.color=c==='ok'?'var(--success)':'var(--danger)';setTimeout(function(){m.style.display='none'},3000)}
-async function saveOpMode(){let sel=document.getElementById('opModeSelect');let mode=parseInt(sel.value);if(!confirm('Alterar modo para '+(['Terminal','AP','Híbrido'])[mode]+'? Reiniciando...')){sel.value=String(window._curOpMode||0);return;}try{let r=await fetch('/api/config/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});let d=await r.json();if(d.status==='ok'){footerEl.textContent='Modo alterado, reiniciando...';setTimeout(function(){location.reload()},3000)}}catch(e){footerEl.textContent='Erro: '+e.message}}
+async function saveOpMode(){let sel=document.getElementById('opModeSelect');let mode=parseInt(sel.value);if(!confirm('Alterar modo para '+(['Terminal','AP','Híbrido'])[mode]+'? Reiniciando...')){sel.value=String(window._curOpMode||0);return;}try{let r=await fetch('/api/config/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});let d=await r.json();if(d.status==='ok'){showToast('Modo alterado, reiniciando...','ok');setTimeout(function(){location.reload()},3000)}}catch(e){showToast('Erro: '+e.message,'err')}}
 async function fetchOpMode(){try{let r=await fetch('/api/config/mode');let d=await r.json();window._curOpMode=d.mode;document.getElementById('opModeSelect').value=String(d.mode)}catch(e){}}
 )=====";
 #ifdef PINS_ENABLED
