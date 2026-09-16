@@ -119,6 +119,7 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="row"><span class="label">Duração</span><span style="display:flex;gap:4px;align-items:center">
 <input type="number" id="pulseDurationInput" min="1" max="1440" style="width:70px">
 <span style="color:var(--muted-subtle);font-size:.75rem">min</span></span></div>
+<div class="row"><span class="label">Suspender por timer</span><label style="font-size:.82rem;color:var(--text)"><input type="checkbox" id="pulseSkipTimerCheck" onchange="savePulse()"> não desligar quando ativado por timer</label></div>
 <div class="row"><span class="label">Restante</span><span class="value" id="pulseRemaining">-</span></div>
 <div style="text-align:center;margin-top:10px"><button class="btn btn-primary" onclick="savePulse()">Salvar</button></div>
 </div>
@@ -134,6 +135,8 @@ select{padding:6px 8px;border-radius:8px;border:1px solid var(--border);backgrou
 <div class="section" id="secConfig">
 <h1>Configuração</h1>
 <div class="row"><span class="label">Nome</span><input type="text" id="deviceNameInput" maxlength="47" style="width:160px"></div>
+<div class="row"><span class="label">Hub IP</span><input type="text" id="hubIp" maxlength="15" style="width:160px" placeholder="auto (UDP)"></div>
+<div style="font-size:.68rem;color:var(--muted-subtle);margin-bottom:8px">vazio = discovery UDP; preencher para 2 hubs (ex: 192.168.1.14)</div>
 <div class="row"><span class="label">GPIO relé</span><select id="relayPinSelect"></select></div>
 <div class="row"><span class="label">GPIO botão</span><select id="buttonPinSelect"></select></div>
 <div class="row"><span class="label">LED</span><label style="font-size:.82rem;color:var(--muted-subtle)"><input type="checkbox" id="ledEnabledCheck" onchange="savePins()"> habilitado</label></div>
@@ -202,10 +205,11 @@ for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('
 async function restartDevice(){if(!confirm('Reiniciar?'))return;try{await fetch('/api/restart',{method:'POST'});footerEl.textContent='Reiniciando...'}catch(e){}}
 async function savePins(){let nm=document.getElementById('deviceNameInput').value.trim();let rp=document.getElementById('relayPinSelect').value;let bp=document.getElementById('buttonPinSelect').value;
 let body={relay_pin:parseInt(rp),button_pin:parseInt(bp),led_enabled:document.getElementById('ledEnabledCheck').checked,startup_mode:parseInt(document.getElementById('startupModeSelect').value)};if(nm)body.device_name=nm;
-try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});fetchSettings()}catch(e){footerEl.textContent='Erro: '+e.message}}
+try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let hubIp=document.getElementById('hubIp').value.trim();await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hub_ip:hubIp})});fetchSettings();let m=document.getElementById('hubIp');if(m)try{let rw=await fetch('/api/wifi');let dw=await rw.json();m.value=dw.hub_ip||''}catch(e){}}catch(e){footerEl.textContent='Erro: '+e.message}}
 async function savePulse(){let en=document.getElementById('pulseEnabledCheck').checked;let dur=parseInt(document.getElementById('pulseDurationInput').value)||60;
+let skip=document.getElementById('pulseSkipTimerCheck').checked;
 if(dur<1)dur=1;if(dur>1440)dur=1440;
-try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur})})}catch(e){}}
+try{await fetch('/api/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:en,duration_minutes:dur,skip_on_timer:skip})})}catch(e){}}
 async function saveCyclic(){let en=document.getElementById('cyclicEnabledCheck').checked;let dur=parseInt(document.getElementById('cyclicDurationInput').value)||60;
 if(dur<1)dur=1;if(dur>1440)dur=1440;
 try{await fetch('/api/timers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cyclic:{enabled:en,duration_min:dur}})})}catch(e){}}
@@ -241,10 +245,11 @@ document.getElementById('startupModeSelect').value=d.startup_mode;
 let rps=document.getElementById('relayPinSelect');let bps=document.getElementById('buttonPinSelect');rps.innerHTML='';bps.innerHTML='';
 d.available_pins.forEach(function(p){
 let ro=document.createElement('option');ro.value=p;ro.text='GPIO '+p;if(p===d.relay_pin)ro.selected=true;rps.appendChild(ro);
-let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.button_pin)bo.selected=true;bps.appendChild(bo)})}catch(e){}}
+let bo=document.createElement('option');bo.value=p;bo.text='GPIO '+p;if(p===d.button_pin)bo.selected=true;bps.appendChild(bo)});try{let rw=await fetch('/api/wifi');let dw=await rw.json();let m=document.getElementById('hubIp');if(m) m.value=dw.hub_ip||''}catch(e){}}catch(e){}}
 async function fetchPulse(){try{let r=await fetch('/api/pulse');let d=await r.json();
 document.getElementById('pulseEnabledCheck').checked=d.enabled;
 document.getElementById('pulseDurationInput').value=d.duration_minutes;
+document.getElementById('pulseSkipTimerCheck').checked=!!d.skip_on_timer;
 document.getElementById('pulseRemaining').textContent=d.remaining_s>0?Math.floor(d.remaining_s/60)+'m '+d.remaining_s%60+'s':'-'}catch(e){}}
 async function toggleRelay(){if(loading)return;loading=true;btn.classList.add('loading');
 try{let r=await fetch('/api/relay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:!btn.classList.contains('on')})});
@@ -357,17 +362,20 @@ input:focus{border-color:var(--primary)}
 <label for="repeaterMac">Repeater MAC (opcional)</label>
 <input type="text" id="repeaterMac" placeholder="AA:BB:CC:DD:EE:FF">
 <div class="hint">Deixe em branco para uso normal</div>
+<label for="hubIp">Hub IP (opcional)</label>
+<input type="text" id="hubIp" placeholder="192.168.1.14">
+<div class="hint">Vazio = discovery UDP; preencher para 2 hubs</div>
 <button type="submit" class="btn" id="submitBtn">Conectar</button>
 </form>
 <div id="msg" class="msg" style="display:none"></div>
 </div>
 <script>
-async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel}catch(e){}}
+async function loadStatus(){try{let r=await fetch('/api/wifi');let d=await r.json();document.getElementById('ssid').value=d.ssid||'';document.getElementById('password').value=d.password||'';document.getElementById('devName').value=d.device_name||'';if(d.channel!==undefined)document.getElementById('wifiChannel').value=d.channel;if(d.hub_ip!==undefined)document.getElementById('hubIp').value=d.hub_ip;}catch(e){}}
 function showMsg(t,c){let m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;m.style.display='block'}
 function loading(v){document.getElementById('submitBtn').style.opacity=v?0.5:1;document.getElementById('submitBtn').disabled=v}
 async function submitForm(){let ssid=document.getElementById('ssid').value.trim();if(!ssid){showMsg('Informe o SSID','err');return false}
-let pass=document.getElementById('password').value;let name=document.getElementById('devName').value.trim();let rep=document.getElementById('repeaterMac').value.trim();let ch=parseInt(document.getElementById('wifiChannel').value)||0;loading(true);
-let body={ssid:ssid,password:pass};if(name)body.device_name=name;if(rep)body.repeater_mac=rep;if(ch>=0&&ch<=13)body.channel=ch;
+let pass=document.getElementById('password').value;let name=document.getElementById('devName').value.trim();let rep=document.getElementById('repeaterMac').value.trim();let hubIp=document.getElementById('hubIp').value.trim();let ch=parseInt(document.getElementById('wifiChannel').value)||0;loading(true);
+let body={ssid:ssid,password:pass,hub_ip:hubIp};if(name)body.device_name=name;if(rep)body.repeater_mac=rep;if(ch>=0&&ch<=13)body.channel=ch;
 try{let r=await fetch('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();
 if(d.status==='ok'){showMsg('Conectando...','ok');setTimeout(function(){showMsg('AP reativado se falhar','ok')},2000)}else{showMsg('Erro: '+d.error,'err');loading(false)}}
 catch(e){showMsg('Erro: '+e.message,'err');loading(false)}return false}

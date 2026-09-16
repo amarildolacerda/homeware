@@ -403,7 +403,7 @@ static void load_startup_mode(void)
    Remover save_wifi_credentials e load_wifi_credentials — usar mywifi_save_creds
    e sh_creds_load do shared. */
 
-static void set_relay(bool state, bool from_cyclic = false, bool from_sync = false);
+static void set_relay(bool state, bool from_cyclic = false, bool from_sync = false, bool from_timer = false);
 
 static void name_to_ssid(const char *name, char *out, size_t max)
 {
@@ -429,7 +429,7 @@ static void name_to_ssid(const char *name, char *out, size_t max)
    timer, cyclic, console e comando do hub TODOS passam por set_relay().
    Mudanças de estado por outro caminho NÃO publicam no hub (regra 14).
    Não alterar s_relay_state diretamente fora daqui. */
-static void set_relay(bool state, bool from_cyclic, bool from_sync)
+static void set_relay(bool state, bool from_cyclic, bool from_sync, bool from_timer)
 {
     bool was_on = s_relay_state;
     s_relay_state = state;
@@ -448,7 +448,7 @@ static void set_relay(bool state, bool from_cyclic, bool from_sync)
     if (state && !was_on)
     {
         s_on_count++;
-        pulse_start();
+        pulse_start(from_timer);
     }
     else
     {
@@ -639,6 +639,10 @@ static void handle_api_wifi(void)
             doc["subnet"] = net_mask;
             doc["dns"] = net_dns;
         }
+#ifdef TCP_ENABLED
+        doc["hub_ip"] = s_radio.hub_ip_configured() ? s_radio.hub_ip_str() : "";
+        doc["hub_ip_current"] = s_radio.gateway_ip().toString();
+#endif
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
         return;
@@ -654,6 +658,12 @@ static void handle_api_wifi(void)
             s_server.send(400, "application/json", "{\"error\":\"invalid JSON\"}");
             return;
         }
+#ifdef TCP_ENABLED
+        if (doc.containsKey("hub_ip")) {
+            const char* hip = doc["hub_ip"];
+            s_radio.set_hub_ip(hip);
+        }
+#endif
         if (doc.containsKey("ssid"))
         {
             const char *ssid = doc["ssid"];
@@ -712,6 +722,10 @@ static void handle_api_wifi(void)
             mywifi_save_creds(ssid, pass);
             delay(100);
             WiFi.begin(ssid, pass);
+        }
+        else if (doc.containsKey("hub_ip"))
+        {
+            s_server.send(200, "application/json", "{\"status\":\"ok\"}");
         }
         else
         {
@@ -1367,7 +1381,7 @@ static void handle_api_settings(void)
 static void apply_timer(int action)
 {
     console.printf("[%s] Timer action: %s\n", TAG, action ? "ON" : "OFF");
-    set_relay(action == 1);
+    set_relay(action == 1, false, false, true);
 }
 
 static unsigned long get_epoch(void)
@@ -1449,6 +1463,7 @@ static void handle_api_timers(void)
         JsonObject pulse = doc["pulse"].to<JsonObject>();
         pulse["enabled"] = timer_pulse_get_enabled();
         pulse["duration_min"] = timer_pulse_get_duration();
+        pulse["skip_on_timer"] = timer_pulse_get_skip_on_timer();
         JsonObject sync = doc["sync"].to<JsonObject>();
         sync["enabled"] = s_sync_cfg.enabled;
         sync["target_device_id"] = s_sync_cfg.target_device_id;
@@ -1481,6 +1496,8 @@ static void handle_api_timers(void)
                 timer_pulse_set_enabled(p["enabled"].as<bool>());
             if (p.containsKey("duration_min"))
                 timer_pulse_set_duration(p["duration_min"].as<uint16_t>());
+            if (p.containsKey("skip_on_timer"))
+                timer_pulse_set_skip_on_timer(p["skip_on_timer"].as<bool>());
         }
         if (doc.containsKey("sync"))
         {
@@ -1748,6 +1765,10 @@ static void on_forward(const uint8_t *data, size_t len, const uint8_t *mac)
 
 static void on_time_sync(uint32_t epoch_seconds)
 {
+    // Ignorar duplicatas ESP-NOW: só atualizar referência quando o epoch muda.
+    // Senão, cada callback reseta s_sync_millis e get_epoch() fica preso.
+    if (epoch_seconds == s_synced_epoch && s_synced_epoch != 0)
+        return;
     s_synced_epoch = epoch_seconds;
     s_sync_millis = millis();
     console.printf("[%s] Time sync: %lu\n", TAG, epoch_seconds);
@@ -2102,12 +2123,10 @@ void loop(void)
 
     {
         static unsigned long last_timer_check = 0;
+        static unsigned long last_timer_debug = 0;
         if (now - last_timer_check > TIMER_CHECK_INTERVAL_MS)
         {
             last_timer_check = now;
-            // Timer deve funcionar mesmo sem WiFi (principal uso é offline).
-            // Única exceção: relógio ainda não carregado — sem epoch não há
-            // como avaliar a hora corrente.
             unsigned long epoch = get_epoch();
             if (epoch > 0)
             {
@@ -2116,6 +2135,17 @@ void loop(void)
                 {
                     apply_timer(action);
                 }
+            }
+            // Debug dump a cada 60s (6 checks de 10s)
+            if (now - last_timer_debug > 60000)
+            {
+                last_timer_debug = now;
+                unsigned long ep = get_epoch();
+                console.printf("[%s] Timer debug — epoch=%lu synced=%lu tz=%d relay=%s paired=%s\n",
+                               TAG, ep, s_synced_epoch, s_timezone_offset,
+                               s_relay_state ? "ON" : "OFF",
+                               s_radio.is_paired() ? "yes" : "no");
+                timer_debug_dump(ep, s_timezone_offset);
             }
         }
     }
