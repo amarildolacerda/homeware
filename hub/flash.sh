@@ -2,7 +2,7 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PORT="/dev/ttyUSB0"
-ENV="hub_32_lora"
+ENV="hub_32_ota"
 
 while getopts ":p:o:e:" opt; do
     case $opt in
