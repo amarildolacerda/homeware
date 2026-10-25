@@ -72,6 +72,7 @@ Exemplo de intenção lógica:
 
 ## Gateway e pareamento
 - O nó deve tentar parear por broadcast em `espnow_pair_request_t`
+- Após despertar e inicializar ESP-NOW, aguardar 2 segundos para estabilização do rádio antes do primeiro pareamento/envio
 - Se o gateway responder com `MSG_PAIR_RESPONSE`, o node grava o MAC e o slot e passa a enviar dados
 - O node deve reconectar/reativar pareamento se o gateway cair ou se a resposta não chegar
 - O par não deve depender de comunicação HTTP direta; o fluxo é por ESP-NOW exclusivamente

@@ -26,6 +26,7 @@ static const char *TAG = "agri-acquiry-bat";
 enum State
 {
     STATE_INIT,
+    STATE_WAIT_RADIO,
     STATE_WAIT_PAIR,
     STATE_READ_SENSOR,
     STATE_SEND_DATA,
@@ -324,7 +325,7 @@ void setup(void)
         s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 
     console.printf("\n============================================\n");
-    console.printf("  AgriSense Presence Bat " FW_VERSION "\n");
+    console.printf("  AgriSense Acquiry Bat " FW_VERSION "\n");
     console.printf("  Device: %s\n", getDeviceId());
     console.printf("  Nome:   %s\n", s_device_name);
     console.printf("============================================\n\n");
@@ -376,6 +377,8 @@ void setup(void)
     char mac_str[18];
     mac_to_str(s_espnow_mac, mac_str, sizeof(mac_str));
     console.printf("[%s] My MAC: %s, ESP-NOW: %s\n", TAG, WiFi.macAddress().c_str(), mac_str);
+    s_state_start = millis();
+    s_state = STATE_WAIT_RADIO;
 }
 
 void loop(void)
@@ -501,6 +504,14 @@ void loop(void)
 
     switch (s_state)
     {
+    case STATE_WAIT_RADIO:
+        if (now - s_state_start >= ESPNOW_STARTUP_WAIT_MS)
+        {
+            console.printf("[%s] Fim da espera de inicializacao ESP-NOW\n", TAG);
+            s_state = STATE_INIT;
+        }
+        break;
+
     case STATE_INIT:
         console.printf("[%s] Sending pair request\n", TAG);
         espnow_send_pair_request();
