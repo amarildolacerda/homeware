@@ -9,6 +9,16 @@
 #include "common_console.h"
 #include "common_espnow.h"
 #include "common_util.h"
+#include "radio_node_strategy.h"
+
+#ifdef TCP_ENABLED
+#define WIFI_ENABLED
+#endif
+
+#if defined(WIFI_ENABLED) && defined(ESPNOW_ENABLED)
+//#error "Choose either WIFI_ENABLED or ESPNOW_ENABLED"
+  #undef ESPNOW_ENABLED
+#endif
 
 #if defined(ARDUINO_ARCH_ESP32)
 #include <esp_sleep.h>
@@ -38,6 +48,9 @@ static State s_state = STATE_INIT;
 static unsigned long s_state_start = 0;
 
 static bool s_espnow_ready = false;
+#ifdef WIFI_ENABLED
+static NodeRadioType s_wifi_radio;
+#endif
 static char s_device_name[32] = DEVICE_NAME;
 static uint16_t s_sequence = 0;
 
@@ -78,6 +91,40 @@ static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 #define MAX_DATA_RETRIES 2
 #define MAX_READ_RETRIES 3
 
+#ifdef WIFI_ENABLED
+static uint8_t get_sensor_type(void)
+{
+    return SENSOR_TYPE_ACQUIRY;
+}
+
+static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
+{
+    if (max_len < sizeof(payload_onoff_t))
+        return 0;
+    payload_onoff_t payload = {};
+    payload.state = s_acquiry_state;
+    memcpy(buf, &payload, sizeof(payload));
+    return sizeof(payload);
+}
+
+static void on_command(uint8_t command)
+{
+    console.printf("[%s] Command received: %u\n", TAG, command);
+}
+
+static void on_paired(uint8_t slot)
+{
+    console.printf("[%s] Registered with hub, slot %u\n", TAG, slot);
+}
+
+static void on_restart(void)
+{
+    console.printf("[%s] Restart command received\n", TAG);
+    delay(100);
+    ESP.restart();
+}
+#endif
+
 static void read_acquiry(void)
 {
     int acquiry_val = digitalRead(ACQUERY_PIN);
@@ -101,13 +148,13 @@ static void read_acquiry(void)
     s_read_valid = true;
 }
 
-#if defined(ARDUINO_ARCH_ESP32)
+#if !defined(WIFI_ENABLED) && defined(ARDUINO_ARCH_ESP32)
 extern "C" void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
 {
     (void)mac;
     (void)status;
 }
-#else
+#elif !defined(WIFI_ENABLED)
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
@@ -115,6 +162,7 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 }
 #endif
 
+#ifndef WIFI_ENABLED
 static void handle_espnow_recv(const uint8_t *mac, const uint8_t *data, int len)
 {
     if (!data || len < 1)
@@ -198,7 +246,9 @@ static bool espnow_send_pair_request(void)
         return false;
     return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
+#endif
 
+#ifndef WIFI_ENABLED
 static bool espnow_send_data(void)
 {
     if (!s_espnow_ready)
@@ -216,6 +266,7 @@ static bool espnow_send_data(void)
     payload_int_t *pl = (payload_int_t *)hdr->payload;
     pl->value = s_acquiry_state;
     pl->ext_value = 0;
+    pl->eventEnabled = 0; // aceita eventos de volta
     IPAddress ip = WiFi.localIP();
     uint8_t *ip_ptr = hdr->payload + sizeof(payload_int_t);
     ip_ptr[0] = ip[0];
@@ -227,6 +278,7 @@ static bool espnow_send_data(void)
         return false;
     return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
 }
+#endif
 
 static void do_deep_sleep(int sleep_s)
 {
@@ -263,7 +315,7 @@ static bool wifi_setup(bool force_config_portal)
         wifiManager.setTimeout(180);
         wifiManager.setConnectRetries(1);
         console.printf("[%s] Connecting to saved WiFi: %s\n", TAG, WiFi.SSID().c_str());
-        if (wifiManager.autoConnect())
+        if (wifiManager.autoConnect(WIFI_CONFIG_PORTAL_SSID, WIFI_CONFIG_PORTAL_PASS))
         {
             console.printf("[%s] WiFi connected! IP: %s\n", TAG, WiFi.localIP().toString().c_str());
             return true;
@@ -334,16 +386,18 @@ void setup(void)
     init_hardware();
 
     bool button_pressed = (digitalRead(CFG_BUTTON_PIN) == LOW);
+#ifndef WIFI_ENABLED
     s_has_gateway = espnow_load_gateway_mac(s_gateway_mac, TAG);
-
-    if (button_pressed || !s_has_gateway)
+#endif
+    bool force_config_portal = button_pressed;
+#ifndef WIFI_ENABLED
+    force_config_portal = true;
+#endif
+    if (!wifi_setup(force_config_portal))
     {
-        if (!wifi_setup(true))
-        {
-            console.printf("[%s] Config portal closed, sleeping\n", TAG);
-            do_deep_sleep(s_interval_s);
-            return;
-        }
+        console.printf("[%s] Config portal closed, sleeping\n", TAG);
+        do_deep_sleep(s_interval_s);
+        return;
     }
 
 #ifdef ESP32
@@ -351,7 +405,8 @@ void setup(void)
 #else
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
 #endif
-    WiFi.begin();
+    if (WiFi.status() != WL_CONNECTED)
+        WiFi.begin();
     unsigned long wifi_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
     while (WiFi.status() != WL_CONNECTED && millis() < wifi_deadline)
     {
@@ -365,6 +420,21 @@ void setup(void)
     }
     console.printf("[%s] WiFi OK, IP: %s\n", TAG, WiFi.localIP().toString().c_str());
 
+#ifdef TCP_ENABLED
+    read_acquiry();
+    uint8_t my_mac[6];
+    WiFi.macAddress(my_mac);
+    s_wifi_radio.set_mac(my_mac);
+    s_wifi_radio.set_device_name(s_device_name);
+    s_wifi_radio.set_device_id(getDeviceId());
+    s_wifi_radio.set_state_interval(STATE_UPDATE_INTERVAL);
+    s_wifi_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
+    s_wifi_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr};
+    s_wifi_radio.begin();
+    s_state = STATE_WAIT_PAIR;
+    s_state_start = millis();
+    console.printf("[%s] WiFi/TCP ready, hub registration pending\n", TAG);
+#else
     s_espnow_ready = espnow_client_init(TAG);
     if (s_espnow_ready)
     {
@@ -379,11 +449,15 @@ void setup(void)
     console.printf("[%s] My MAC: %s, ESP-NOW: %s\n", TAG, WiFi.macAddress().c_str(), mac_str);
     s_state_start = millis();
     s_state = STATE_WAIT_RADIO;
+#endif
 }
 
 void loop(void)
 {
     console.loop();
+#ifdef WIFI_ENABLED
+    s_wifi_radio.loop();
+#endif
     static bool s_first_loop = true;
     if (s_first_loop)
     {
@@ -486,9 +560,13 @@ void loop(void)
                 break;
             case 'p':
                 console.printf("[%s] Re-pairing...\n", TAG);
+#ifdef WIFI_ENABLED
+                s_wifi_radio.force_repair();
+#else
                 s_has_gateway = false;
                 memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
                 s_assigned_slot = 0;
+#endif
                 s_suspend = false;
                 s_state = STATE_INIT;
                 break;
@@ -513,6 +591,12 @@ void loop(void)
         break;
 
     case STATE_INIT:
+#ifdef WIFI_ENABLED
+        s_state_start = now;
+        s_pair_attempts = 1;
+        s_read_attempts = 0;
+        s_state = s_wifi_radio.is_paired() ? STATE_READ_SENSOR : STATE_WAIT_PAIR;
+#else
         console.printf("[%s] Sending pair request\n", TAG);
         espnow_send_pair_request();
         s_pair_attempts = 1;
@@ -522,6 +606,7 @@ void loop(void)
             s_state = STATE_READ_SENSOR;
         else
             s_state = STATE_WAIT_PAIR;
+#endif
         break;
 
     case STATE_READ_SENSOR:
@@ -549,6 +634,26 @@ void loop(void)
         break;
 
     case STATE_WAIT_PAIR:
+#ifdef WIFI_ENABLED
+        if (s_wifi_radio.is_paired())
+        {
+            s_state = STATE_READ_SENSOR;
+        }
+        else if (now - s_state_start > PAIR_RETRY_INTERVAL_MS)
+        {
+            s_pair_attempts++;
+            if (s_pair_attempts >= ESPNOW_MAX_PAIR_ATTEMPTS)
+            {
+                console.printf("[%s] Hub registration failed after %d attempts\n", TAG, s_pair_attempts);
+                s_state = STATE_SLEEP;
+            }
+            else
+            {
+                console.printf("[%s] Waiting for hub registration (%d/%d)\n", TAG, s_pair_attempts, ESPNOW_MAX_PAIR_ATTEMPTS);
+                s_state_start = now;
+            }
+        }
+#else
         if (s_has_gateway)
         {
             s_state = STATE_READ_SENSOR;
@@ -568,9 +673,33 @@ void loop(void)
                 s_state_start = now;
             }
         }
+#endif
         break;
 
     case STATE_SEND_DATA:
+#ifdef WIFI_ENABLED
+        if (!s_read_valid)
+        {
+            console.printf("[%s] Leitura invalida, pulando envio\n", TAG);
+            s_data_retries = 0;
+            s_state = STATE_SLEEP;
+            break;
+        }
+        digitalWrite(LED_PIN, LOW);
+        {
+            JsonDocument doc;
+            doc["device_id"] = getDeviceId();
+            doc["state"] = s_acquiry_state != 0;
+            doc["battery_pct"] = s_battery;
+            doc["fw_version"] = FW_VERSION;
+            doc["ip"] = WiFi.localIP().toString();
+            doc["free_heap"] = ESP.getFreeHeap();
+            String payload;
+            serializeJson(doc, payload);
+            s_ack_received = s_wifi_radio.send_to_hub("/node/state", payload);
+        }
+        digitalWrite(LED_PIN, HIGH);
+#else
         delay(200);
         espnow_send_pair_request();
         delay(100);
@@ -586,6 +715,7 @@ void loop(void)
         espnow_send_data();
         delay(LED_BLINK_SEND_MS);
         digitalWrite(LED_PIN, HIGH);
+#endif
         s_data_retries = 0;
         s_state_start = now;
         s_state = STATE_WAIT_ACK;
@@ -616,8 +746,23 @@ void loop(void)
                     s_state = STATE_SLEEP;
                     break;
                 }
+#ifdef WIFI_ENABLED
+                {
+                    JsonDocument doc;
+                    doc["device_id"] = getDeviceId();
+                    doc["state"] = s_acquiry_state != 0;
+                    doc["battery_pct"] = s_battery;
+                    doc["fw_version"] = FW_VERSION;
+                    doc["ip"] = WiFi.localIP().toString();
+                    doc["free_heap"] = ESP.getFreeHeap();
+                    String payload;
+                    serializeJson(doc, payload);
+                    s_ack_received = s_wifi_radio.send_to_hub("/node/state", payload);
+                }
+#else
                 s_ack_received = false;
                 espnow_send_data();
+#endif
                 s_state_start = now;
             }
         }

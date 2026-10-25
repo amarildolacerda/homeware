@@ -65,6 +65,8 @@ Exemplo de intenção lógica:
 
 ## WiFi e configuração
 - O nó usa WiFiManager para conectar e para portal de configuração quando necessário
+- A cada inicialização, tentar a conexão com as credenciais WiFi salvas; se não houver credenciais ou a conexão falhar, abrir o portal de configuração
+- O botão físico força o portal; não pular o WiFiManager na inicialização normal
 - O portal deve permitir alterar nome do dispositivo e o intervalo de sleep
 - O botão físico de configuração deve forçar o portal se pressionado ou se não houver gateway pareado
 - A conexão WiFi deve ser tratada como etapa de setup, não como rotina permanente de operação
