@@ -410,6 +410,10 @@ void web_server_init() {
                         state["free_heap"] = s->state.repeater.free_heap;
                         state["ack_failures"] = s->state.repeater.ack_failures;
                         break;
+                    default:
+                        state["value"] = s->state.generic.value;
+                        state["ext_value"] = s->state.generic.ext_value;
+                        break;
                 }
             }
         }

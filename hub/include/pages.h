@@ -1942,7 +1942,7 @@ R"rawliteral(
 <div class="params">
 <table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
 <tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
-<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor 1-10 (obrigatorio)</td></tr>
+<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor (0 = generico; tipos nao reconhecidos tambem usam payload_int_t)</td></tr>
 <tr><td><code>device_name</code></td><td>string</td><td>Nome do device (obrigatorio)</td></tr>
 <tr><td><code>fw_version</code></td><td>string</td><td>Versao do firmware (opcional)</td></tr></table>
 </div>

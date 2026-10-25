@@ -34,7 +34,7 @@ int TcpRadioHandler::init() {
         const char* device_id = doc["device_id"];
         const char* device_name = doc["device_name"];
         const char* fw_version = doc["fw_version"];
-        uint8_t sensor_type = doc["sensor_type"];
+        int sensor_type = doc["sensor_type"] | -1;
 
         if (!device_id || !device_name) {
             request->send(400, "application/json", "{\"error\":\"missing fields\"}");
@@ -48,7 +48,7 @@ int TcpRadioHandler::init() {
             }
         }
 
-        if (sensor_type < 1 || sensor_type > 10) {
+        if (sensor_type < 0 || sensor_type > 255) {
             request->send(400, "application/json", "{\"error\":\"invalid sensor_type\"}");
             return;
         }
@@ -91,7 +91,7 @@ int TcpRadioHandler::init() {
 
         uint8_t client_chip = doc["client_chip"] | HW_CHIP_UNKNOWN;
 
-        handle_register(mac, device_id, sensor_type, device_name, fw_version, client_chip);
+        handle_register(mac, device_id, (uint8_t)sensor_type, device_name, fw_version, client_chip);
 
         int slot = find_slot_by_device_id(device_id);
 
@@ -425,6 +425,8 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             break;
         }
         default:
+            if (state["value"].is<uint16_t>()) sensor->state.generic.value = state["value"];
+            if (state["ext_value"].is<uint8_t>()) sensor->state.generic.ext_value = state["ext_value"];
             break;
     }
 

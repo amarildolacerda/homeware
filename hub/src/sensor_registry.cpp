@@ -264,6 +264,11 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             s->state.soil_moisture.moisture_pct = pl->moisture_pct;
             break;
         }
+        default: {
+            if (payload_len < sizeof(payload_int_t)) { sensor_registry_unlock(); return false; }
+            memcpy(&s->state.generic, payload, sizeof(payload_int_t));
+            break;
+        }
     }
 
     size_t expected = 0;
@@ -279,6 +284,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_LIGHT:    expected = sizeof(payload_onoff_t); break;
         case SENSOR_TYPE_REPEATER: expected = sizeof(payload_repeater_status_t); break;
         case SENSOR_TYPE_SOIL_MOISTURE: expected = sizeof(payload_soil_moisture_t); break;
+        default: expected = sizeof(payload_int_t); break;
     }
     if (expected && payload_len >= expected + 6) {
         memcpy(s->ip, payload + payload_len - 6, 4);
@@ -405,6 +411,7 @@ const char* sensor_type_friendly_name(uint8_t type) {
 
 const char* sensor_type_to_string(uint8_t type) {
     switch (type) {
+        case SENSOR_TYPE_DEFAULT: return "generic";
         case SENSOR_TYPE_TEMP_HUM: return "temperature";
         case SENSOR_TYPE_CONTACT: return "contact";
         case SENSOR_TYPE_MOTION: return "occupancy";
@@ -416,6 +423,6 @@ const char* sensor_type_to_string(uint8_t type) {
         case SENSOR_TYPE_LEVEL: return "tanque";
         case SENSOR_TYPE_REPEATER: return "repeater";
         case SENSOR_TYPE_SOIL_MOISTURE: return "soil_moisture";
-        default: return "unknown";
+        default: return "generic";
     }
 }
