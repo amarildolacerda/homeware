@@ -30,6 +30,16 @@ static unsigned long s_wifi_config_start = 0;
 static bool s_wifi_reconnect_active = false;
 static unsigned long s_wifi_reconnect_deadline = 0;
 
+// Restart agendado: handlers async NÃO devem chamar delay()/ESP.restart()
+// diretamente (corre com o flush da resposta HTTP e o browser reporta erro
+// no fim de um upload bem-sucedido). O flag é consumido em web_server_loop().
+static unsigned long s_restart_at = 0;
+
+void web_server_request_restart(unsigned long delay_ms) {
+    s_restart_at = millis() + (delay_ms ? delay_ms : 1);
+    console.printf("[WEB] Restart agendado em %lums\n", delay_ms);
+}
+
 // WiFi credentials are not persisted by the ESP32 WiFi driver NVS in this
 // environment (esp_wifi_set_config returns OK but is lost on reboot), so we
 // store them in our own EEPROM NVS namespace instead.
@@ -282,6 +292,9 @@ void web_server_init() {
         doc["platform"] = "esp8266";
 #endif
         doc["free_heap"] = ESP.getFreeHeap();
+        doc["free_sketch"] = ESP.getFreeSketchSpace();
+        doc["sketch_size"] = ESP.getSketchSize();
+        doc["ota_port"] = 3232;
         doc["max_sensors"] = MAX_VIRTUAL_SENSORS;
 #ifdef TELEGRAM_ENABLED
         doc["telegram_enabled"] = true;
@@ -397,6 +410,10 @@ void web_server_init() {
                     case SENSOR_TYPE_LIGHT:
                         state["state"] = s->state.onoff.state;
                         break;
+                    case SENSOR_TYPE_ACQUIRY:
+                        state["state"] = s->state.onoff.state;
+                        if (s->state.generic.label[0]) state["label"] = s->state.generic.label;
+                        break;
                     case SENSOR_TYPE_SOIL_MOISTURE:
                         state["moisture_pct"] = s->state.soil_moisture.moisture_pct;
                         state["raw_adc"] = s->state.soil_moisture.raw_adc;
@@ -411,8 +428,10 @@ void web_server_init() {
                         state["ack_failures"] = s->state.repeater.ack_failures;
                         break;
                     default:
+                        // fallback genérico: tipos novos nunca são descartados
                         state["value"] = s->state.generic.value;
-                        state["ext_value"] = s->state.generic.ext_value;
+                        if (s->state.generic.value <= 1) state["state"] = s->state.generic.value;
+                        if (s->state.generic.label[0]) state["label"] = s->state.generic.label;
                         break;
                 }
             }
@@ -765,33 +784,48 @@ void web_server_init() {
 
     s_server.on("/update", HTTP_POST,
         [](AsyncWebServerRequest *request) {
-            bool error = Update.hasError();
-            if (error) {
-                Update.printError(console);
-                request->send(500, "application/json", "{\"status\":\"error\"}");
+            if (Update.hasError()) {
+                const char *err = Update.errorString();
+                console.printf("[OTA] Falha: %s\n", err);
+                log_add("error", "OTA falhou: %s", err ? err : "?");
+                // Resposta com Connection: close + restart agendado (sem
+                // delay/ESP.restart dentro do handler async).
+                String body = String("{\"status\":\"error\",\"error\":\"") + (err ? err : "?") + "\"}";
+                AsyncWebServerResponse *r = request->beginResponse(500, "application/json", body);
+                r->addHeader("Connection", "close");
+                request->send(r);
             } else {
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-                delay(500);
-                ESP.restart();
+                log_add("info", "OTA concluído com sucesso, reiniciando...");
+                AsyncWebServerResponse *r = request->beginResponse(200, "application/json", "{\"status\":\"ok\"}");
+                r->addHeader("Connection", "close");
+                request->send(r);
+                web_server_request_restart(1500);
             }
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
             if (!index) {
-                console.printf("[OTA] Update started: %s (%d bytes)\n", filename.c_str(), request->contentLength());
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-                    Update.printError(console);
-                    console.printf("[OTA] Begin failed (no OTA partition space?)\n");
+                size_t content_len = request->contentLength();
+                console.printf("[OTA] Update started: %s (%u bytes, free_sketch=%u)\n",
+                               filename.c_str(), (unsigned)content_len,
+                               (unsigned)ESP.getFreeSketchSpace());
+                log_add("info", "OTA upload: %s (%u bytes, free_sketch=%u)",
+                        filename.c_str(), (unsigned)content_len,
+                        (unsigned)ESP.getFreeSketchSpace());
+                if (!Update.begin(content_len ? content_len : UPDATE_SIZE_UNKNOWN)) {
+                    console.printf("[OTA] Begin failed: %s\n", Update.errorString());
+                    log_add("error", "OTA begin falhou: %s", Update.errorString());
                 }
             }
             if (!Update.hasError()) {
                 if (Update.write(data, len) != len) {
-                    console.printf("[OTA] Write failed at %d\n", index + len);
-                    Update.printError(console);
+                    console.printf("[OTA] Write failed at %u: %s\n", (unsigned)(index + len), Update.errorString());
+                    log_add("error", "OTA write falhou em %u: %s", (unsigned)(index + len), Update.errorString());
                 }
             }
             if (final) {
-                if (!Update.end()) {
-                    Update.printError(console);
+                if (!Update.end(true)) {
+                    console.printf("[OTA] End failed: %s\n", Update.errorString());
+                    log_add("error", "OTA end falhou: %s", Update.errorString());
                 }
             }
         }
@@ -903,6 +937,10 @@ void web_server_init() {
 
 void web_server_loop() {
     // No handleClient() needed — async server handles requests automatically
+    if (s_restart_at && millis() >= s_restart_at) {
+        console.println("[WEB] Restart executando (agendado)");
+        ESP.restart();
+    }
     if (s_wifi_config_mode) captive_dns_poll();
 
     if (s_wifi_config_mode && millis() - s_wifi_config_start > 300000) {

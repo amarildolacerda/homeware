@@ -64,6 +64,8 @@ Os mesmos tipos do protocolo ESP-NOW (`sensor_type_t`), reusando as mesmas `payl
 | 9 | `SENSOR_TYPE_LIGHT` | `payload_onoff_t { uint8_t state; }` |
 | 10 | `SENSOR_TYPE_REPEATER` | `payload_repeater_status_t { uint16_t received; uint16_t forwarded; uint8_t client_count; uint8_t channel; int16_t rssi; uint32_t uptime_s; uint16_t free_heap; uint8_t ack_failures; }` |
 | 11 | `SENSOR_TYPE_DHT_RELE` | (reservado) |
+| 12 | `SENSOR_TYPE_SOIL_MOISTURE` | `payload_soil_moisture_t { uint16_t raw_adc; uint8_t moisture_pct; }` |
+| 13 | `SENSOR_TYPE_ACQUIRY` | `payload_int_t { uint16_t value; uint8_t accepts_command; char label[12]; }` — value: 0/1 = on/off, >1 = leitura (0-1024); accepts_command=0 (somente leitura); label=estado p/ card (ex: "aberto"), '\0'-terminado |
 
 ## 5. Pareamento (Pairing)
 

@@ -55,7 +55,7 @@ Body:
 | device_id | string | ✅ | ID único do node |
 | device_name | string | ✅ | Nome legível (max 32 bytes) |
 | fw_version | string | ✅ | Versão do firmware |
-| sensor_type | int | ✅ | Tipo do sensor (1–11) |
+| sensor_type | int | ✅ | Tipo do sensor (1–13) |
 | mac | string | Opcional | MAC WiFi do node; se ausente, pseudo-MAC derivada do IP |
 | client_chip | int | Opcional | 0=ESP8266, 1=ESP32, 0xFF=desconhecido |
 
@@ -99,6 +99,14 @@ Node publica estado periodicamente (a cada `m_state_interval_ms`) e logo após r
 | humidity | float | Para SENSOR_TYPE_TEMP_HUM |
 | gas_level | int | Para SENSOR_TYPE_GAS |
 | alarm | int | Para SENSOR_TYPE_GAS |
+| value | int | Para tipos genéricos/ACQUIRY (0/1 = on/off; >1 = leitura) |
+| label | string | Label dinâmico de estado (opc., ≤11 chars, ex: "aberto") |
+
+### Tipos de sensor
+
+| Valor | Nome | Payload/Estado | Observação |
+|-------|------|----------------|------------|
+| 13 | `SENSOR_TYPE_ACQUIRY` | `state` (bool/uint8, 0/1) + `value` (opc., 0/1 = on/off; >1 = leitura) + `label` (opc., string ≤11 chars) | Aquisição binária somente leitura — sem comando/relé |
 
 ## 5. Heartbeat (Node → Hub)
 

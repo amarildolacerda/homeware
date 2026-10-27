@@ -140,6 +140,8 @@ typedef struct __attribute__((packed)) {
 | 9 | `SENSOR_TYPE_LIGHT` | `payload_onoff_t` | state |
 | 10 | `SENSOR_TYPE_REPEATER` | `payload_repeater_status_t` | received, forwarded, client_count, channel, uptime_s, free_heap, ack_failures |
 | 11 | `SENSOR_TYPE_DHT_RELE` | (reservado) | temperature, humidity, state |
+| 12 | `SENSOR_TYPE_SOIL_MOISTURE` | `payload_soil_moisture_t` | moisture_pct, raw_adc |
+| 13 | `SENSOR_TYPE_ACQUIRY` | `payload_int_t` (value: 0/1 = on/off, >1 = leitura; accepts_command=0; label[12] '\0'-terminado) + 4 bytes IP | state (0/1, somente leitura) + label dinâmico |
 
 ### Payloads (structs packed)
 

@@ -12,21 +12,21 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_lora_heltec/firmware.elf",
-            "projectEnvName": "hub_32_lora_heltec",
+            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "projectEnvName": "hub_32_ota",
             "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "preLaunchTask": {
                 "type": "PlatformIO",
-                "task": "Pre-Debug"
+                "task": "Pre-Debug (hub_32_ota)"
             }
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_lora_heltec/firmware.elf",
-            "projectEnvName": "hub_32_lora_heltec",
+            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "projectEnvName": "hub_32_ota",
             "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart"
         },
@@ -34,8 +34,8 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_lora_heltec/firmware.elf",
-            "projectEnvName": "hub_32_lora_heltec",
+            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "projectEnvName": "hub_32_ota",
             "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "loadMode": "manual"

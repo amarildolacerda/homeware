@@ -439,16 +439,22 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_ACQUIRY: {
+            // Somente leitura: binary_sensor sem command_topic e sem optimistic.
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "acq");
+            publish_entity_config("binary_sensor", entity, name, "Aquisição", "", "", true, id, model);
+            publish_entity_state("binary_sensor", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
         case SENSOR_TYPE_REPEATER:
             break;
         default: {
+            // fallback genérico: tipos novos nunca são descartados
+            // value: 0/1 = on/off; >1 = leitura do sensor (ext_value removido do protocolo)
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "value");
             publish_entity_config("sensor", entity, name, "Valor", "", "", false, id, model);
             publish_entity_state("sensor", entity, String(sensor->state.generic.value).c_str());
-
-            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "ext");
-            publish_entity_config("sensor", entity, name, "Valor adicional", "", "", false, id, model);
-            publish_entity_state("sensor", entity, String(sensor->state.generic.ext_value).c_str());
             break;
         }
     }
@@ -556,16 +562,19 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
                                  sensor->state.onoff.state ? "ON" : "OFF");
             break;
         }
+        case SENSOR_TYPE_ACQUIRY: {
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "acq");
+            publish_entity_state("binary_sensor", entity,
+                                 sensor->state.onoff.state ? "ON" : "OFF");
+            break;
+        }
         case SENSOR_TYPE_REPEATER:
             break;
         default: {
+            // fallback genérico: tipos novos nunca são descartados
             char val[8];
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "value");
             snprintf(val, sizeof(val), "%u", sensor->state.generic.value);
-            publish_entity_state("sensor", entity, val);
-
-            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "ext");
-            snprintf(val, sizeof(val), "%u", sensor->state.generic.ext_value);
             publish_entity_state("sensor", entity, val);
             break;
         }
@@ -674,15 +683,17 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
             snprintf(topic, sizeof(topic), "%s/light/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
             break;
+        case SENSOR_TYPE_ACQUIRY:
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "acq");
+            snprintf(topic, sizeof(topic), "%s/binary_sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(topic, payload, true); count++;
+            break;
         case SENSOR_TYPE_REPEATER:
             // Repeaters don't expose HA entities; skip
             return false;
         default:
+            // fallback genérico: tipos novos nunca são descartados
             build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "value");
-            snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
-            s_mqtt.publish(topic, payload, true); count++;
-
-            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "ext");
             snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
             s_mqtt.publish(topic, payload, true); count++;
             break;

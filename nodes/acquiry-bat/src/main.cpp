@@ -16,8 +16,7 @@
 #endif
 
 #if defined(WIFI_ENABLED) && defined(ESPNOW_ENABLED)
-//#error "Choose either WIFI_ENABLED or ESPNOW_ENABLED"
-  #undef ESPNOW_ENABLED
+#error "Escolha entre WIFI_ENABLED (TCP) e ESPNOW_ENABLED (mutuamente exclusivos)"
 #endif
 
 #if defined(ARDUINO_ARCH_ESP32)
@@ -26,7 +25,7 @@
 
 /*
 power: battery
-O objetivo é fazer acquisição do sinal no pino ACQUERY_PIN (GPIO4) e enviar via ESP-NOW para o gateway. O estado do sensor é 1 quando o pino está HIGH, e 0 quando está LOW. O estado é mantido por PIR_HOLD_TIME_MS (30s) após o pino voltar a LOW.
+O objetivo é fazer acquisição do sinal no pino ACQUERY_PIN (GPIO4) e enviar via ESP-NOW para o gateway. O estado do sensor é 1 quando o pino está HIGH, e 0 quando está LOW. O estado é mantido por ACQUIRY_HOLD_TIME_MS (30s) após o pino voltar a LOW.
 Funciona somente indicando se esta ligado ou desligado, não é um sensor de presença completo. O dispositivo envia o estado do sensor e a duração da ocupação (em segundos) para o gateway. O gateway pode então processar os dados e enviar para o servidor.
 O dispositivo entra em deep sleep por s_interval_s segundos (default 60s) após enviar
 */
@@ -48,7 +47,7 @@ static State s_state = STATE_INIT;
 static unsigned long s_state_start = 0;
 
 static bool s_espnow_ready = false;
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
 static NodeRadioType s_wifi_radio;
 #endif
 static char s_device_name[32] = DEVICE_NAME;
@@ -91,7 +90,7 @@ static int s_interval_s = DEEP_SLEEP_INTERVAL_DEFAULT;
 #define MAX_DATA_RETRIES 2
 #define MAX_READ_RETRIES 3
 
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
 static uint8_t get_sensor_type(void)
 {
     return SENSOR_TYPE_ACQUIRY;
@@ -99,12 +98,15 @@ static uint8_t get_sensor_type(void)
 
 static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
 {
-    if (max_len < sizeof(payload_onoff_t))
+    if (max_len < sizeof(payload_int_t))
         return 0;
-    payload_onoff_t payload = {};
-    payload.state = s_acquiry_state;
-    memcpy(buf, &payload, sizeof(payload));
-    return sizeof(payload);
+    payload_int_t pl = {};
+    pl.value = s_acquiry_state;
+    pl.accepts_command = 0; // somente leitura: não aceita comando on/off do hub
+    strncpy(pl.label, s_acquiry_state ? ACQ_LABEL_ON : ACQ_LABEL_OFF, sizeof(pl.label) - 1);
+    pl.label[sizeof(pl.label) - 1] = '\0';
+    memcpy(buf, &pl, sizeof(pl));
+    return sizeof(pl);
 }
 
 static void on_command(uint8_t command)
@@ -125,10 +127,40 @@ static void on_restart(void)
 }
 #endif
 
+/* Bateria via ADC. Desabilitada por padrão (BATTERY_ADC_PIN < 0 em config.h)
+   enquanto o divisor de tensão da placa final não é definido — nesse caso
+   reporta 100% sem simulação/drift. */
+static int read_battery(void)
+{
+#if defined(BATTERY_ADC_PIN) && (BATTERY_ADC_PIN >= 0)
+    int raw = analogRead(BATTERY_ADC_PIN);
+    if (raw < BATTERY_ADC_MIN)
+        raw = BATTERY_ADC_MIN;
+    if (raw > BATTERY_ADC_MAX)
+        raw = BATTERY_ADC_MAX;
+    // ADC -> tensão no pino (0..3.3V) -> tensão da bateria via divisor
+    float v_pin = (float)(raw - BATTERY_ADC_MIN) * 3.3f / (float)(BATTERY_ADC_MAX - BATTERY_ADC_MIN);
+    float v_bat = v_pin * (float)BATTERY_DIVIDER_RATIO;
+    // faixa útil da Li-ion: 3.3V (0%) .. 4.2V (100%), clamp 0..100
+    float pct = (v_bat - 3.3f) * 100.0f / (4.2f - 3.3f);
+    if (pct < 0.0f)
+        pct = 0.0f;
+    if (pct > 100.0f)
+        pct = 100.0f;
+    return (int)(pct + 0.5f);
+#else
+    return 100; // ADC não habilitado (BATTERY_ADC_PIN < 0)
+#endif
+}
+
 static void read_acquiry(void)
 {
+    // Semântica nível+hold (ver cabeçalho): HIGH → estado 1; LOW → mantém 1 por
+    // ACQUIRY_HOLD_TIME_MS e volta a 0. A versão anterior usava borda com
+    // `static old = !val` — após deep sleep os statics zeram e o primeiro call
+    // sempre detectava "borda" falsa (pino em GND lia 1).
     int acquiry_val = digitalRead(ACQUERY_PIN);
-    if (acquiry_val == HIGH && !s_acquiry_state)
+    if (acquiry_val)
     {
         s_acquiry_state = 1;
         s_acquiry_start_time = millis();
@@ -137,24 +169,18 @@ static void read_acquiry(void)
     {
         s_acquiry_state = 0;
     }
-    static int counter = 0;
-    counter++;
-    if (counter > 100)
-    {
-        counter = 0;
-        s_battery = max(0, s_battery - 1);
-    }
+    s_battery = read_battery();
     console.printf("Sensor: acquiry=%d bat=%d%%\n", s_acquiry_state, s_battery);
     s_read_valid = true;
 }
 
-#if !defined(WIFI_ENABLED) && defined(ARDUINO_ARCH_ESP32)
+#if !defined(TCP_ENABLED) && defined(ARDUINO_ARCH_ESP32)
 extern "C" void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
 {
     (void)mac;
     (void)status;
 }
-#elif !defined(WIFI_ENABLED)
+#elif !defined(TCP_ENABLED)
 extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 {
     (void)mac;
@@ -162,7 +188,7 @@ extern "C" void espnow_send_cb(uint8_t *mac, uint8_t status)
 }
 #endif
 
-#ifndef WIFI_ENABLED
+#ifndef TCP_ENABLED
 static void handle_espnow_recv(const uint8_t *mac, const uint8_t *data, int len)
 {
     if (!data || len < 1)
@@ -224,6 +250,20 @@ extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len)
 }
 #endif
 
+/* Converte FW_VERSION ("v1.2.28") nos 4 bytes de firmware_version
+   (bytes = 1, 2, 28, 0). Fallback para a constante legada se o parse falhar. */
+static uint32_t parse_firmware_version(void)
+{
+    int major = 0, minor = 0, patch = 0;
+    if (sscanf(FW_VERSION, "v%d.%d.%d", &major, &minor, &patch) == 3 &&
+        major >= 0 && minor >= 0 && patch >= 0 &&
+        major <= 255 && minor <= 255 && patch <= 255)
+    {
+        return ((uint32_t)major << 24) | ((uint32_t)minor << 16) | ((uint32_t)patch << 8);
+    }
+    return 0x000A000B;
+}
+
 static bool espnow_send_pair_request(void)
 {
     if (!s_espnow_ready)
@@ -235,7 +275,7 @@ static bool espnow_send_pair_request(void)
     req->sequence = s_sequence++;
     WiFi.macAddress(req->sensor_mac);
     req->sensor_type = SENSOR_TYPE_ACQUIRY;
-    uint32_t ver = 0x000A000B;
+    uint32_t ver = parse_firmware_version();
     req->firmware_version[0] = (uint8_t)(ver >> 24);
     req->firmware_version[1] = (uint8_t)(ver >> 16);
     req->firmware_version[2] = (uint8_t)(ver >> 8);
@@ -248,7 +288,7 @@ static bool espnow_send_pair_request(void)
 }
 #endif
 
-#ifndef WIFI_ENABLED
+#ifndef TCP_ENABLED
 static bool espnow_send_data(void)
 {
     if (!s_espnow_ready)
@@ -262,11 +302,13 @@ static bool espnow_send_data(void)
     WiFi.macAddress(hdr->sensor_mac);
     hdr->sensor_type = SENSOR_TYPE_ACQUIRY;
     hdr->battery_pct = (uint8_t)s_battery;
-    hdr->rssi = (int16_t)WiFi.RSSI();
+    // Core retorna 31 (fail) quando não conectado → enviar 0 explícito (lib-1)
+    hdr->rssi = (WiFi.status() == WL_CONNECTED) ? (int16_t)WiFi.RSSI() : 0;
     payload_int_t *pl = (payload_int_t *)hdr->payload;
     pl->value = s_acquiry_state;
-    pl->ext_value = 0;
-    pl->eventEnabled = 0; // aceita eventos de volta
+    pl->accepts_command = 0; // somente leitura: não aceita comando on/off do hub
+    strncpy(pl->label, s_acquiry_state ? ACQ_LABEL_ON : ACQ_LABEL_OFF, sizeof(pl->label) - 1);
+    pl->label[sizeof(pl->label) - 1] = '\0';
     IPAddress ip = WiFi.localIP();
     uint8_t *ip_ptr = hdr->payload + sizeof(payload_int_t);
     ip_ptr[0] = ip[0];
@@ -302,16 +344,18 @@ static void init_hardware(void)
 {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
-    pinMode(ACQUERY_PIN, INPUT);
+    pinMode(ACQUERY_PIN, INPUT_PULLUP);
     pinMode(CFG_BUTTON_PIN, INPUT_PULLUP);
 }
 
 static bool wifi_setup(bool force_config_portal)
 {
     WiFiManager wifiManager;
-    wifiManager.setConnectTimeout(20);
+    wifiManager.setConnectTimeout(20); // conexão limitada a 20s (STA e portal)
     if (!force_config_portal && WiFi.SSID() != "")
     {
+        // Caminho normal: credenciais salvas. O portal só é aberto se esta
+        // tentativa falhar (ou se não houver credenciais salvas / tecla).
         wifiManager.setTimeout(180);
         wifiManager.setConnectRetries(1);
         console.printf("[%s] Connecting to saved WiFi: %s\n", TAG, WiFi.SSID().c_str());
@@ -321,6 +365,11 @@ static bool wifi_setup(bool force_config_portal)
             return true;
         }
         console.printf("[%s] Failed to connect to saved WiFi\n", TAG);
+    }
+    else
+    {
+        console.printf("[%s] %s\n", TAG,
+                       force_config_portal ? "Portal forcado pela tecla" : "Sem credenciais salvas");
     }
     console.printf("[%s] Starting config portal (%ds)...\n", TAG, WIFI_CONFIG_PORTAL_TIMEOUT_S);
     s_config_mode = true;
@@ -386,25 +435,38 @@ void setup(void)
     init_hardware();
 
     bool button_pressed = (digitalRead(CFG_BUTTON_PIN) == LOW);
-#ifndef WIFI_ENABLED
+#ifndef TCP_ENABLED
     s_has_gateway = espnow_load_gateway_mac(s_gateway_mac, TAG);
 #endif
     bool force_config_portal = button_pressed;
-#ifndef WIFI_ENABLED
-    force_config_portal = true;
-#endif
+#ifdef WIFI_ENABLED
     if (!wifi_setup(force_config_portal))
     {
         console.printf("[%s] Config portal closed, sleeping\n", TAG);
         do_deep_sleep(s_interval_s);
         return;
     }
+#else
+    // ESP-NOW puro: não conecta ao AP (sem IP). Portal WiFiManager só pela
+    // tecla, para configurar device_name/intervalo sem depender do STA.
+    if (force_config_portal)
+    {
+        if (!wifi_setup(true))
+        {
+            console.printf("[%s] Config portal closed, sleeping\n", TAG);
+            do_deep_sleep(s_interval_s);
+            return;
+        }
+    }
+#endif
 
 #ifdef ESP32
     WiFi.setSleep(false);
 #else
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
 #endif
+
+#ifdef WIFI_ENABLED
     if (WiFi.status() != WL_CONNECTED)
         WiFi.begin();
     unsigned long wifi_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
@@ -419,6 +481,41 @@ void setup(void)
         return;
     }
     console.printf("[%s] WiFi OK, IP: %s\n", TAG, WiFi.localIP().toString().c_str());
+#else
+    // ESP-NOW puro: conectar ao AP SÓ para herdar o canal (regra 25). Sem
+    // portal e sem exigir IP — se falhar, segue no canal atual (sem dormir).
+    // Pesquisa lib-1 (core 3.1.2): STA com creds salvas reconecta sozinho e
+    // pula de canal (quebra ESP-NOW de canal fixo) → autoReconnect off;
+    // WiFi.disconnect() apaga as creds → usar disconnect(false, false).
+    WiFi.setAutoReconnect(false);
+    if (WiFi.SSID() != "")
+    {
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            WiFi.begin(); // creds salvas: associa e herda o canal do AP
+            unsigned long ch_deadline = millis() + WIFI_INHERIT_TIMEOUT_MS;
+            while (WiFi.status() != WL_CONNECTED && millis() < ch_deadline)
+            {
+                delay(50);
+            }
+        }
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            console.printf("[%s] Channel inherited from AP: %d, IP: %s\n",
+                           TAG, WiFi.channel(), WiFi.localIP().toString().c_str());
+        }
+        else
+        {
+            // Para retries/scans que pulariam de canal; mantém as creds salvas.
+            WiFi.disconnect(false, false);
+            console.printf("[%s] AP join timeout, keeping channel %d\n", TAG, WiFi.channel());
+        }
+    }
+    else
+    {
+        console.printf("[%s] No saved WiFi, ESP-NOW on channel %d\n", TAG, WiFi.channel());
+    }
+#endif
 
 #ifdef TCP_ENABLED
     read_acquiry();
@@ -455,7 +552,7 @@ void setup(void)
 void loop(void)
 {
     console.loop();
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
     s_wifi_radio.loop();
 #endif
     static bool s_first_loop = true;
@@ -464,10 +561,7 @@ void loop(void)
         console.printf("[%s] Aguardando tecla: %s\n", TAG, "h for help");
         s_first_loop = false;
     }
-    if (s_state != STATE_WAIT_ACK)
-    {
-        delay(1000);
-    }
+    delay(50); // tick curto: todas as transições são por millis() (STATE_WAIT_ACK não pode busy-spin)
     if ((Serial.available() > 0 || console.telnet_available() > 0 || console.telnet_connected()) && !s_suspend)
     {
         delay(1);
@@ -560,7 +654,7 @@ void loop(void)
                 break;
             case 'p':
                 console.printf("[%s] Re-pairing...\n", TAG);
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
                 s_wifi_radio.force_repair();
 #else
                 s_has_gateway = false;
@@ -591,7 +685,7 @@ void loop(void)
         break;
 
     case STATE_INIT:
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
         s_state_start = now;
         s_pair_attempts = 1;
         s_read_attempts = 0;
@@ -634,7 +728,7 @@ void loop(void)
         break;
 
     case STATE_WAIT_PAIR:
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
         if (s_wifi_radio.is_paired())
         {
             s_state = STATE_READ_SENSOR;
@@ -677,7 +771,7 @@ void loop(void)
         break;
 
     case STATE_SEND_DATA:
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
         if (!s_read_valid)
         {
             console.printf("[%s] Leitura invalida, pulando envio\n", TAG);
@@ -746,7 +840,7 @@ void loop(void)
                     s_state = STATE_SLEEP;
                     break;
                 }
-#ifdef WIFI_ENABLED
+#ifdef TCP_ENABLED
                 {
                     JsonDocument doc;
                     doc["device_id"] = getDeviceId();
