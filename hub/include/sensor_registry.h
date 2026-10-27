@@ -40,6 +40,7 @@ typedef struct {
         } soil_moisture;
         struct { uint16_t level_pct; uint16_t distance_cm; } tank;
         struct { uint8_t state; } onoff;
+        payload_int_t generic;
         struct {
             uint16_t received;
             uint16_t forwarded;

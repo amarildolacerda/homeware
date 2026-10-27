@@ -593,12 +593,12 @@ var s_sensorCount = 0;
 var s_info = {};
 
 function typeName(type) {
-  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',12:'Solo'};
+  var names = {1:'Temp+Hum',2:'Contato',3:'Movimento',4:'Gas',5:'Chuva',6:'Tanque',7:'DHT+Gas',8:'Interruptor',9:'Lâmpada',12:'Solo',13:'Aquisição'};
   return names[type] || 'Desconhecido';
 }
 
 function typeIcon(type) {
-  var icons = {1:'&#x1F321;',2:'&#x1F514;',3:'&#x1F3C3;',4:'&#x1F4A8;',5:'&#x2614;',6:'&#x1F4A7;',7:'&#x1F321;+&#x1F4A8;',8:'&#x1F50C;',9:'&#x1F4A1;',12:'&#x1F331;'};
+  var icons = {1:'&#x1F321;',2:'&#x1F514;',3:'&#x1F3C3;',4:'&#x1F4A8;',5:'&#x2614;',6:'&#x1F4A7;',7:'&#x1F321;+&#x1F4A8;',8:'&#x1F50C;',9:'&#x1F4A1;',12:'&#x1F331;',13:'&#x1F4E1;'};
   return icons[type] || '&#x2753;';
 }
 
@@ -649,6 +649,11 @@ function renderState(s) {
     } else {
       html += '<span style="color:var(--muted-subtle);font-size:0.7rem">Aguardando dados...</span>';
     }
+  } else if (s.type === 13) {
+    html += '<span class="state-item state-contact">'+escHtml((st.label||'') ? st.label : (st.state ? 'ATIVA' : 'INATIVA'))+'</span>';
+  } else if (st.value !== undefined) {
+    // fallback genérico: tipos novos nunca são descartados
+    html += '<span class="state-item">'+escHtml((st.label||'') ? st.label : String(st.value))+'</span>';
   }
   return html || '<span class="state-item" style="color:var(--muted-subtle)">Aguardando dados...</span>';
 }
@@ -874,12 +879,18 @@ function showPropsModal(slot) {
   else if (s.type === 6) stateHtml = '<div class="row"><span class="label">Nível</span><span class="value">'+(st.level_pct||0)+'%</span></div><div class="row"><span class="label">Distância</span><span class="value">'+(st.distance_cm||0)+' cm</span></div>';
   else if (s.type === 7) stateHtml = '<div class="row"><span class="label">Temperatura</span><span class="value">'+(st.temperature||0).toFixed(1)+'&deg;C</span></div><div class="row"><span class="label">Umidade</span><span class="value">'+(st.humidity||0).toFixed(0)+'%</span></div><div class="row"><span class="label">Gás</span><span class="value">'+(st.gas_level||0)+'%</span></div>'+(st.alarm?'<div class="row"><span class="label">Alarme</span><span class="value" style="color:var(--danger)">ATIVO</span></div>':'');
   else if (s.type === 8 || s.type === 9) stateHtml = '<div class="row"><span class="label">Estado</span><span class="value">'+(st.state?'Ligado':'Desligado')+'</span></div>';
+  else if (s.type === 13) stateHtml = '<div class="row"><span class="label">Aquisição</span><span class="value">'+escHtml((st.label||'') ? st.label : (st.state?'Ativa':'Inativa'))+'</span></div>';
   else if (s.type === 12) {
     var pct = Math.min(Math.max(st.moisture_pct||0, 0), 100);
     var full = Math.round(pct / 10);
     var bars = '';
     for (var i = 0; i < 10; i++) bars += '<span class="bar'+(i<full?' on':'')+'"></span>';
     stateHtml = '<div class="moisture-bars" style="justify-content:center;margin-bottom:8px">'+bars+'</div><div class="row"><span class="label">Umidade</span><span class="value">'+pct+'%</span></div><div class="row"><span class="label">ADC</span><span class="value">'+(st.raw_adc||0)+'</span></div>';
+  }
+  else if (st.value !== undefined) {
+    // fallback genérico: tipos novos nunca são descartados
+    stateHtml = '<div class="row"><span class="label">Valor</span><span class="value">'+st.value+'</span></div>'+
+                ((st.label||'')?'<div class="row"><span class="label">Estado</span><span class="value">'+escHtml(st.label)+'</span></div>':'');
   }
   body.innerHTML =
     '<div class="props-section"><div class="props-section-title">Estado</div>'+
@@ -1942,7 +1953,7 @@ R"rawliteral(
 <div class="params">
 <table><tr><th>Param</th><th>Tipo</th><th>Descricao</th></tr>
 <tr><td><code>device_id</code></td><td>string</td><td>ID do device (obrigatorio)</td></tr>
-<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor 1-10 (obrigatorio)</td></tr>
+<tr><td><code>sensor_type</code></td><td>number</td><td>Tipo do sensor (0 = generico; tipos nao reconhecidos tambem usam payload_int_t)</td></tr>
 <tr><td><code>device_name</code></td><td>string</td><td>Nome do device (obrigatorio)</td></tr>
 <tr><td><code>fw_version</code></td><td>string</td><td>Versao do firmware (opcional)</td></tr></table>
 </div>

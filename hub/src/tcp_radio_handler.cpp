@@ -34,7 +34,7 @@ int TcpRadioHandler::init() {
         const char* device_id = doc["device_id"];
         const char* device_name = doc["device_name"];
         const char* fw_version = doc["fw_version"];
-        uint8_t sensor_type = doc["sensor_type"];
+        int sensor_type = doc["sensor_type"] | -1;
 
         if (!device_id || !device_name) {
             request->send(400, "application/json", "{\"error\":\"missing fields\"}");
@@ -48,7 +48,7 @@ int TcpRadioHandler::init() {
             }
         }
 
-        if (sensor_type < 1 || sensor_type > 10) {
+        if (sensor_type < 0 || sensor_type > 255) {
             request->send(400, "application/json", "{\"error\":\"invalid sensor_type\"}");
             return;
         }
@@ -91,7 +91,7 @@ int TcpRadioHandler::init() {
 
         uint8_t client_chip = doc["client_chip"] | HW_CHIP_UNKNOWN;
 
-        handle_register(mac, device_id, sensor_type, device_name, fw_version, client_chip);
+        handle_register(mac, device_id, (uint8_t)sensor_type, device_name, fw_version, client_chip);
 
         int slot = find_slot_by_device_id(device_id);
 
@@ -424,7 +424,36 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             if (val != 0xFF) sensor->state.onoff.state = val;
             break;
         }
+        case SENSOR_TYPE_ACQUIRY: {
+            // Sinal binário somente leitura (acquiry): aceita bool ou uint8_t em "state".
+            uint8_t val = 0xFF;
+            if (state["state"].is<bool>()) val = state["state"] ? 1 : 0;
+            else if (state["state"].is<uint8_t>()) val = (uint8_t)state["state"];
+            if (val != 0xFF) sensor->state.onoff.state = val ? 1 : 0;
+            // Label dinâmico de estado (opcional, ex: "aberto"/"fechado")
+            if (state["label"].is<const char*>()) {
+                strncpy(sensor->state.generic.label, state["label"].as<const char*>(),
+                        sizeof(sensor->state.generic.label) - 1);
+                sensor->state.generic.label[sizeof(sensor->state.generic.label) - 1] = '\0';
+            }
+            break;
+        }
         default:
+            // fallback genérico: tipos novos nunca são descartados
+            // Aceita `state` (bool/uint8) ou `value` (uint16/int); espelha 0/1
+            // em onoff.state (união compatível) para o fallback de dashboard/MQTT.
+            if (state["state"].is<bool>()) sensor->state.generic.value = state["state"] ? 1 : 0;
+            else if (state["state"].is<uint8_t>()) sensor->state.generic.value = (uint8_t)state["state"];
+            else if (state["value"].is<uint16_t>()) sensor->state.generic.value = state["value"];
+            else if (state["value"].is<int>()) sensor->state.generic.value = (uint16_t)state["value"].as<int>();
+            sensor->state.onoff.state = (sensor->state.generic.value <= 1) ? (uint8_t)sensor->state.generic.value
+                                                                           : sensor->state.onoff.state;
+            // Label dinâmico de estado (opcional)
+            if (state["label"].is<const char*>()) {
+                strncpy(sensor->state.generic.label, state["label"].as<const char*>(),
+                        sizeof(sensor->state.generic.label) - 1);
+                sensor->state.generic.label[sizeof(sensor->state.generic.label) - 1] = '\0';
+            }
             break;
     }
 

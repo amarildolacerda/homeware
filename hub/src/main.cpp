@@ -322,6 +322,8 @@ void setup() {
     }
     
     ota_setup(get_gateway_device_id());
+    log_add("info", "OTA: free=%u sketch=%u", ESP.getFreeSketchSpace(), ESP.getSketchSize());
+    console.printf("[OTA] free_sketch=%u sketch=%u\n", ESP.getFreeSketchSpace(), ESP.getSketchSize());
     console.begin();
     {
         char banner[64];
