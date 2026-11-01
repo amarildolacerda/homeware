@@ -117,7 +117,8 @@
 #define OP_MODE_TERMINAL 0
 #define OP_MODE_AP       1
 #define OP_MODE_HYBRID   2
-#define EEPROM_OP_MODE_ADDR 202
+// 200..215 = hub IP (shared). Manter op_mode/dados locais FORA dessa faixa.
+#define EEPROM_OP_MODE_ADDR 218
 
 /* Pinos GPIO disponiveis para configuracao do relé */
 #ifdef ESP01S

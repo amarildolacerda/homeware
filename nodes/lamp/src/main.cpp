@@ -29,6 +29,7 @@
 #include "common_web.h"
 #include "common_repeater.h"
 #include "node_protocol.h"
+#include "radio_mode.h"
 #include "radio_node_strategy.h"
 #include "timer.h"
 
@@ -36,8 +37,10 @@ static const char *TAG = "agri-lamp";
 
 // ── Operation mode (EEPROM) ──
 int getModeOperStrategy() {
-#if defined(TCP_ENABLED) && defined(ESPNOW_ENABLED)
-    return OP_MODE_HYBRID;
+#if defined(RADIO_SELECT_ENABLED)
+    // Build dual: o modo de operação acompanha o protocolo escolhido
+    // (ESP-NOW = AP, TCP = Terminal), como nos builds exclusivos.
+    return (radio_mode_active() == RADIO_MODE_TCP) ? OP_MODE_TERMINAL : OP_MODE_AP;
 #elif defined(TCP_ENABLED)
     return OP_MODE_TERMINAL;
 #else
@@ -123,6 +126,28 @@ static EspalexaDevice *s_alexa_dev = nullptr;
 static bool s_alexa_initialized = false;
 #endif
 
+/* Restart agendado, consumido no loop(): reiniciar dentro do handler HTTP
+   mata o socket antes da resposta chegar ao browser (upload/ação "ok" que
+   aparece como erro). */
+static unsigned long s_restart_at_ms = 0;
+
+static void schedule_restart(unsigned long delay_ms)
+{
+    s_restart_at_ms = millis() + delay_ms;
+    if (s_restart_at_ms == 0)
+        s_restart_at_ms = 1;
+}
+
+static void process_pending_restart(void)
+{
+    if (s_restart_at_ms != 0 && (long)(millis() - s_restart_at_ms) >= 0)
+    {
+        s_restart_at_ms = 0;
+        console.println("Reiniciando...");
+        ESP.restart();
+    }
+}
+
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // D1-MINI é invtido
@@ -142,7 +167,9 @@ static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #define EEPROM_LED_ENABLED_ADDR  167
 #define EEPROM_STARTUP_MODE_ADDR 168
 #define EEPROM_REPEATER_EN_ADDR  169
-#define EEPROM_MULTIHUB_ADDR     201
+// 170 = timezone, 171.. = timers (legado), 200..215 = hub IP (shared),
+// 216 = protocolo radio (shared), 217 = multihub, 218 = op_mode
+#define EEPROM_MULTIHUB_ADDR     217
 #define EEPROM_MAGIC 0xAA
 
 #define SYNC_LITTLEFS_FILE "/sync.json"
@@ -473,7 +500,12 @@ static void set_relay(bool state, bool from_cyclic, bool from_sync, bool from_ti
         s_sync_sent_ms = millis();  // marca tempo para debounce
 #ifdef TCP_ENABLED
         // TCP mode: send command to target via hub HTTP API
-        if (s_radio.is_paired() && s_sync_target_slot >= 0)
+        if (!s_radio.uses_tcp())
+        {
+            console.printf("[%s] Sync: relay %s -> target %s (ESP-NOW sync not yet implemented)\n",
+                           TAG, state ? "ON" : "OFF", s_sync_cfg.target_device_id);
+        }
+        else if (s_radio.is_paired() && s_sync_target_slot >= 0)
         {
             String endpoint = String("/api/sensor/") + String(s_sync_target_slot) + "/command";
             String payload = String("{\"state\":") + (state ? "1" : "0") + "}";
@@ -568,7 +600,8 @@ static void on_wifi_connected(void)
         s_radio.begin();
         s_radio_initialized = true;
 #ifdef ESPNOW_ENABLED
-        console.printf("[%s] ESP-NOW initialized on ch %d\n", TAG, WiFi.channel());
+        if (!s_radio.uses_tcp())
+            console.printf("[%s] ESP-NOW initialized on ch %d\n", TAG, WiFi.channel());
 #endif
     }
     console.printf("  => Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
@@ -640,8 +673,10 @@ static void handle_api_wifi(void)
             doc["dns"] = net_dns;
         }
 #ifdef TCP_ENABLED
+        // hub_ip é config persistente (vale quando o protocolo for TCP)
         doc["hub_ip"] = s_radio.hub_ip_configured() ? s_radio.hub_ip_str() : "";
-        doc["hub_ip_current"] = s_radio.gateway_ip().toString();
+        if (s_radio.uses_tcp())
+            doc["hub_ip_current"] = s_radio.gateway_ip().toString();
 #endif
         serializeJson(doc, json);
         s_server.send(200, "application/json", json);
@@ -659,7 +694,7 @@ static void handle_api_wifi(void)
             return;
         }
 #ifdef TCP_ENABLED
-        if (doc.containsKey("hub_ip")) {
+        if (s_radio.uses_tcp() && doc.containsKey("hub_ip")) {
             const char* hip = doc["hub_ip"];
             s_radio.set_hub_ip(hip);
         }
@@ -785,10 +820,16 @@ static void handle_root(void)
 #ifdef REPEATER_ENABLED
         (const char *)FPSTR(PAGE_DASHBOARD_REPEATER_CFG),
 #endif
+#ifdef RADIO_SELECT_ENABLED
+        (const char *)FPSTR(PAGE_RADIO_MODE_CFG),
+#endif
         (const char *)FPSTR(PAGE_DASHBOARD_CONT3),
         (const char *)FPSTR(PAGE_PINS_SEC),
         (const char *)FPSTR(PAGE_DASHBOARD_CONT2),
         (const char *)FPSTR(PAGE_SCRIPT_PINS),
+#ifdef RADIO_SELECT_ENABLED
+        (const char *)FPSTR(PAGE_SCRIPT_RADIO),
+#endif
         (const char *)FPSTR(PAGE_DASHBOARD_END)};
     serve_pgm_sections(s_server, sections, sizeof(sections) / sizeof(sections[0]));
 }
@@ -828,8 +869,13 @@ static void handle_api_state(void)
         doc["rx_count"] = s_radio.rx_count();
         doc["on_count"] = s_on_count;
         doc["free_heap"] = ESP.getFreeHeap();
+#if defined(RADIO_SELECT_ENABLED)
+        doc["radio_mode"] = radio_mode_id(s_radio.mode());
+        doc["radio_mode_label"] = radio_mode_label(s_radio.mode());
+#endif
 #ifdef TCP_ENABLED
-        doc["hub_ip"] = s_radio.gateway_ip().toString();
+        if (s_radio.uses_tcp())
+            doc["hub_ip"] = s_radio.gateway_ip().toString();
 #endif
 #ifdef REPEATER_ENABLED
         doc["repeater_supported"] = true;
@@ -1066,15 +1112,15 @@ static void handle_console(char c)
         console.printf("  h/?  - esta ajuda\n");
         console.printf("  Dashboard: http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef TCP_ENABLED
-        console.printf("  Hub IP: http://%s\n", s_radio.gateway_ip().toString().c_str());
-#else
-        if (s_radio.is_paired())
+        if (s_radio.uses_tcp())
+            console.printf("  Hub IP: http://%s\n", s_radio.gateway_ip().toString().c_str());
+#endif
+        if (!s_radio.uses_tcp() && s_radio.is_paired())
         {
             char mac_str[18];
             mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
             console.printf("  Hub: %s (slot %d)\n", mac_str, s_radio.assigned_slot());
         }
-#endif
 
         console.printf("  IP local: %s\n", WiFi.localIP().toString().c_str());
         console.printf("  RSSI:     %d dBm\n", WiFi.RSSI());
@@ -1152,12 +1198,14 @@ static void handle_console(char c)
 
         if (s_radio.has_gateway())
         {
+            if (s_radio.uses_tcp())
+            {
 #ifdef TCP_ENABLED
-            if (s_radio.is_paired())
-                console.printf("  Hub IP:      http://%s\n", s_radio.gateway_ip().toString().c_str());
-#else
-
-            if (s_radio.is_paired())
+                if (s_radio.is_paired())
+                    console.printf("  Hub IP:      http://%s\n", s_radio.gateway_ip().toString().c_str());
+#endif
+            }
+            else if (s_radio.is_paired())
             {
                 char mac_str[18];
                 mac_to_str(s_gateway_mac, mac_str, sizeof(mac_str));
@@ -1165,11 +1213,8 @@ static void handle_console(char c)
             }
             else
             {
-
                 console.printf("  Hub:     nao pareado\n");
             }
-
-#endif
         }
         console.printf("  Dashboard:   http://%s:%d\n", WiFi.localIP().toString().c_str(), DASHBOARD_PORT);
 #ifdef ALEXA_ENABLED
@@ -1252,6 +1297,20 @@ static void handle_api_settings(void)
         doc["led_enabled"] = s_led_enabled;
         doc["startup_mode"] = s_startup_mode;
         doc["multihub"] = s_multihub;
+#if defined(RADIO_SELECT_ENABLED)
+        doc["radio_mode"] = radio_mode_id(s_radio.mode());
+        doc["radio_mode_label"] = radio_mode_label(s_radio.mode());
+        JsonArray radios = doc["radio_modes"].to<JsonArray>();
+        const uint8_t all_modes[] = {RADIO_MODE_ESPNOW, RADIO_MODE_TCP};
+        for (uint8_t i = 0; i < sizeof(all_modes) / sizeof(all_modes[0]); i++)
+        {
+            if (!radio_mode_compiled(all_modes[i]))
+                continue;
+            JsonObject r = radios.add<JsonObject>();
+            r["id"] = radio_mode_id(all_modes[i]);
+            r["label"] = radio_mode_label(all_modes[i]);
+        }
+#endif
         JsonArray pins = doc["available_pins"].to<JsonArray>();
         for (int i = 0; i < AVAILABLE_GPIOS_COUNT; i++)
             pins.add(AVAILABLE_GPIOS[i]);
@@ -1359,6 +1418,33 @@ static void handle_api_settings(void)
                 changed = true;
             }
         }
+#if defined(RADIO_SELECT_ENABLED)
+        if (doc.containsKey("radio_mode"))
+        {
+            uint8_t new_mode = RADIO_MODE_ESPNOW;
+            const char *mode_str = doc["radio_mode"] | "";
+            if (!radio_mode_parse(mode_str, &new_mode) || !radio_mode_compiled(new_mode))
+            {
+                s_server.send(400, "application/json", "{\"error\":\"invalid radio_mode\"}");
+                return;
+            }
+            if (new_mode != s_radio.mode())
+            {
+                radio_mode_save(new_mode);
+                radio_mode_set_active(new_mode);
+                /* Alinha o modo de operação ao novo protocolo (AP para
+                   ESP-NOW, Terminal para TCP) — igual a um build exclusivo. */
+                op_mode_save(getModeOperStrategy());
+                console.printf("[%s] Protocolo alterado para %s, reiniciando...\n",
+                               TAG, radio_mode_label(new_mode));
+                String resp = String("{\"status\":\"ok\",\"radio_mode\":\"") +
+                              radio_mode_id(new_mode) + "\",\"restart\":true}";
+                s_server.send(200, "application/json", resp);
+                schedule_restart(1500);
+                return;
+            }
+        }
+#endif
         if (!changed)
         {
             s_server.send(200, "application/json", "{\"status\":\"no changes\"}");
@@ -1397,6 +1483,7 @@ static void handle_api_devices(void)
 
 #ifdef TCP_ENABLED
     // TCP mode: fetch device list directly from hub's /api/sensors
+    if (s_radio.uses_tcp())
     {
         char buf[1024];
         if (s_radio.fetch_hub_devices(buf, sizeof(buf)))
@@ -1611,8 +1698,7 @@ static void handle_api_restart(void)
 {
     s_server.send(200, "application/json", "{\"status\":\"ok\"}");
     console.println("API - reiniciando...");
-    delay(500);
-    ESP.restart();
+    schedule_restart(800);
 }
 
 static void handle_api_pair(void)
@@ -1627,8 +1713,7 @@ static void handle_ota(void)
     {
         console.printf("[%s] OTA concluido, reiniciando...\n", TAG);
         s_server.send(200, "application/json", "{\"status\":\"ok\"}");
-        delay(500);
-        ESP.restart();
+        schedule_restart(1500);
     }
     else
     {
@@ -1881,6 +1966,14 @@ void setup(void)
 
     WiFi.hostname(strcmp(s_device_name, DEVICE_NAME) == 0 ? getDeviceId() : s_device_name);
 
+#if defined(RADIO_SELECT_ENABLED)
+    /* Protocolo node->hub (ESP-NOW ou TCP) vem da EEPROM e pode ser trocado
+       no dashboard (Configurações). Troca exige restart. */
+    radio_mode_set_active(radio_mode_load());
+    s_radio.set_mode(radio_mode_active());
+    console.printf("[%s] Protocolo: %s\n", TAG, radio_mode_label(radio_mode_active()));
+#endif
+
     int op_mode = op_mode_load();
     console.printf("[%s] Operation mode: %d (%s)\n", TAG, op_mode,
         op_mode == OP_MODE_TERMINAL ? "Terminal" :
@@ -1917,13 +2010,14 @@ void setup(void)
         s_radio.begin();
         s_radio_initialized = true;
 #ifdef ESPNOW_ENABLED
-        console.printf("[%s] ESP-NOW initialized on AP ch %d\n", TAG, WiFi.channel());
+        if (!s_radio.uses_tcp())
+            console.printf("[%s] ESP-NOW initialized on AP ch %d\n", TAG, WiFi.channel());
         #endif
     }
 
-    // Watchdog: só em TCP_ENABLED e NÃO em modo AP
+    // Watchdog: só no protocolo TCP e NÃO em modo AP
 #ifdef TCP_ENABLED
-    if (op_mode != OP_MODE_AP) {
+    if (op_mode != OP_MODE_AP && s_radio.uses_tcp()) {
         g_blink_wd.init(WATCHDOG_STABLE_RESET_MS, 300000);
     }
 #endif
@@ -1994,8 +2088,7 @@ void setup(void)
         }
         op_mode_save(mode);
         s_server.send(200, "application/json", "{\"status\":\"ok\",\"restarting\":true}");
-        delay(300);
-        ESP.restart();
+        schedule_restart(800);
     });
 
 #ifdef ALEXA_ENABLED
@@ -2050,6 +2143,7 @@ void setup(void)
 void loop(void)
 {
     console.loop();
+    process_pending_restart();
     if (Serial.available() > 0)
     {
         handle_console(Serial.read());
@@ -2181,7 +2275,7 @@ void loop(void)
 
 #ifdef TCP_ENABLED
     // Periodically fetch device list from hub to cache sync target slot
-    if (s_sync_cfg.enabled && strlen(s_sync_cfg.target_device_id) > 0)
+    if (s_radio.uses_tcp() && s_sync_cfg.enabled && strlen(s_sync_cfg.target_device_id) > 0)
     {
         static unsigned long last_device_fetch = 0;
         if (now - last_device_fetch > 30000 && s_radio.is_paired())
@@ -2260,8 +2354,8 @@ void loop(void)
 #endif
 
 #ifdef TCP_ENABLED
-    // Watchdog: TCP node só precisa estar conectado se NÃO estiver em modo AP
-    if (op_mode_load() != OP_MODE_AP)
+    // Watchdog: node TCP só precisa estar conectado se NÃO estiver em modo AP
+    if (op_mode_load() != OP_MODE_AP && s_radio.uses_tcp())
     {
         bool wd_healthy = (WiFi.status() == WL_CONNECTED)
                           && (mywifi_state() != WIFI_STATE_PORTAL)

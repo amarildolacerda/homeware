@@ -240,6 +240,16 @@ static const char PAGE_DASHBOARD_REPEATER_CFG[] PROGMEM = R"=====(
 <div class="row"><span class="label">Modo repetidor</span><button class="btn" id="repBtn" onclick="toggleRepeater()">-</button></div>
 )=====";
 #endif
+#ifdef RADIO_SELECT_ENABLED
+static const char PAGE_RADIO_MODE_CFG[] PROGMEM = R"=====(
+<div class="row"><span class="label">Protocolo</span>
+<select id="radioModeSelect" onchange="saveRadioMode()" style="max-width:140px">
+<option value="espnow">ESP-NOW</option>
+<option value="tcp">TCP (HTTP)</option>
+</select></div>
+<div style="font-size:.68rem;color:var(--muted-subtle)">ESP-NOW = pareamento MAC/slot; TCP = HTTP no hub. Trocar reinicia o dispositivo.</div>
+)=====";
+#endif
 static const char PAGE_DASHBOARD_CONT3[] PROGMEM = R"=====(
 <div class="card" id="card-actions">
 <div class="card-head">
@@ -324,7 +334,7 @@ let loading=false,cicloOpen=false,currentSection='home';
 let _toastTimer=0;function showToast(t,c){let el=document.getElementById('toast');el.textContent=t;el.className='toast '+c+' show';clearTimeout(_toastTimer);_toastTimer=setTimeout(function(){el.className='toast'},3000)}
 function toggleCard(id){const el=document.getElementById(id);const wasCollapsed=el.classList.contains('collapsed');document.querySelectorAll('.card.collapsible').forEach(function(c){c.classList.add('collapsed')});if(wasCollapsed)el.classList.remove('collapsed')}
 function showSection(s){document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});document.getElementById('sec'+(s.charAt(0).toUpperCase()+s.slice(1))).classList.add('active');
-document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers();if(s==='config'){fetchSettings();fetchWifi();fetchOpMode()}}
+document.querySelectorAll('.nav-item[data-section]').forEach(function(el){el.classList.remove('active')});document.querySelector('.nav-item[data-section="'+s+'"]').classList.add('active');currentSection=s;if(s==='pins')fetchPins();if(s==='timer'||s==='cyclic'||s==='pulse'||s==='sync')fetchTimers();if(s==='config'){fetchSettings();fetchWifi();fetchOpMode();if(typeof fetchRadioMode==='function')fetchRadioMode()}}
 function toggleCiclo(){cicloOpen=!cicloOpen;document.getElementById('cicloSub').style.display=cicloOpen?'block':'none';document.getElementById('cicloIcon').style.transform=cicloOpen?'rotate(90deg)':'none'}
 for(let i=0;i<24;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerHour').appendChild(o)}
 for(let i=0;i<60;i++){let o=document.createElement('option');o.value=i;o.text=('0'+i).slice(-2);document.getElementById('timerMin').appendChild(o)}
@@ -440,6 +450,16 @@ setInterval(function(){fetchState()},3000);
 fetchState();setTimeout(function(){fetchSettings()},200);setTimeout(function(){fetchTimers()},400);setTimeout(function(){loadDevices()},600);setTimeout(function(){fetchWifi()},800);setTimeout(function(){fetchOpMode()},1000);
 )=====";
 #endif
+#ifdef RADIO_SELECT_ENABLED
+static const char PAGE_SCRIPT_RADIO[] PROGMEM = R"=====(
+async function fetchRadioMode(){try{let r=await fetch('/api/settings');let d=await r.json();let el=document.getElementById('radioModeSelect');if(el&&d.radio_mode)el.value=d.radio_mode}catch(e){}}
+async function saveRadioMode(){let el=document.getElementById('radioModeSelect');if(!el)return;let m=el.value;let name=m==='tcp'?'TCP (HTTP)':'ESP-NOW';
+if(!confirm('Alterar protocolo para '+name+'? O dispositivo vai reiniciar.')){fetchRadioMode();return;}
+try{let r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({radio_mode:m})});let d=await r.json();
+if(d.status==='ok'){showToast('Protocolo '+name+', reiniciando...','ok');setTimeout(function(){location.reload()},8000)}else{showToast('Erro: '+(d.error||d.status),'err');fetchRadioMode()}}catch(e){showToast('Alterado. Aguarde o restart...','ok');setTimeout(function(){location.reload()},10000)}}
+setTimeout(function(){fetchRadioMode()},1100);
+)=====";
+#endif
 static const char PAGE_DASHBOARD_END[] PROGMEM = R"=====(
 </script>
 </body>
@@ -475,7 +495,7 @@ h1{color:var(--primary);font-size:1.2rem;margin-bottom:16px}
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/relay</span></div><div class="desc">Controla relé</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/pin</span></div><div class="desc">Escrita GPIO</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/settings</span></div><div class="desc">Configurações</div></div>
-<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div><div class="desc">Altera nome/pinos</div></div>
+<div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/settings</span></div><div class="desc">Altera nome/pinos/protocolo (radio_mode: 0=ESP-NOW, 1=TCP; reinicia)</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timers</span></div><div class="desc">Lista timers</div></div>
 <div class="endpoint"><div class="head"><span class="method post">POST</span><span class="path">/api/timers</span></div><div class="desc">Atualiza timer</div></div>
 <div class="endpoint"><div class="head"><span class="method get">GET</span><span class="path">/api/timer/next</span></div><div class="desc">Próximo timer</div></div>
