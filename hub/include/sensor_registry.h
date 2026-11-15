@@ -25,6 +25,8 @@ typedef struct {
     unsigned long last_seen;
     bool paired;
     bool online;
+    uint16_t reconnect_count;
+    uint16_t activation_count;
     uint8_t ip[4];
     uint16_t free_heap;
     union {

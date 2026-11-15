@@ -1,0 +1,1438 @@
+#!/usr/bin/env node
+
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { publicCommands } from "./lib/public-commands.mjs";
+import { validateClaudeAgentGraph } from "./lib/claude-agent-graph.mjs";
+import { validateCodexDelegateGraph } from "./lib/codex-delegate-graph.mjs";
+import { validateCopilotDelegateGraph } from "./lib/copilot-delegate-graph.mjs";
+import { validateOpenCodeDelegateGraph, validateOpenCodeRegisteredAgentPolicies } from "./lib/opencode-delegate-graph.mjs";
+import { collectCanonicalWorkflowGraph } from "./lib/canonical-workflow-graph.mjs";
+import { validateWrapperInventory } from "./lib/wrapper-inventory.mjs";
+import { delegatedAgents, openCodeCoordinatorAgents } from "./lib/delegated-agents.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "..");
+
+const DEFAULT_OUTPUT = path.join(repoRoot, ".build", "drift-report");
+
+const FAILING_STATUSES = new Set(["missing", "stale-reference", "normalized-drift", "unsupported-extra", "agents-section-drift"]);
+const OK_STATUS = "in-sync";
+const NA_STATUS = "n/a";
+const AGENTS_SECTION_DRIFT_STATUS = "agents-section-drift";
+
+export const AGENTS_SECTION_ALLOWLIST = new Map([
+  ["Lifecycle", "Universal SDD delivery lifecycle"],
+  ["Runtime Preflight", "Universal Node runtime prerequisite"],
+  ["Phase Gates", "Universal phase-boundary controls"],
+  ["Core Conventions", "Universal feature-workspace and priority conventions"],
+  ["Artifact Conventions", "Universal parser and traceability guardrails"],
+  ["Communication Style", "Universal runtime output contract"],
+  ["Continuous Execution Policy", "Universal execution and persistence policy"],
+]);
+
+const workflowSurfaces = [
+  {
+    key: "copilot",
+    label: "Copilot",
+    generated: true,
+    pathFor(command) {
+      return path.join(repoRoot, ".github", "prompts", `${command.command}.prompt.md`);
+    },
+  },
+  {
+    key: "claude",
+    label: "Claude",
+    pathFor(command) {
+      return path.join(repoRoot, ".claude", "skills", command.command, "SKILL.md");
+    },
+    expectedMode: "task-tool-subagent",
+    requiresInput: false,
+    requiresAutopilot: false,
+    requiresProgress: true,
+  },
+  {
+    key: "agentsSkill",
+    label: "Codex",
+    pathFor(command) {
+      return path.join(repoRoot, ".agents", "skills", command.command, "SKILL.md");
+    },
+    expectedMode: "read-agent-file",
+    requiresInput: true,
+    requiresAutopilot: true,
+    requiresProgress: true,
+  },
+  {
+    key: "agentsWorkflow",
+    label: "Antigravity",
+    pathFor(command) {
+      return path.join(repoRoot, ".agents", "workflows", `${command.command}.md`);
+    },
+    expectedMode: "read-agent-file",
+    requiresInput: true,
+    requiresAutopilot: false,
+    requiresProgress: true,
+  },
+  {
+    key: "openCodeCommand",
+    label: "OpenCode Command",
+    pathFor(command) {
+      return path.join(repoRoot, ".opencode", "commands", `${command.command}.md`);
+    },
+    expectedMode: "invoke-subagent",
+    requiresInput: true,
+    requiresAutopilot: false,
+    requiresProgress: true,
+    requiresAgentReference: false,
+  },
+  {
+    key: "windsurf",
+    label: "Windsurf",
+    pathFor(command) {
+      return path.join(repoRoot, ".windsurf", "workflows", `${command.command}.md`);
+    },
+    expectedMode: "read-agent-file",
+    requiresInput: true,
+    requiresAutopilot: false,
+    requiresProgress: true,
+  },
+];
+
+const opencodeAgentSurface = {
+  key: "openCodeAgent",
+  label: "OpenCode Agent",
+  dir: path.join(repoRoot, ".opencode", "agents"),
+};
+
+const codexAgentSurface = {
+  key: "codex",
+  label: "Codex",
+  dir: path.join(repoRoot, ".codex", "agents"),
+};
+
+const delegatedAgentContractsById = new Map(delegatedAgents.map((contract) => [contract.id, contract]));
+const supportedHosts = new Set(["copilot", "antigravity", "windsurf", "opencode", "claude-code", "codex"]);
+const hostWorkflowSurface = Object.freeze({
+  copilot: "copilot",
+  "claude-code": "claude",
+  codex: "agentsSkill",
+  antigravity: "agentsWorkflow",
+  opencode: "openCodeCommand",
+  windsurf: "windsurf",
+});
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  await mkdir(options.output, { recursive: true });
+
+  const canonicalGraph = await collectCanonicalWorkflowGraph(repoRoot, publicCommands);
+  const copilotGraph = !options.host || options.host === "copilot" ? await validateCopilotDelegateGraph(repoRoot, publicCommands) : { findings: [] };
+  const openCodeGraph = !options.host || options.host === "opencode" ? await validateOpenCodeDelegateGraph(repoRoot, publicCommands) : { findings: [] };
+  const openCodeAgentPolicies = !options.host || options.host === "opencode" ? await validateOpenCodeRegisteredAgentPolicies(repoRoot) : { findings: [] };
+  const workflowRows = await buildWorkflowRows(options, canonicalGraph, copilotGraph);
+  const agentRows = await buildAgentRows(options);
+  const extras = await collectExtras(options, workflowRows, agentRows);
+  const compactCommunicationFindings = await checkCompactCommunicationHoist();
+  const primerPath = path.join(repoRoot, options.context === "source" ? "templates/downstream/AGENTS.md" : "AGENTS.md");
+  const writingQualityFindings = await checkWritingQualityHoist(primerPath);
+  const artifactConventionFindings = await checkArtifactConventionsHoist(primerPath);
+  const agentsSectionFindings = await checkAgentsSectionDrift(primerPath);
+  const claudeGraph = !options.host || options.host === "claude-code" ? await validateClaudeAgentGraph(repoRoot, publicCommands) : { findings: [] };
+  const claudeAgentFindings = claudeGraph.findings.map((finding) => ({
+    status: finding.status,
+    scope: "agent",
+    surface: "Claude Agent Graph",
+    row: finding.agent,
+    filePath: relativePath(finding.filePath),
+    detail: finding.commands.length > 0 ? `${finding.detail}; referenced by ${finding.commands.join(", ")}` : `${finding.detail}; registered independently of command reachability`,
+  }));
+  const codexGraph = !options.host || options.host === "codex" ? await validateCodexDelegateGraph(repoRoot, publicCommands) : { findings: [] };
+  const codexFindings = codexGraph.findings.map((finding) => ({
+    status: "stale-reference",
+    scope: "workflow",
+    surface: "Codex Delegate Graph",
+    row: finding.command,
+    filePath: relativePath(finding.filePath),
+    detail: finding.lineNumber ? `line ${finding.lineNumber}: ${finding.detail}` : finding.detail,
+  }));
+  const copilotFindings = copilotGraph.findings.map((finding) => ({
+    status: "stale-reference",
+    scope: "workflow",
+    surface: "Copilot Delegate Graph",
+    row: finding.command,
+    filePath: relativePath(finding.filePath),
+    detail: finding.detail,
+  }));
+  const openCodeFindings = [...openCodeGraph.findings, ...openCodeAgentPolicies.findings].map((finding) => ({
+    status: finding.status ?? "stale-reference",
+    scope: finding.scope ?? "workflow",
+    surface: "OpenCode Delegate Graph",
+    row: finding.command,
+    filePath: relativePath(finding.filePath),
+    detail: finding.detail,
+  }));
+  const inventory = await validateWrapperInventory(repoRoot, publicCommands, { host: options.host });
+  const inventoryFindings = inventory.findings.map((finding) => ({
+    status: finding.status,
+    scope: "workflow",
+    surface: finding.surface,
+    row: finding.command,
+    filePath: relativePath(finding.filePath),
+    detail: finding.detail,
+  }));
+  const canonicalFindings = canonicalGraph.findings.map((finding) => ({
+    status: "stale-reference",
+    scope: "workflow",
+    surface: "Canonical Workflow Graph",
+    row: finding.command,
+    filePath: relativePath(finding.filePath),
+    detail: finding.detail,
+  }));
+
+  const report = buildReport(options, workflowRows, agentRows, extras, compactCommunicationFindings, writingQualityFindings, artifactConventionFindings, agentsSectionFindings, claudeAgentFindings, codexFindings, copilotFindings, openCodeFindings, [...inventoryFindings, ...canonicalFindings]);
+  await writeOutputs(options.output, report);
+
+  const failureCount = report.findings.filter((finding) => FAILING_STATUSES.has(finding.status)).length;
+  console.log(`Drift report written to ${path.relative(repoRoot, options.output)}`);
+  console.log(`Workflow rows: ${workflowRows.length}`);
+  console.log(`Agent rows: ${agentRows.length}`);
+  console.log(`Findings: ${report.findings.length}`);
+
+  if (options.strict && failureCount > 0) {
+    throw new Error(`Drift detected: ${failureCount} failing finding(s)`);
+  }
+}
+
+function parseArgs(argv) {
+  const options = {
+    output: DEFAULT_OUTPUT,
+    strict: true,
+    host: null,
+    context: "installed",
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--context") {
+      const value = argv[index + 1];
+      if (value !== "source" && value !== "installed") throw new Error("--context must be source or installed");
+      options.context = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--output") {
+      const value = argv[index + 1];
+      if (!value) throw new Error("Missing value for --output");
+      options.output = path.resolve(value);
+      index += 1;
+      continue;
+    }
+    if (arg === "--strict") {
+      options.strict = true;
+      continue;
+    }
+    if (arg === "--host") {
+      const value = argv[index + 1];
+      if (!value) throw new Error("Missing value for --host");
+      if (!supportedHosts.has(value)) throw new Error(`Unsupported host: ${value}`);
+      options.host = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--no-strict") {
+      options.strict = false;
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  return options;
+}
+
+async function buildWorkflowRows(options, canonicalGraph, copilotGraph) {
+  const rows = [];
+  const graphByCommand = new Map(canonicalGraph.rows.map((row) => [row.command, row]));
+  const copilotFindingsByCommand = new Map();
+  for (const finding of copilotGraph.findings) {
+    const findings = copilotFindingsByCommand.get(finding.command) ?? [];
+    findings.push(finding);
+    copilotFindingsByCommand.set(finding.command, findings);
+  }
+
+  for (const command of publicCommands) {
+    const canonicalPath = path.resolve(repoRoot, command.canonicalWorkflow);
+    const canonicalContent = await readRequiredText(canonicalPath, `canonical workflow ${command.workflow}`);
+    const expectedDelegates = extractCanonicalDelegateIds(canonicalContent);
+
+    const row = {
+      id: command.command,
+      title: command.command,
+      canonicalWorkflow: command.workflow,
+      canonicalPath: relativePath(canonicalPath),
+      canonicalTarget: command.canonicalWorkflow,
+      category: command.category,
+      prerequisites: command.prerequisites,
+      canonicalDelegates: expectedDelegates,
+      transitiveDelegates: graphByCommand.get(command.command)?.delegates ?? [],
+      surfaces: {},
+    };
+
+    for (const surface of workflowSurfaces) {
+      if (options.host && hostWorkflowSurface[options.host] !== surface.key) {
+        row.surfaces[surface.key] = { status: NA_STATUS, label: surface.label, filePath: null, details: ["Host surface not selected"] };
+        continue;
+      }
+      if (surface.key === "copilot") {
+        const findings = copilotFindingsByCommand.get(command.command) ?? [];
+        row.surfaces.copilot = {
+          status: findings.length === 0 ? OK_STATUS : "stale-reference",
+          label: surface.label,
+          filePath: relativePath(surface.pathFor(command)),
+          details: findings.map((finding) => finding.detail),
+        };
+        continue;
+      }
+      const filePath = surface.pathFor(command, options);
+      const document = await parseWorkflowSurfaceFile(filePath);
+      const evaluation = evaluateWorkflowSurface({
+        surface,
+        document,
+        command,
+        row,
+      });
+      row.surfaces[surface.key] = evaluation;
+    }
+
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+async function buildAgentRows(options) {
+  const openCodeAgents = !options.host || options.host === "opencode" ? await loadOpenCodeAgents() : [];
+  const codexAgents = !options.host || options.host === "codex" ? await loadCodexAgents() : [];
+  const openCodeAgentsByPath = new Map(openCodeAgents.map((wrapper) => [relativePath(wrapper.filePath), wrapper]));
+  const codexAgentsByPath = new Map(codexAgents.map((wrapper) => [relativePath(wrapper.filePath), wrapper]));
+  const rows = [];
+
+  const contracts = options.host && options.host !== "copilot" ? delegatedAgents.filter((contract) => contract.kind === "methodology") : delegatedAgents;
+  for (const contract of contracts) {
+    const filePath = path.join(repoRoot, contract.canonicalPath);
+    const exists = await pathExists(filePath);
+    const content = exists ? await readFile(filePath, "utf8") : "";
+    const canonical = parseCanonicalAgent(content, contract);
+    const row = {
+      id: contract.id,
+      title: contract.id,
+      kind: contract.kind,
+      name: contract.name,
+      requiredCapabilities: contract.requiredCapabilities,
+      executionPolicy: contract.executionPolicy,
+      canonicalPath: contract.canonicalPath,
+      canonical: canonical.summary,
+      registryIssues: exists ? canonical.registryIssues : ["Expected canonical agent file is missing"],
+      displayHosts: {
+        copilot: !options.host || options.host === "copilot",
+        claude: !options.host || options.host === "claude-code",
+        opencode: !options.host || options.host === "opencode",
+        codex: !options.host || options.host === "codex",
+      },
+      surfaces: {},
+    };
+
+    const openCodeWrapper = openCodeAgentsByPath.get(contract.hosts.opencode);
+    row.surfaces.openCodeAgent = row.displayHosts.opencode ? evaluateAgentSurface({
+      wrapper: openCodeWrapper,
+      canonical,
+      expected: "required",
+    }) : { status: NA_STATUS, filePath: null, details: ["Host surface not selected"] };
+
+    if (row.displayHosts.codex && contract.hosts.codex) {
+      const codexWrapper = codexAgentsByPath.get(contract.hosts.codex);
+      row.surfaces.codex = evaluateAgentSurface({
+        wrapper: codexWrapper,
+        canonical,
+        expected: "required",
+      });
+    } else {
+      row.surfaces.codex = {
+        status: NA_STATUS,
+        label: codexAgentSurface.label,
+        filePath: null,
+        details: ["No Codex workflow-agent wrapper expected"],
+      };
+    }
+
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function evaluateWorkflowSurface({ surface, document, command, row }) {
+  const details = [];
+
+  if (!document.exists) {
+    return {
+      status: "missing",
+      label: surface.label,
+      filePath: relativePath(document.filePath),
+      details: ["Expected wrapper file is missing"],
+    };
+  }
+
+  if (document.targetSkill !== row.canonicalTarget) {
+    details.push(`Expected ${row.canonicalTarget}, found ${document.targetSkill || "none"}`);
+    return {
+      status: "stale-reference",
+      label: surface.label,
+      filePath: relativePath(document.filePath),
+      details,
+    };
+  }
+
+  if (surface.key !== "openCodeCommand" && surface.key !== "agentsSkill") {
+    const expectedDelegates = row.transitiveDelegates;
+    const missingDelegates = expectedDelegates.filter((delegateId) => !document.delegates.includes(delegateId));
+    const unexpectedDelegates = document.delegates.filter((delegateId) => !expectedDelegates.includes(delegateId));
+    if (missingDelegates.length > 0 || unexpectedDelegates.length > 0) {
+      if (missingDelegates.length > 0) details.push(`Missing delegates: ${missingDelegates.join(", ")}`);
+      if (unexpectedDelegates.length > 0) details.push(`Unexpected delegates: ${unexpectedDelegates.join(", ")}`);
+      return {
+        status: "stale-reference",
+        label: surface.label,
+        filePath: relativePath(document.filePath),
+        details,
+      };
+    }
+  }
+
+  const contractIssues = validateWorkflowContract(surface, document, command);
+  if (contractIssues.length > 0) {
+    return {
+      status: "normalized-drift",
+      label: surface.label,
+      filePath: relativePath(document.filePath),
+      details: contractIssues,
+    };
+  }
+
+
+  return {
+    status: OK_STATUS,
+    label: surface.label,
+    filePath: relativePath(document.filePath),
+    details: [],
+  };
+}
+
+function validateWorkflowContract(surface, document, command) {
+  const issues = [];
+
+  if (!document.hasLoadWorkflowLine) {
+    issues.push("Missing canonical workflow load instruction");
+  }
+  if (surface.key !== "openCodeCommand" && document.body.includes("Delegate") && document.delegationMode !== surface.expectedMode) {
+    issues.push(`Expected delegation mode ${surface.expectedMode}, found ${document.delegationMode || "none"}`);
+  }
+  if (surface.key === "agentsSkill" && document.skillName !== command.command) {
+    issues.push(`Expected skill name ${command.command}, found ${document.skillName || "none"}`);
+  }
+  if (surface.requiresProgress && !document.hasProgressDirective) {
+    issues.push("Missing progress directive");
+  }
+  if (surface.key === "agentsSkill" && command.command === "sddp-autopilot" && !document.hasAutopilotBlock) {
+    issues.push("Missing Autopilot execution contract");
+  }
+  if (surface.requiresAgentReference && !document.agentReference) {
+    issues.push("Missing OpenCode agent reference");
+  }
+
+  return issues;
+}
+
+function evaluateAgentSurface({ wrapper, canonical, expected }) {
+  if (expected === "required" && !wrapper) {
+    return {
+      status: "missing",
+      filePath: null,
+      details: ["Expected wrapper is missing"],
+    };
+  }
+  if (!wrapper) {
+    return {
+      status: NA_STATUS,
+      filePath: null,
+      details: ["No wrapper expected"],
+    };
+  }
+
+  const details = [];
+  if (canonical.kind === "methodology") {
+    if (wrapper.targetAgent !== canonical.targetAgent) {
+      details.push(`Expected ${canonical.targetAgent}, found ${wrapper.targetAgent || "none"}`);
+    }
+    if (wrapper.kind !== "methodology") {
+      details.push(`Expected methodology wrapper, found ${wrapper.kind}`);
+    }
+  } else {
+    if (wrapper.targetSkill !== canonical.targetSkill) {
+      details.push(`Expected ${canonical.targetSkill}, found ${wrapper.targetSkill || "none"}`);
+    }
+    const missingDelegates = canonical.delegates.filter((delegateId) => !wrapper.delegates.includes(delegateId));
+    const extraDelegates = wrapper.delegates.filter((delegateId) => !canonical.delegates.includes(delegateId));
+    if (missingDelegates.length > 0) {
+      details.push(`Missing delegates: ${missingDelegates.join(", ")}`);
+    }
+    if (extraDelegates.length > 0) {
+      details.push(`Unexpected delegates: ${extraDelegates.join(", ")}`);
+    }
+  }
+
+  if (wrapper.modeIssue) {
+    details.push(wrapper.modeIssue);
+  }
+
+  return {
+    status: details.length === 0 ? OK_STATUS : wrapper.surfaceKey === "codex" ? "stale-reference" : "normalized-drift",
+    filePath: relativePath(wrapper.filePath),
+    details,
+  };
+}
+
+async function collectExtras(options, workflowRows, agentRows) {
+  const findings = [];
+
+  const expectedCanonicalAgents = new Set(delegatedAgents.map((agent) => agent.canonicalPath));
+  for (const fullPath of (await listFiles(path.join(repoRoot, ".github", "agents"))).filter((file) => file.endsWith(".md"))) {
+    const filePath = relativePath(fullPath);
+    if (!expectedCanonicalAgents.has(filePath)) {
+      findings.push({
+        status: "unsupported-extra",
+        scope: "agent",
+        surface: "Canonical Agent Registry",
+        row: path.basename(filePath),
+        filePath,
+        detail: "Canonical agent is not declared in delegatedAgents",
+      });
+    }
+  }
+
+  const expectedOpenCodeAgents = new Set([
+    ...delegatedAgents.map((agent) => agent.hosts.opencode),
+    ...openCodeCoordinatorAgents.map((agent) => agent.path),
+  ]);
+  for (const fullPath of !options.host || options.host === "opencode" ? await listFiles(opencodeAgentSurface.dir) : []) {
+    const filePath = relativePath(fullPath);
+    if (!expectedOpenCodeAgents.has(filePath)) {
+      findings.push({
+        status: "unsupported-extra",
+        scope: "agent",
+        surface: opencodeAgentSurface.label,
+        row: path.basename(filePath),
+        filePath,
+        detail: "Unexpected agent wrapper file present",
+      });
+    }
+  }
+
+  const expectedCodexAgents = new Set(delegatedAgents.map((agent) => agent.hosts.codex).filter(Boolean));
+  for (const filePath of (!options.host || options.host === "codex" ? await listFiles(codexAgentSurface.dir) : []).map(relativePath)) {
+    if (!expectedCodexAgents.has(filePath)) {
+      findings.push({
+        status: "unsupported-extra",
+        scope: "agent",
+        surface: codexAgentSurface.label,
+        row: path.basename(filePath),
+        filePath,
+        detail: "Unexpected agent wrapper file present",
+      });
+    }
+  }
+
+
+
+  return findings;
+}
+
+async function checkCompactCommunicationHoist() {
+  const findings = [];
+  const deprecatedShim = path.join(repoRoot, ".github", "skills", "compact-communication", "SKILL.md");
+  const targetSubstring = "compact-communication/SKILL.md";
+
+  const canonicalSkills = path.join(repoRoot, ".github", "skills");
+  const canonicalWorkflows = path.join(repoRoot, ".github", "sddp", "workflows");
+  const canonicalAgents = path.join(repoRoot, ".github", "agents");
+
+  const skillFiles = (await listFiles(canonicalSkills)).filter((file) => file.endsWith("SKILL.md"));
+  const workflowFiles = (await listFiles(canonicalWorkflows)).filter((file) => file.endsWith(".md"));
+  const agentFiles = (await listFiles(canonicalAgents)).filter((file) => file.endsWith(".md"));
+
+  for (const filePath of [...workflowFiles, ...skillFiles, ...agentFiles]) {
+    if (path.resolve(filePath) === path.resolve(deprecatedShim)) {
+      continue;
+    }
+    const content = await readFile(filePath, "utf8");
+    if (!content.includes(targetSubstring)) {
+      continue;
+    }
+    findings.push({
+      status: "stale-reference",
+      scope: "governance",
+      surface: "Compact Communication Hoist",
+      row: relativePath(filePath),
+      filePath: relativePath(filePath),
+      detail: "Re-introduced a Read instruction for compact-communication/SKILL.md. The rules are ambient in AGENTS.md \u00a7Communication Style \u2014 remove this reference.",
+    });
+  }
+
+  return findings;
+}
+
+const writingQualityPrimerSentinels = [
+  {
+    label: "application scope",
+    value: "Apply a writing-quality pass to user-facing text and newly written or changed prose before delivery.",
+  },
+  {
+    label: "meaning preservation",
+    value: "Preserve meaning, scope, certainty, evidence, citations, and the user's voice.",
+  },
+  {
+    label: "changed-span boundary",
+    value: "Edit only narrative spans created or changed by the current task.",
+  },
+  {
+    label: "exact-content boundary",
+    value: "Preserve frontmatter, required headings and section order, tables, checkbox lines, IDs, markers, paths, commands, URLs, citations, code, quoted text, and machine-readable content exactly.",
+  },
+  {
+    label: "instruction precedence",
+    value: "`project-instructions.md` remains authoritative.",
+  },
+];
+
+const writingQualityReferenceSentinels = [
+  {
+    label: "semantic preservation",
+    value: "Preserve meaning, scope, certainty, evidence, citations, and the user's voice.",
+  },
+  {
+    label: "no semantic authorization",
+    value: "Style work never authorizes a new requirement, stronger claim, resolved ambiguity, changed priority, or removed caveat.",
+  },
+  {
+    label: "whole-file rewrite boundary",
+    value: "Never run a whole-file style rewrite over SDDP artifacts or governance files.",
+  },
+  {
+    label: "self-audit",
+    value: "What makes this obviously AI generated?",
+  },
+];
+
+const writingQualityTargetSubstring = "writing-quality/SKILL.md";
+const writingQualityLoadInstruction = /\b(?:read|re-?read|reload|load|execute|follow|acquire)\b/i;
+
+export function findWritingQualityContractDrift({ primer, reference, documents = [], primerFilePath = "AGENTS.md" }) {
+  const findings = [];
+
+  for (const sentinel of writingQualityPrimerSentinels) {
+    if (!primer.includes(sentinel.value)) {
+      findings.push({
+        filePath: primerFilePath,
+        label: sentinel.label,
+        detail: `Ambient writing-quality primer is missing the required ${sentinel.label} sentinel`,
+      });
+    }
+  }
+
+  for (const sentinel of writingQualityReferenceSentinels) {
+    if (!reference.includes(sentinel.value)) {
+      findings.push({
+        filePath: ".github/skills/writing-quality/SKILL.md",
+        label: sentinel.label,
+        detail: `Writing-quality reference is missing the required ${sentinel.label} sentinel`,
+      });
+    }
+  }
+
+  for (const document of documents) {
+    for (const line of document.content.split(/\r?\n/)) {
+      if (!line.includes(writingQualityTargetSubstring) || !writingQualityLoadInstruction.test(line)) {
+        continue;
+      }
+      findings.push({
+        filePath: document.filePath,
+        label: document.filePath,
+        detail: "Re-introduced a load instruction for writing-quality/SKILL.md. The runtime rules are ambient in AGENTS.md under Communication Style; remove the local load.",
+      });
+    }
+  }
+
+  return findings;
+}
+
+async function checkWritingQualityHoist(primerPath) {
+  const referencePath = path.join(repoRoot, ".github", "skills", "writing-quality", "SKILL.md");
+  const runtimeDirectories = [
+    [".github", "sddp", "workflows"],
+    [".github", "skills"],
+    [".github", "agents"],
+    [".github", "prompts"],
+    [".agents", "skills"],
+    [".agents", "workflows"],
+    [".claude", "skills"],
+    [".claude", "agents"],
+    [".opencode", "commands"],
+    [".opencode", "agents"],
+    [".windsurf", "workflows"],
+    [".codex", "agents"],
+  ];
+  const runtimeFiles = [];
+
+  for (const segments of runtimeDirectories) {
+    runtimeFiles.push(...(await listFiles(path.join(repoRoot, ...segments))));
+  }
+
+  const documents = [];
+  for (const filePath of runtimeFiles.filter((file) => /\.(?:md|toml)$/.test(file))) {
+    if (path.resolve(filePath) === path.resolve(referencePath)) {
+      continue;
+    }
+    documents.push({
+      filePath: relativePath(filePath),
+      content: await readFile(filePath, "utf8"),
+    });
+  }
+
+  const findings = findWritingQualityContractDrift({
+    primer: await readRequiredText(primerPath, "writing-quality primer"),
+    primerFilePath: relativePath(primerPath),
+    reference: await readRequiredText(referencePath, "writing-quality reference"),
+    documents,
+  });
+
+  return findings.map((finding) => ({
+    status: "stale-reference",
+    scope: "governance",
+    surface: "Writing Quality Hoist",
+    row: finding.label,
+    filePath: finding.filePath,
+    detail: finding.detail,
+  }));
+}
+
+export function findAgentsSectionDrift(content) {
+  const findings = [];
+  let inCodeFence = false;
+
+  for (const [index, line] of content.split(/\r?\n/).entries()) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence) {
+      continue;
+    }
+
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    if (!match) {
+      continue;
+    }
+
+    const heading = match[1].replace(/\s+#+\s*$/, "").trim();
+    if (!AGENTS_SECTION_ALLOWLIST.has(heading)) {
+      findings.push({ heading, lineNumber: index + 1 });
+    }
+  }
+
+  return findings;
+}
+
+async function checkAgentsSectionDrift(agentsPath) {
+  const content = await readRequiredText(agentsPath, "AGENTS.md");
+
+  return findAgentsSectionDrift(content).map(({ heading, lineNumber }) => ({
+    status: AGENTS_SECTION_DRIFT_STATUS,
+    scope: "governance",
+    surface: "AGENTS.md Section Allowlist",
+    row: `## ${heading}`,
+    filePath: relativePath(agentsPath),
+    detail: `Unallowlisted top-level section at line ${lineNumber}. Review whether it is universal; move project-specific rules to project-instructions.md or add a reviewed universal allowlist entry.`,
+  }));
+}
+
+const artifactConventionPrimerSentinels = [
+  {
+    label: "task grammar",
+    value: "- [ ] T### [P?] [US#|OBJ#?] {(FR|TR|OR|RR)-###?} [COMPLETES req?] Description [after:T###?] [← T###:Symbol?] [→ exports: Symbol?] [VERIFY: <command>]?*",
+  },
+  { label: "requirement grammar", value: "- **(FR|TR|OR|RR)-###** [US#|OBJ#]: ..." },
+  { label: "success criterion grammar", value: "SC-### [US#|OBJ#]: [Measurable, technology-agnostic outcome]" },
+  { label: "checklist grammar", value: "- [ ] CHK### <question> [Quality Dimension, Spec §X.Y]" },
+  { label: "bug task grammar", value: "- [ ] T### [BUG:severity] [RECURRING?] [ESCALATED?] [DEFERRED?] {(FR|TR|OR|RR)-###} [category] Description — file:line" },
+  { label: "stress-test grammar", value: "STF-###: [Category] (Severity) — Affected: [IDs] — [summary]" },
+  { label: "immutable ID rules", value: "T###`, `CHK###`, `FR-###`, `TR-###`, `OR-###`, `RR-###`, `SC-###`, `AD-###`, `ADR-NNNN`, or `STF-###" },
+  { label: "checkbox transition", value: "- [ ]` → `- [X]" },
+  { label: "spec section rules", value: "Product specs require `Problem Statement`, `Scope`, `User Scenarios & Testing`, `Requirements`, `Assumptions & Risks`, `Implementation Signals`, and `Success Criteria`; technical specs use `Technical Objectives` and `Integration Points`; operational specs use `Operational Objectives` and `Integration Points`." },
+  { label: "plan size limit", value: "`plan.md`: preserve `Instructions Check`, `Technical Context`, `Requirement Coverage Map`, and `Acceptance Test Stubs`; populate coverage paths and symbols. Size limit: ≤ **10KB**." },
+  { label: "tasks size limit", value: "`tasks.md`: preserve `Dependencies` and existing phase headers. Size limit: ≤ **6KB** and 40 tasks." },
+];
+
+const artifactConventionReferenceSentinels = [
+  { label: "task grammar", value: "T### [P?]" },
+  { label: "requirement grammar", value: "- **(FR|TR|OR|RR)-###** [US#|OBJ#]: ..." },
+  { label: "success criterion grammar", value: "SC-### [US#|OBJ#]:" },
+  { label: "checklist grammar", value: "CHK### <question>" },
+  { label: "bug task grammar", value: "T### [BUG:severity]" },
+  { label: "stress-test grammar", value: "STF-###: [Category]" },
+  { label: "ADR ID rule", value: "ADR-NNNN" },
+  { label: "checkbox transition", value: "- [ ]` → `- [X]" },
+  { label: "spec size limit", value: "Size budget: ≤ **10KB**" },
+  { label: "tasks size limit", value: "Size budget: ≤ **6KB** and 40 tasks" },
+];
+
+async function checkArtifactConventionsHoist(primerPath) {
+  const findings = [];
+  const expandedReference = path.join(repoRoot, ".github", "skills", "artifact-conventions", "SKILL.md");
+  const primer = await readRequiredText(primerPath, "artifact conventions primer");
+  const expanded = await readRequiredText(expandedReference, "expanded artifact conventions reference");
+  const normalizedExpanded = expanded.replaceAll("\\|", "|");
+  const targetSubstring = "artifact-conventions/SKILL.md";
+  const loadInstruction = /\b(?:read|re-?read|load|execute|follow|acquire)\b/i;
+
+  for (const sentinel of artifactConventionPrimerSentinels) {
+    if (primer.includes(sentinel.value)) {
+      continue;
+    }
+    findings.push({
+      status: "stale-reference",
+      scope: "governance",
+      surface: "Artifact Conventions Hoist",
+      row: sentinel.label,
+      filePath: relativePath(primerPath),
+      detail: `Ambient primer is missing the required ${sentinel.label} sentinel`,
+    });
+  }
+
+  for (const sentinel of artifactConventionReferenceSentinels) {
+    if (normalizedExpanded.includes(sentinel.value)) {
+      continue;
+    }
+    findings.push({
+      status: "stale-reference",
+      scope: "governance",
+      surface: "Artifact Conventions Reference",
+      row: sentinel.label,
+      filePath: relativePath(expandedReference),
+      detail: `Expanded reference is missing the required ${sentinel.label} sentinel`,
+    });
+  }
+
+  const canonicalSkills = path.join(repoRoot, ".github", "skills");
+  const canonicalWorkflows = path.join(repoRoot, ".github", "sddp", "workflows");
+  const canonicalAgents = path.join(repoRoot, ".github", "agents");
+  const skillFiles = (await listFiles(canonicalSkills)).filter((file) => file.endsWith("SKILL.md"));
+  const workflowFiles = (await listFiles(canonicalWorkflows)).filter((file) => file.endsWith(".md"));
+  const agentFiles = (await listFiles(canonicalAgents)).filter((file) => file.endsWith(".md"));
+
+  for (const filePath of [...workflowFiles, ...skillFiles, ...agentFiles]) {
+    if (path.resolve(filePath) === path.resolve(expandedReference)) {
+      continue;
+    }
+    const content = await readFile(filePath, "utf8");
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.includes(targetSubstring) || !loadInstruction.test(line)) {
+        continue;
+      }
+      findings.push({
+        status: "stale-reference",
+        scope: "governance",
+        surface: "Artifact Conventions Hoist",
+        row: relativePath(filePath),
+        filePath: relativePath(filePath),
+        detail: "Re-introduced a load instruction for artifact-conventions/SKILL.md. The runtime rules are ambient in AGENTS.md §Artifact Conventions; retain the expanded reference only for intentional exceptional lookups.",
+      });
+    }
+  }
+
+  return findings;
+}
+
+function buildReport(options, workflowRows, agentRows, extras, compactCommunicationFindings = [], writingQualityFindings = [], artifactConventionFindings = [], agentsSectionFindings = [], claudeAgentFindings = [], codexFindings = [], copilotFindings = [], openCodeFindings = [], inventoryFindings = []) {
+  const findings = [];
+
+  for (const row of workflowRows) {
+    for (const surface of workflowSurfaces) {
+      const result = row.surfaces[surface.key];
+      if (result.status === OK_STATUS || result.status === NA_STATUS) {
+        continue;
+      }
+      findings.push({
+        status: result.status,
+        scope: "workflow",
+        surface: result.label,
+        row: row.id,
+        filePath: result.filePath,
+        detail: result.details.join("; "),
+      });
+    }
+  }
+
+  for (const row of agentRows) {
+    if (row.registryIssues.length > 0) {
+      findings.push({
+        status: "normalized-drift",
+        scope: "agent",
+        surface: "Canonical Agent Registry",
+        row: row.id,
+        filePath: row.canonicalPath,
+        detail: row.registryIssues.join("; "),
+      });
+    }
+    for (const [surfaceKey, result] of Object.entries(row.surfaces)) {
+      if (result.status === OK_STATUS || result.status === NA_STATUS) {
+        continue;
+      }
+      findings.push({
+        status: result.status,
+        scope: "agent",
+        surface: surfaceKey === "openCodeAgent" ? opencodeAgentSurface.label : codexAgentSurface.label,
+        row: row.id,
+        filePath: result.filePath,
+        detail: result.details.join("; "),
+      });
+    }
+  }
+
+  findings.push(...extras);
+  findings.push(...compactCommunicationFindings);
+  findings.push(...writingQualityFindings);
+  findings.push(...artifactConventionFindings);
+  findings.push(...agentsSectionFindings);
+  findings.push(...claudeAgentFindings);
+  findings.push(...codexFindings);
+  findings.push(...copilotFindings);
+  findings.push(...openCodeFindings);
+  findings.push(...inventoryFindings);
+
+  const summary = summarizeReport(workflowRows, agentRows, findings);
+  const mermaid = renderMermaid(workflowRows, agentRows, findings);
+  const markdown = renderMarkdown({ options, workflowRows, agentRows, findings, summary, mermaid });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    options: {
+      output: relativePath(options.output),
+      strict: options.strict,
+      host: options.host,
+      context: options.context,
+    },
+    summary,
+    workflowRows,
+    agentRows,
+    findings,
+    mermaid,
+    markdown,
+  };
+}
+
+async function writeOutputs(outputDir, report) {
+  await writeTextFile(path.join(outputDir, "drift-report.json"), `${JSON.stringify(report, null, 2)}${os.EOL}`);
+  await writeTextFile(path.join(outputDir, "drift-report.md"), report.markdown);
+  await writeTextFile(path.join(outputDir, "drift-report.mmd"), `${report.mermaid}${os.EOL}`);
+}
+
+function renderMarkdown({ options, workflowRows, agentRows, findings, summary, mermaid }) {
+  const lines = [
+    "# Drift Report",
+    "",
+    `- Generated: ${new Date().toISOString()}`,
+    `- Strict mode: ${options.strict ? "true" : "false"}`,
+    `- Host: ${options.host ?? "all"}`,
+    `- Context: ${options.context}`,
+    `- Runtime primer: ${options.context === "source" ? "templates/downstream/AGENTS.md" : "AGENTS.md"}`,
+    "",
+    "## Status Legend",
+    "",
+    "- `in-sync`: wrapper target, delegate mapping, and surface contract matched expectations",
+    "- `missing`: expected wrapper file was not found",
+    "- `stale-reference`: wrapper points at the wrong canonical target or delegate set",
+    "- `normalized-drift`: wrapper shape diverged from the expected tool-specific contract",
+    "- `unsupported-extra`: unexpected wrapper file exists outside the supported inventory",
+    "- `agents-section-drift`: AGENTS.md contains an unallowlisted top-level section requiring maintainer review",
+    "- `n/a`: surface intentionally not present for that row",
+    "",
+    "## Summary",
+    "",
+    "| Status | Count |",
+    "| --- | ---: |",
+  ];
+
+  for (const [status, count] of Object.entries(summary.byStatus)) {
+    lines.push(`| ${status} | ${count} |`);
+  }
+
+  lines.push("", "## Workflow Matrix", "", workflowMatrixTable(workflowRows), "", "## Agent Matrix", "", agentMatrixTable(agentRows, findings));
+
+  lines.push("", "## Findings", "");
+  if (findings.length === 0) {
+    lines.push("No drift findings.");
+  } else {
+    for (const finding of findings) {
+      lines.push(`- [${finding.status}] ${finding.scope} :: ${finding.row} :: ${finding.surface} :: ${finding.filePath || "(no file)"} :: ${finding.detail}`);
+    }
+  }
+
+  lines.push("", "## Governance Lint", "");
+  lines.push("Verifies that no canonical workflow, support skill, or agent re-introduces a Read instruction for `.github/skills/compact-communication/SKILL.md` (the rules are ambient in `AGENTS.md` \u00a7Communication Style). The deprecation shim itself is exempt. Findings here are emitted as `stale-reference` and fail strict mode alongside the wrapper drift checks.");
+  lines.push("Verifies that the ambient writing-quality contract preserves meaning and exact content boundaries, that its expanded reference retains the semantic safeguards and self-audit, and that runtime files do not load `.github/skills/writing-quality/SKILL.md` during ordinary execution.");
+  lines.push("Verifies that the ambient `AGENTS.md` \u00a7Artifact Conventions primer retains its format grammars, immutable-ID rules, checkbox transition, and artifact size limits, and that canonical workflows, support skills, and agents do not re-introduce a load instruction for `.github/skills/artifact-conventions/SKILL.md`. The expanded document remains an intentional reference lookup only.");
+  lines.push(`Verifies that top-level sections in \`AGENTS.md\` stay within the reviewed universal allowlist: ${[...AGENTS_SECTION_ALLOWLIST.keys()].map((heading) => `\`${heading}\``).join(", ")}. Unallowlisted sections are emitted as \`agents-section-drift\` and fail strict mode; move project-specific rules to \`project-instructions.md\` or review the allowlist entry.`);
+
+  lines.push("", "## Mermaid", "", "```mermaid", mermaid, "```", "");
+  return lines.join(os.EOL);
+}
+
+function workflowMatrixTable(rows) {
+  const header = ["| Workflow | Category | Prerequisites | Canonical Workflow | Copilot | Claude | Codex | Antigravity | OpenCode | Windsurf |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"];
+  const body = rows.map((row) => [
+    `| ${row.id}`,
+    `${row.category}`,
+    `${row.prerequisites.length > 0 ? row.prerequisites.join("<br>") : "none"}`,
+    `${row.canonicalWorkflow}`,
+    `${row.surfaces.copilot.status}`,
+    `${row.surfaces.claude.status}`,
+    `${row.surfaces.agentsSkill.status}`,
+    `${row.surfaces.agentsWorkflow.status}`,
+    `${row.surfaces.openCodeCommand.status}`,
+    `${row.surfaces.windsurf.status} |`,
+  ].join(" | "));
+  return [...header, ...body].join(os.EOL);
+}
+
+function agentMatrixTable(rows, findings) {
+  const header = ["| Canonical Agent | Copilot | Claude | OpenCode Agent | Codex |", "| --- | --- | --- | --- | --- |"];
+  const body = rows.map((row) => {
+    const surfaces = Object.fromEntries(agentDisplaySurfaces(row, findings).map(({ key, result }) => [key, result]));
+    return `| ${row.id} | ${surfaces.copilot.status} | ${surfaces.claude.status} | ${surfaces.openCodeAgent.status} | ${surfaces.codex.status} |`;
+  });
+  return [...header, ...body].join(os.EOL);
+}
+
+function agentDisplaySurfaces(row, findings) {
+  const contract = delegatedAgentContractsById.get(row.id);
+  return [
+    {
+      key: "copilot",
+      label: "Copilot",
+      result: row.displayHosts?.copilot === false ? { status: NA_STATUS } : displayAgentHostResult(contract?.hosts.copilot, findings.filter((finding) => (
+        (finding.surface === "Canonical Agent Registry" && finding.row === row.id)
+        || (finding.surface === "Copilot Delegate Graph" && finding.filePath === contract?.hosts.copilot)
+      ))),
+    },
+    {
+      key: "claude",
+      label: "Claude",
+      result: row.displayHosts?.claude === false ? { status: NA_STATUS } : displayAgentHostResult(contract?.hosts.claude, findings.filter((finding) => (
+        finding.filePath === contract?.hosts.claude
+        && ["Claude Agent", "Claude Agent Graph"].includes(finding.surface)
+      ))),
+    },
+    { key: "openCodeAgent", label: opencodeAgentSurface.label, result: row.surfaces.openCodeAgent },
+    { key: "codex", label: codexAgentSurface.label, result: row.surfaces.codex },
+  ];
+}
+
+function displayAgentHostResult(hostPath, findings) {
+  if (!hostPath) return { status: NA_STATUS };
+  const rank = new Map([["missing", 4], ["stale-reference", 3], ["normalized-drift", 2], ["unsupported-extra", 1]]);
+  return { status: findings.reduce((status, finding) => (rank.get(finding.status) > (rank.get(status) ?? 0) ? finding.status : status), OK_STATUS) };
+}
+
+function renderMermaid(workflowRows, agentRows, findings) {
+  const lines = [
+    "flowchart TB",
+    "  classDef ok fill:#daf5d7,stroke:#2f7d32,color:#123a18;",
+    "  classDef fail fill:#fde2e1,stroke:#c62828,color:#4a1111;",
+    "  classDef neutral fill:#eceff1,stroke:#546e7a,color:#22313a;",
+  ];
+
+  for (const row of workflowRows) {
+    const rowId = sanitizeId(`wf-${row.id}`);
+    lines.push(`  ${rowId}["${escapeMermaid(`${row.id} -> ${row.canonicalWorkflow}`)}"]`);
+    for (const surface of workflowSurfaces) {
+      const result = row.surfaces[surface.key];
+      const nodeId = sanitizeId(`${row.id}-${surface.key}`);
+      lines.push(`  ${nodeId}["${escapeMermaid(`${surface.label}: ${result.status}`)}"]`);
+      lines.push(`  ${rowId} --> ${nodeId}`);
+      lines.push(`  class ${nodeId} ${result.status === OK_STATUS ? "ok" : result.status === NA_STATUS ? "neutral" : "fail"};`);
+    }
+    lines.push(`  class ${rowId} neutral;`);
+  }
+
+  for (const row of agentRows) {
+    const rowId = sanitizeId(`agent-${row.id}`);
+    lines.push(`  ${rowId}["${escapeMermaid(row.id)}"]`);
+    for (const { key: surfaceKey, label, result } of agentDisplaySurfaces(row, findings)) {
+      const nodeId = sanitizeId(`${row.id}-${surfaceKey}`);
+      lines.push(`  ${nodeId}["${escapeMermaid(`${label}: ${result.status}`)}"]`);
+      lines.push(`  ${rowId} --> ${nodeId}`);
+      lines.push(`  class ${nodeId} ${result.status === OK_STATUS ? "ok" : result.status === NA_STATUS ? "neutral" : "fail"};`);
+    }
+    lines.push(`  class ${rowId} neutral;`);
+  }
+
+  return lines.join(os.EOL);
+}
+
+export function summarizeReport(workflowRows, agentRows, findings) {
+  const byStatus = {
+    [OK_STATUS]: 0,
+    [NA_STATUS]: 0,
+    missing: 0,
+    "stale-reference": 0,
+    "normalized-drift": 0,
+    "unsupported-extra": 0,
+    "agents-section-drift": 0,
+  };
+
+  for (const row of workflowRows) {
+    for (const result of Object.values(row.surfaces)) byStatus[result.status] += 1;
+  }
+  for (const row of agentRows) {
+    for (const { result } of agentDisplaySurfaces(row, findings)) byStatus[result.status] += 1;
+  }
+
+  for (const finding of findings) {
+    const representedWorkflowCell = finding.scope === "workflow"
+      && workflowSurfaces.some((surface) => surface.label === finding.surface)
+      && workflowRows.some((row) => row.id === finding.row);
+    const representedAgentCell = finding.scope === "agent" && agentRows.some((row) => row.id === finding.row);
+    if (representedWorkflowCell || representedAgentCell) continue;
+    if (!(finding.status in byStatus)) {
+      byStatus[finding.status] = 0;
+    }
+    byStatus[finding.status] += 1;
+  }
+
+  return { byStatus, failing: findings.filter((finding) => FAILING_STATUSES.has(finding.status)).length };
+}
+
+async function parseWorkflowSurfaceFile(filePath) {
+  const exists = await pathExists(filePath);
+  if (!exists) {
+    return {
+      exists: false,
+      filePath,
+      delegates: [],
+      normalizedComparable: "",
+    };
+  }
+  const content = await readFile(filePath, "utf8");
+  const parsed = parseWorkflowDocument(content, { canonicalizeBundlePaths: true });
+  return {
+    ...parsed,
+    exists: true,
+    filePath,
+  };
+}
+
+
+
+function parseWorkflowDocument(content, options) {
+  const canonicalized = options.canonicalizeBundlePaths ? canonicalizeBundledPaths(content) : content;
+  const { body, frontmatter } = stripFrontmatter(canonicalized);
+  const targetSkill = extractWorkflowTarget(body);
+  const delegates = extractDelegateIds(body);
+  const delegationMode = inferDelegationMode(body);
+  const normalizedComparable = normalizeComparableBody(body);
+
+  return {
+    surfaceKey: null,
+    frontmatter,
+    skillName: frontmatter?.match(/^name:\s*([^\s]+)\s*$/m)?.[1] ?? null,
+    body,
+    targetSkill,
+    delegates,
+    delegationMode,
+    hasLoadWorkflowLine: Boolean(targetSkill),
+    hasInputSection: /(^|\n)## Input\n/.test(body),
+    hasAutopilotBlock: body.includes("AUTOPILOT = true"),
+    hasProgressDirective: /Report[^\n]*progress/i.test(body),
+    agentReference: body.match(/^@([a-z0-9-]+)$/m)?.[1] ?? frontmatter?.match(/^agent:\s*([a-z0-9-]+)/m)?.[1] ?? null,
+    normalizedComparable,
+  };
+}
+
+function parseCanonicalAgent(content, contract) {
+  const { frontmatter, body } = stripFrontmatter(content);
+  const methodology = contract.kind === "methodology";
+  const targetSkill = methodology ? null : contract.workflow;
+  const targetAgent = methodology ? contract.canonicalPath : null;
+  const delegates = extractDelegateIds(body);
+  const kind = methodology ? "methodology" : "workflow";
+  const parsedName = frontmatter?.match(/^name:\s*(.+?)\s*$/m)?.[1] ?? null;
+  const parsedWorkflow = methodology ? null : extractWorkflowTarget(body);
+  const parsedCapabilities = parseInlineStringArray(frontmatter, "required-capabilities");
+  const registryIssues = [];
+  if (parsedName !== contract.name) registryIssues.push(`Expected name ${contract.name}, found ${parsedName || "none"}`);
+  if (parsedWorkflow !== contract.workflow) registryIssues.push(`Expected workflow ${contract.workflow}, found ${parsedWorkflow || "none"}`);
+  if (JSON.stringify(parsedCapabilities) !== JSON.stringify(contract.requiredCapabilities)) {
+    registryIssues.push(`Expected required capabilities ${contract.requiredCapabilities.join(", ") || "none"}, found ${parsedCapabilities.join(", ") || "none"}`);
+  }
+
+  return {
+    id: contract.id,
+    kind,
+    targetSkill,
+    targetAgent: targetAgent ?? contract.canonicalPath,
+    delegates,
+    summary: targetAgent || targetSkill || "self",
+    registryIssues,
+  };
+}
+
+async function loadOpenCodeAgents() {
+  const wrappers = [];
+  for (const filePath of (await listFiles(opencodeAgentSurface.dir)).filter((file) => file.endsWith(".md"))) {
+    const content = await readFile(filePath, "utf8");
+    const parsed = parseWorkflowDocument(content, { canonicalizeBundlePaths: false });
+    const targetAgent = parsed.body.match(/Read and follow the methodology in `([^`]+)`\./)?.[1] ?? null;
+    const modeIssue = !/^---[\s\S]*mode:\s*subagent/m.test(content) ? "Missing or invalid subagent mode frontmatter" : null;
+    wrappers.push({
+      surfaceKey: opencodeAgentSurface.key,
+      filePath,
+      kind: targetAgent ? "methodology" : "workflow",
+      targetSkill: parsed.targetSkill,
+      targetAgent,
+      delegates: parsed.delegates,
+      modeIssue,
+    });
+  }
+  return wrappers;
+}
+
+async function loadCodexAgents() {
+  const wrappers = [];
+  for (const filePath of (await listFiles(codexAgentSurface.dir)).filter((file) => file.endsWith(".toml"))) {
+    const content = await readFile(filePath, "utf8");
+    const targetAgent = content.match(/Read and follow the methodology in `([^`]+)`\./)?.[1] ?? null;
+    wrappers.push({
+      surfaceKey: codexAgentSurface.key,
+      filePath,
+      kind: "methodology",
+      targetAgent,
+      delegates: [],
+      modeIssue: null,
+    });
+  }
+  return wrappers;
+}
+
+function extractCanonicalDelegateIds(content) {
+  return [...new Set([...content.matchAll(/\.github\/agents\/(_[a-z0-9-]+)\.md/g)].map((match) => match[1].slice(1)))].sort();
+}
+
+function extractDelegateIds(body) {
+  const ids = [];
+  const lines = body.split(/\r?\n/);
+  let delegateContext = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      delegateContext = false;
+      continue;
+    }
+
+    if (/delegate/i.test(trimmed)) {
+      delegateContext = true;
+    }
+
+    if (!delegateContext) {
+      continue;
+    }
+
+    for (const candidate of extractDelegateCandidates(trimmed)) {
+      ids.push(candidate);
+    }
+  }
+  return [...new Set(ids)].sort();
+}
+
+function extractDelegateCandidates(line) {
+  const candidates = [];
+
+  for (const match of line.matchAll(/\.github\/agents\/_?([a-z0-9-]+)\.md/g)) {
+    candidates.push(match[1]);
+  }
+  for (const match of line.matchAll(/`sddp-([a-z0-9-]+)`/g)) {
+    candidates.push(match[1]);
+  }
+  for (const match of line.matchAll(/`([A-Z][A-Za-z0-9]+)`/g)) {
+    candidates.push(camelToKebab(match[1]));
+  }
+
+  return candidates;
+}
+
+function normalizeDelegateTarget(target) {
+  const markdownAgent = target.match(/\.github\/agents\/_?([a-z0-9-]+)\.md/);
+  if (markdownAgent) {
+    return markdownAgent[1];
+  }
+  const sddpAgent = target.match(/`sddp-([a-z0-9-]+)`/);
+  if (sddpAgent) {
+    return sddpAgent[1];
+  }
+  const camelAgent = target.match(/`([A-Za-z][A-Za-z0-9]+)`/);
+  if (camelAgent) {
+    return camelToKebab(camelAgent[1]);
+  }
+  return null;
+}
+
+function inferDelegationMode(body) {
+  if (body.includes("via Task") || body.includes("Task tool to invoke") || body.includes("use the Task tool to invoke")) {
+    return "task-tool-subagent";
+  }
+  if (body.includes("invoke the corresponding subagent") || body.includes("invoke `sddp-")) {
+    return "invoke-subagent";
+  }
+  if (/read the (?:exact )?referenced sub-agent file/i.test(body) || body.includes("read `.github/agents/_") || body.includes("Read `.github/agents/_")) {
+    return "read-agent-file";
+  }
+  if (body.includes("Read and follow the methodology")) {
+    return "methodology-follow";
+  }
+  return null;
+}
+
+function normalizeComparableBody(body) {
+  return body
+    .replace(/^@([a-z0-9-]+)\n+/m, "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
+function canonicalizeBundledPaths(content) {
+  return content
+    .replace(/references\/shared-skills\/([a-z0-9-]+)\/SKILL\.md/g, ".github/skills/$1/SKILL.md")
+    .replace(/references\/shared-skills\/([a-z0-9-]+)\/assets\//g, ".github/skills/$1/assets/")
+    .replace(/references\/shared-agents\/([A-Za-z0-9._-]+\.md)/g, ".github/agents/$1")
+    .replace(/references\/shared-instructions\/([A-Za-z0-9._\/-]+)/g, ".github/instructions/$1");
+}
+
+function stripFrontmatter(content) {
+  if (!content.startsWith("---\n")) {
+    return { frontmatter: null, body: content };
+  }
+  const end = content.indexOf("\n---\n", 4);
+  if (end === -1) {
+    return { frontmatter: null, body: content };
+  }
+  return {
+    frontmatter: content.slice(4, end),
+    body: content.slice(end + 5),
+  };
+}
+
+function parseInlineStringArray(frontmatter, field) {
+  const value = frontmatter?.match(new RegExp(`^${field}:\\s*(.+?)\\s*$`, "m"))?.[1];
+  if (!value) return [];
+  return [...value.matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
+}
+
+function camelToKebab(value) {
+  return value
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .toLowerCase();
+}
+
+function extractWorkflowTarget(body) {
+  const patterns = [
+    /Load and follow the workflow in `([^`]+)`\.?/,
+    /Load and follow the workflow defined in `([^`]+)`\.?/,
+    /Follow `([^`]+)`\.?/,
+    /Follow the workflow in `([^`]+)`\.?/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = body.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+function sanitizeId(value) {
+  return value.replace(/[^A-Za-z0-9_]/g, "_");
+}
+
+function escapeMermaid(value) {
+  return value.replace(/"/g, "'");
+}
+
+function relativePath(targetPath) {
+  if (!targetPath) {
+    return null;
+  }
+  return path.relative(repoRoot, targetPath) || ".";
+}
+
+async function listFiles(directory) {
+  if (!(await pathExists(directory))) {
+    return [];
+  }
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listFiles(fullPath)));
+      continue;
+    }
+    if (entry.isFile()) {
+      files.push(fullPath);
+    }
+  }
+  return files.sort();
+}
+
+async function readRequiredText(filePath, label) {
+  if (!(await pathExists(filePath))) {
+    throw new Error(`Missing required ${label}: ${relativePath(filePath)}`);
+  }
+  return readFile(filePath, "utf8");
+}
+
+async function pathExists(targetPath) {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeTextFile(targetPath, content) {
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, content, "utf8");
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

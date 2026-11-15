@@ -172,6 +172,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
     s->sequence = header->sequence;
     s->battery_pct = header->battery_pct;
     s->last_rssi = header->rssi;
+    if (!s->online) s->reconnect_count++;
     s->last_seen = millis();
     s->online = true;
     // Extract node IP from ESP-NOW header (v2+)
@@ -239,6 +240,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_LIGHT: {
             if (payload_len >= sizeof(payload_onoff_t)) {
                 payload_onoff_t *p = (payload_onoff_t*)payload;
+                if (s->state.onoff.state == 0 && p->state != 0) s->activation_count++;
                 s->state.onoff.state = p->state;
             }
             break;
@@ -281,6 +283,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             memcpy(&s->state.generic, payload, sizeof(payload_int_t));
             s->state.generic.label[sizeof(s->state.generic.label) - 1] = '\0';
             // Espelha 0/1 em onoff.state (união compatível) p/ fallback dashboard/MQTT
+            if (s->state.onoff.state == 0 && s->state.generic.value == 1) s->activation_count++;
             s->state.onoff.state = (s->state.generic.value <= 1) ? (uint8_t)s->state.generic.value
                                                                  : s->state.onoff.state;
             break;

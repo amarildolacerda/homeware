@@ -135,6 +135,7 @@ Análise comparativa entre o que o mercado de IoT/Agronegócio demanda em 2025-2
 1. **Notificações Telegram** — alertas de alarme, device offline, resumo diário
    - 📋 **SPEC:** `hub/SPEC_telegram.md`
    - ✅ **Dashboard:** Configuração via `/settings` (token, chat_id, enable/disable)
+   - 📋 **Pendente:** resumo diário com estatísticas por nó (reconexões, acionamentos, uptime) — agregar contadores no sensor_registry e incluir no relatório 08:00
 2. **Availability MQTT** — ✅ JÁ IMPLEMENTADO
 3. **Google Home via HA** — ✅ **JÁ DISPONÍVEL** no HA (Nabu Casa ou manual)
 4. **Dashboard charts** — ✅ **JÁ DISPONÍVEL** no HA (Grafana, ApexCards, Energy Dashboard)

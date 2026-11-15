@@ -258,6 +258,7 @@ static void handle_toggle(long chat_id, int slot) {
     if (device_send_command(s->mac, s->slot, new_state)) {
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
+        if (s->state.onoff.state == 0 && new_state != 0) s->activation_count++;
         s->state.onoff.state = new_state;
         s_last_lamp_state[slot] = new_state;
         s_last_kb_push = millis();
@@ -547,8 +548,14 @@ static void check_alerts() {
     // Relatório diário 08:00
     if (tm_now && tm_now->tm_hour==8 && tm_now->tm_min==0 && is_alert_type_enabled(9) && is_alert_level_enabled(3) && check_throttle(s_tg_throttle_daily, THROTTLE_DAILY_MS)) {
         int paired=sensor_registry_count_paired(); int online=sensor_registry_count_online();
-        char b[160]; snprintf(b,sizeof(b),"🟢 Resumo diário: %d/%d online | Heap %u | Uptime %lu min", online, paired, ESP.getFreeHeap(), millis()/60000);
+        char b[512]; snprintf(b,sizeof(b),"🟢 Resumo diário: %d/%d online | Heap %u | Uptime %lu min", online, paired, ESP.getFreeHeap(), millis()/60000);
         telegram_send_alert("🟢", b);
+        for (int i=0;i<MAX_VIRTUAL_SENSORS;i++){
+            virtual_sensor_t *s=sensor_registry_get(i);
+            if (!s || !s->paired) continue;
+            char n[96]; snprintf(n,sizeof(n),"   • %s: %s | recon=%u acion=%u", s->name, s->online?"online":"offline", s->reconnect_count, s->activation_count);
+            telegram_send_alert("📊", n);
+        }
     }
 }
 

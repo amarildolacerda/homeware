@@ -1,0 +1,322 @@
+# SDD Pilot — Reference
+
+This document contains detailed reference material for SDD Pilot internals, agent mappings, configuration, and conventions. For an overview and getting started guide, see [README.md](../README.md).
+
+## Artifact Taxonomy
+
+SDD Pilot organizes repository artifacts into five layers:
+
+- **Workspace Control Plane**: repo-root governance and coordination files such as `project-instructions.md`, `.github/sddp-config.md`, `AGENTS.md`, and `CLAUDE.md`
+- **Project Context Specs**: canonical product, technical, operational, and planning specs at the root of `specs/`
+- **Feature Workspaces**: per-feature delivery artifacts under `specs/<feature-folder>/`
+- **Framework Internals**: workflow, agent, skill, rule, and wrapper directories such as `.github/sddp/workflows/`, `.github/agents/`, `.github/skills/`, `.github/instructions/`, `.claude/`, `.agents/`, `.windsurf/`, `.opencode/`, and `.codex/`
+- **Runtime and Distribution**: packaging and release assets in `scripts/` and the release workflows
+
+In installed projects, root `AGENTS.md` contains the downstream runtime contract. In the framework source checkout, root `AGENTS.md` contains developer instructions and tells agents to stop SDD command execution. The runtime contract is maintained in `templates/downstream/AGENTS.md` and staged as root `AGENTS.md` in all six host archives. Source validation uses `--context source`; installed validation defaults to `--context installed`. Pipeline smoke tests belong in staged consumer fixtures, not the framework checkout. No feature-artifact migration is required.
+
+## Project Context Specs
+
+### Existing-project onboarding
+
+`/sddp-reverseengineer [scope/context]` inspects existing local evidence and coordinates owner-compatible bootstrap candidates. `--resume` continues `specs/reverse-engineering.md`; `--status` is read-only. The ledger's marked schema-1 JSON block preserves append-only `RE-###` evidence/inference/question/decision records, source digests, coverage, checkpoints, per-output confirmation/readiness, and publication provenance. Candidates and ignored private recovery data live under `specs/reverse-engineering/`; neither is canonical.
+
+`scripts/onboarding-state.mjs` validates checkpoints, detects stale evidence, provides target-scoped read/write gates, and journals approved candidate/live/config publication. `validate-dod.mjs` checks structural reference usability. `validate-project-plan.mjs` checks canonical PRD/SAD readiness, capability-digest freshness, epic/detail grammar, protected history, and brownfield baseline dispositions. No onboarding ledger leaves existing readiness consumers unchanged.
+
+Imported baseline coverage is recorded as a marked `sddp-baseline-coverage` JSON block inside the plan's Coverage Validation section, retaining the existing checklist and source-tag grammars. Baselines are not epic completions or QC evidence. Every new unchecked brownfield epic needs an attributed future-work decision; a zero-epic plan needs explicit no-future-work confirmation. Project planning/amend preserve these dispositions. Autopilot distinguishes no planned epics from delivered epics; regen rejects empty checklists. See the [onboarding guide](sddp-reverseengineer-user-guide.md).
+
+Project bootstrap keeps these canonical specs at the root of `specs/`:
+
+```text
+specs/prd.md             # Product Requirements Document / Product Document
+specs/sad.md             # Software Architecture Document / Technical Context Document (index + topology)
+specs/dod.md             # Deployment & Operations Document
+specs/project-plan.md    # Project Implementation Plan
+specs/adrs/              # Standalone MADR Architecture Decision Records (source of truth for project-level decisions)
+```
+
+`specs/sad.md` is the default Technical Context Document. It records system decomposition, technical context, a concern-driven architecture view catalog, major `FLOW-###` data paths and recovery behavior, quality attributes, traceability, and an ADR catalog. C4 Context and Container views provide the static overview; standard Mermaid sequence, flowchart, state, and ER diagrams cover temporal, data, trust, deployment, and lifecycle concerns. Full decision records live exclusively under `specs/adrs/` as MADR files (e.g., `specs/adrs/0001-decision-title.md`). All ADR file mutations flow through the ADR Author subagent (`.github/agents/_adr-author.md`).
+
+### Product discovery command
+
+`/sddp-prd [--quick|--discover|--resume] [--skip-research] [product context]` passes its arguments and controls to the shared `product-document` workflow. It creates or refines exactly one canonical PRD and registers that path in `.github/sddp-config.md`. The default is `specs/prd.md`; a readable registered custom path remains the sole write target rather than creating a shadow `specs/prd.md`.
+
+| Control | Execution behavior |
+|---------|--------------------|
+| No mode flag / `--quick` | Focused default with at most two question batches. Creates no discovery or research artifact. |
+| `--discover` | Starts or reopens adaptive discovery and persists its staged evidence, decisions, questions, and readiness state. An active or ready-to-synthesize ledger must use `--resume`. |
+| `--resume` | Continues the persisted stage of an active or ready-to-synthesize discovery ledger. A missing, completed, or abandoned discovery cannot be resumed without an explicit restart decision. |
+| `--skip-research` | Skips Technical Researcher delegation; combines with quick, discover, or resume mode. |
+
+Every client remains interactive when the shared workflow requests a decision: it asks explicitly, waits for the complete answer, treats recommendations as guidance only, and accepts free-form input where allowed. Silence or a partial response is never consent. External work can be delegated only to the Technical Researcher, and milestone progress is reported.
+
+Adaptive discovery uses two durable artifacts:
+
+- `specs/prd-discovery.md` is the resumable ledger. It preserves stable `EVD-###`, `HYP-###`, `PDD-###`, and `PDQ-###` IDs plus `active`, `ready-to-synthesize`, `completed`, or `abandoned` state. A pause is `active` with `awaiting_user: true`.
+- `specs/prd-research.md` is written only when external research runs. It records findings and sources mapped back to discovery evidence; recommendations never decide scope or stakeholder consensus.
+
+Before registration, `/sddp-prd` runs `node scripts/validate-prd.mjs` against both the temporary candidate and the live canonical PRD. The validator checks frontmatter maturity, required product sections, prioritized stable `CAP-###` rows, prohibited implementation content, and downstream context. A valid `draft` may retain unresolved product blockers. The `planning-ready` profile additionally requires all five downstream categories and at least one P1 capability.
+
+`/sddp-systemdesign` automatically classifies architecture complexity from domain, deployment, storage, integration, asynchronous, trust, regional, and reliability signals. Simple systems use a focused path. Compound and complex systems require explicit approval of the proposed decomposition, major flow inventory, and final architecture preview. Diagram notation is selected by concern rather than forcing every view into C4.
+
+Before registration, `/sddp-systemdesign` runs `node scripts/validate-sad.mjs` against both a temporary candidate and the live canonical SAD. The validator checks schema/maturity, Technical Context fields, decomposition and view tables, C4 overviews, per-view node limits, flow-to-diagram linkage, recovery coverage, measurable quality targets, traceability, ADR catalog shape, and registration. `planning-ready` is required by Project Planning and Autopilot; `draft` remains available for unresolved architecture work.
+
+`/sddp-systemdesign` and `/sddp-init` can consume the registered Product Document. `/sddp-projectplan` and `/sddp-autopilot` run fail-closed `planning-ready` validators for both the PRD and SAD. Active matching product discovery blocks both and routes back to `/sddp-prd --resume`. Project planning persists a PRD capability digest so later runs can detect stale product plans.
+
+## Feature Workspace Structure
+
+Each feature produces artifacts under `specs/<feature-folder>/`:
+
+```
+specs/<feature-folder>/
+├── spec.md          # Feature specification (user stories, requirements, success criteria)
+├── plan.md          # Implementation plan (tech context, architecture, instructions check, acceptance test stubs)
+├── tasks.md         # Phased task list (setup → foundational → user stories → polish)
+├── research.md      # Technology research and decisions
+├── data-model.md    # Entity definitions and relationships (conditional)
+├── contracts/       # API contracts (conditional)
+├── checklists/      # Requirements quality checklists (*.md)
+├── qc-report.md     # Quality control results (test, lint, security, coverage, traceability)
+├── manual-test.md   # Manual test script (conditional — when visual/interactive testing needed)
+├── .completed       # Implementation complete marker (set by /sddp-implement)
+├── .implement-state # Ephemeral local Developer-slice checkpoint (gitignored)
+├── autopilot-log.md # Autopilot decision audit log (when autopilot is used)
+├── divergence-log.md # Self-healing amendment audit log (set by /sddp-implement when the Developer diverges from plan)
+└── .qc-passed       # QC passed marker (set by /sddp-qc)
+```
+
+### Feature reruns and migration
+
+Existing Feature Workspaces are refined, not regenerated. `/sddp-specify`, `/sddp-plan`, `/sddp-tasks`, and `/sddp-checklist` preserve immutable IDs, checked lines, phase headers, BUG history, checklist paths, and downstream references; Autopilot never treats unattended mode as permission to overwrite them. Task reruns reconcile missing work by appending IDs above the current maximum, checklist queues merge without resetting `CHL###` state, and every new checklist receives an immutable unique path.
+
+Destructive regeneration is an interactive-only migration. It requires approval for the exact affected files and complete old-ID → new-ID mapping, an atomic update of every downstream reference, and validation that no checked line, unmapped ID, or referenced path was lost. Any missing approval or failed validation leaves the original bytes unchanged; compatibility aliases are not created for silent renumbering.
+
+### Acceptance test stubs (P1)
+
+When `plan.md` has a populated `## Acceptance Test Stubs` section, `/sddp-tasks` emits a stub-creation task per P1 requirement as the first task of that requirement's work-item phase, and `/sddp-implement` parses the section into `STUB_MAP` and passes an array-normalized `AcceptanceStubs` input to the Developer. The Developer creates the stub test file in RED state (pending/skip/failing-assertion), then implements the requirement until the matching stub blocks turn GREEN — giving every P1 requirement a per-requirement pass/fail signal during Implement instead of relying on lint/compilation alone. Stub test files live at the `Test File` paths declared in the plan section, following the `## Testing Strategy` Unit tier convention (co-located or `tests/` sibling). Scope is P1 only.
+
+### Requirement self-verification (Step 3.5)
+
+When a task carries a requirement tag (`FR-###`/`TR-###`/`OR-###`/`RR-###`) and `plan.md` has a matching `## Requirement Coverage Map` row, `/sddp-implement` passes an `ExpectedEvidence` input (`{reqID, filePaths, functions}`) to the Developer. After implementing, the Developer greps each expected file for its expected symbol(s) and reports a `requirement-gap` FAILURE on any miss. For reqIDs without an `AcceptanceStub`, the Developer also runs a happy-path test coverage sub-check: it greps conventional test locations (co-located `*.test.*`/`*_test.*` siblings of each expected file plus repo `tests/` and `__tests__/` directories) for the reqID tag or any expected function symbol, and reports `requirement-gap` when no test references the requirement. The happy-path grep is skipped when an `AcceptanceStub` exists for the reqID (the Step 3 GREEN check is authoritative for stubbed P1 requirements), avoiding double-gating. On pass, the Developer Report notes "requirement evidence verified for [reqID(s)]" plus "happy-path test verified for [reqID(s)]" (the happy-path note is omitted when every reqID was stubbed). This couples the per-task definition of done to the spec, not just code health — a stub that compiles and declares the right symbols can no longer pass without a test exercising the requirement.
+
+### Implementation review findings
+
+`.review-findings` is version 1 canonical JSON Lines. Every line has exactly `version`, `task`, `requirements`, `type`, `evidence`, and `paths` in that order with no extra whitespace; requirements and repository-relative paths are arrays, so multiple values have no positional meaning. Paths must be existing canonical descendants of the repository root: control characters, traversal, missing paths, aliases, and symlink escapes block QC. `/sddp-implement` validates an existing file before appending canonical, deduplicated records and validates the result before creating `.completed`. `/sddp-qc` uses `.github/sddp/workflows/quality-control/scripts/parse-review-findings.mjs` and blocks before verification, reporting, or BUG generation on malformed, noncanonical, unknown-version, unknown-type, or legacy pipe input. The Story Verifier preserves each record and may return BUG targets only as evidence-confirmed `{requirement, path, description}` objects, which the QC report records. Valid findings remain evidence across QC reruns and are removed only with Feature Workspace archival or deletion.
+
+### Developer confidence scoring
+
+The Developer Report (`_developer.md` Step 4) includes a required `Confidence: CONFIDENT | TENTATIVE | UNCERTAIN` field with a one-line evidence statement on every SUCCESS (omitted on FAILURE, since FAILURE is already the escalation). The level is chosen from the Step 3/3.5/3.7/3.8 outcomes: `CONFIDENT` is the default when all objective checks pass (validation/lint/stub-GREEN, requirement + happy-path evidence, VERIFY assertions, export contracts when `Exports` present); `TENTATIVE` when objective checks pass but the agent is unsure the behavior is correct; `UNCERTAIN` when the agent doubts the implementation is correct. `/sddp-implement` parses the field and auto-escalates without user interaction: CONFIDENT enters ephemeral in-review state as-is; TENTATIVE remains unchecked, gets extra orchestrator verification (re-run the task's test file, verify `→ exports:` against `contracts/` when present), and enters `TENTATIVE_TASKS` only on pass with no Developer retry; UNCERTAIN remains unchecked and routes into the existing On FAILURE error-recovery loop with the one-line uncertainty evidence appended to `PriorAttempts` so the retry gets richer context (a second UNCERTAIN follows the existing second-failure path). Sequential and parallel tasks transition from `[ ]` to `[X]` exactly once, only after their Developer, confidence, VERIFY, export, Phase Review, and required Micro-QC checks pass. At the Step 6 final summary, `TENTATIVE_TASKS` are listed and written to `FEATURE_DIR/.review-findings` as QC priority-review checks, so low-confidence completions surface to QC automatically instead of passing silently. This is orthogonal to #31's objective `requirement-gap` check: #31 catches missing evidence, #33 captures subjective uncertainty — a task can pass every objective check and still be TENTATIVE or UNCERTAIN.
+
+### Export contract verification (Step 3.8)
+
+The `→ exports: Symbol(params)` annotations in `tasks.md` create an implicit contract between a producer task and its downstream consumers. Before #32, nothing verified this contract at task-completion time — a consumer's import error would surface phases later as a cryptic failure, with no trace-back to the producer. Now the Developer runs Section 3.8 after Section 3.7 for every task with a non-empty `exports` array, catching a broken export at the producer before any consumer depends on it. Three sub-checks per declared `Symbol(params)`: **existence** (grep the declared `FilePath` for the symbol declaration; for JS/TS require an `export` keyword so a symbol declared but not exported fails); **importability** (stack-aware one-liner — `python -c "from <module> import <Symbol>"` for Python, `node --input-type=module -e "import('<module>').then(…)"` for JS ESM, `tsc --noEmit` on a scratch import / `tsx`/`ts-node` for TypeScript, `go build ./<pkg>` for Go, `cargo check` for Rust, project build/typecheck for other compiled languages); **signature match** (parse the declared parameter count from `Symbol(params)` and compare against the actual declaration — param count only for untyped stacks, param count + return type for typed stacks where the actual return type is statically determinable). The first failure is `errorType: export-contract` and routes into the existing per-task error-recovery loop. On pass, the Developer Report notes "export contracts verified for [symbol(s)]" and the Step 4 CONFIDENT guidance counts Section 3.8 among its objective checks.
+
+When a consumer task fails with `errorType: import` or `export-contract`, `/sddp-implement` applies a **consumer→producer trace-back** before retrying the consumer: it inspects the failing task's `imports[]` for a `sourceTask` referencing a producer, re-runs the producer's Section 3.8 check for the imported symbol, and — if the producer fails — fixes the producer first, marks it `[X]`, and only then retries the consumer. This avoids wasting a consumer retry on an intact consumer with a broken producer, and generalizes the existing parallel-batch trace-back rule to sequential tasks. When the task has no resolvable producer (no `imports[]`, `sourceTask == "plan"`, or the producer is already `[X]` and confirmed), trace-back is skipped and normal auto-fix + retry proceeds. Phase Review step 5 (behavioral spot-check) and Micro-QC export/contract conformance remain as safety nets; Section 3.8 is the early-warning per-task layer.
+
+### Developer scoped slices and implementation state
+
+Issue #53 keeps `.github/agents/_developer.md` as the canonical, always-required compact core. The detailed validation procedure remains reachable at `.github/sddp/workflows/implement-tasks/references/developer-validation.md`. Every delegation carries a versioned `DeveloperSlice` (`schema: developer-slice/v1`, `version: 1`) with task details, `ScopedContext.Summary`/source sections, artifact paths, `Imports`, `Exports`, canonical `PriorExports`, `ExpectedEvidence`, array-normalized `AcceptanceStubs`, `Verify`, and loop/retry fields. The slice is rebuilt from current Task Tracker, `COVERAGE_MATRIX`, and `STUB_MAP` data rather than copying a previous prompt.
+
+Dispatch is explicit: first invocation uses the core, detailed procedure, and scoped context; a same-live-context repeat may use only the fresh serialized slice because the core and procedure remain cached in that trusted context. T001 → T002 is a slice rebuild, not a procedure reset, when the trusted continuation, procedure fingerprint, and scoped artifact fingerprints remain valid. Changed plan/spec/scoped artifacts or missing/untrusted continuation require reset/full bootstrap. Retries retain the complete slice shape and refresh attempts, evidence, stubs, VERIFY assertions, and export inputs. Producer trace-back, Micro-QC, parallel retries, resume, and Implement+QC iterations use the same rules. A durable `preamble_sent` flag, state-file presence, matching task ID, or timestamp never proves live agent memory. When no wrapper supplies a trustworthy continuation ID, the portable safe fallback always sends the compact core plus detailed bootstrap content.
+
+Before each Developer delegation, `/sddp-implement` checkpoints `FEATURE_DIR/.implement-state` with `schema: implement-state/v1`, `version`, `runId`, `contextId` copied from `ContinuationID`, `activeTask`, canonical serialized slice/fingerprint, canonical `priorExports` array, separate procedure/artifact/task fingerprints, phase counters, and timestamps. Task changes rebuild only the slice under a trusted live procedure; stale procedure/plan/spec/scoped artifacts force reset. Self-healing `COVERAGE_MATRIX` amendments invalidate the cached slice and force fresh evidence/stub construction. `tasks.md` remains the only completion source of truth. `.implement-state` is ephemeral, rebuildable, and ignored by Git via `.gitignore`.
+
+Canonical JSON uses UTF-8, recursively sorted object keys, no insignificant whitespace, and semantic array order. `PriorExports` entries are sorted `{TaskID, Symbol, FilePath, Signature}` objects; `AcceptanceStubs` is always `[]` or matching reqID entries.
+
+The contract-level tests measure UTF-8 bytes: the compact core has a 2,048-byte core budget, and representative first-bootstrap/repeat payloads are compared with the prior 17,766-byte prompt baseline. These tests validate documented payload construction, not an unimplemented runtime dispatcher.
+
+### Executable workflow evidence
+
+Workflow prose and wrapper declarations are declarative contracts. Behavioral claims use executable filesystem and temporary-Git tests: `workflow-state.mjs` covers task completion, rerun preservation, plan-gate initialization, QC baseline selection, and autopilot-log append behavior. Source-text assertions remain only where the Markdown declaration itself is the contract.
+
+The Implement orchestrator keeps conditional procedures as directly editable handwritten references rather than generated bundles. `references/self-healing-amendments.md` loads only after successful output containing `Divergence`; `references/micro-qc.md` loads only after delivery-phase review; `references/parallel-batches.md` loads only for consecutive incomplete `[P]` tasks. The canonical workflow retains the trigger and routing contract for each reference. Copilot command prompts keep their selected agent and canonical workflow target but do not repeat phase or delegate inventories already owned by the selected agent and workflow.
+
+### Autopilot pipeline context handoff
+
+`/sddp-autopilot` delegates `.github/agents/_context-gatherer.md` once during its gate check and retains the exact full Context Report as the in-turn `PIPELINE_CONTEXT` value. Specify, Clarify, Plan, Checklist, Tasks, Analyze, and Implement+QC consume that value; Implement+QC passes it to nested Implement and QC runs. Standalone commands omit the value and retain normal Context Gatherer delegation.
+
+The handoff supplies stable resolution data such as `FEATURE_DIR`, branch state, registered document paths, `AUTOPILOT`, and checklist settings. Completion is reported separately as `IMPLEMENTATION_COMPLETE`, `QC_COMPLETE`, `COMPLETION_STATE`, and `COMPLETION_ISSUES`; `scripts/derive-completion-state.mjs` validates tasks, markers, the PASS report, current evidence digests, and the marker's Git baseline plus relevant repository-state digest. A handoff is valid only while `CONTEXT_BLOCKED` is false, `FEATURE_DIR` is non-empty, and the current branch matches the captured `BRANCH` when Git is available. `HAS_*`, completion, queue, and other artifact-presence fields are snapshots only. Each phase re-reads mutable artifacts before its gates, so `spec.md`, `plan.md`, `tasks.md`, checklist queues, markers, and QC state remain live. `PIPELINE_CONTEXT` is not persisted to a feature workspace or used as proof of agent memory.
+
+Requirements use canonical ownership syntax: `- **FR-001** [US1]: ...` for product specs and `- **(TR|OR|RR)-###** [OBJ1]: ...` for technical or operational specs. Each requirement has exactly one existing owner, and the owner's declared `P1`/`P2`/`P3` priority is the requirement priority. Proximity never implies ownership.
+
+After Clarify completes or is skipped, autopilot runs `scripts/parse-requirement-ownership.mjs` and creates a separate ephemeral `P1_REQUIREMENT_SNAPSHOT` from the current `spec.md`. The same deterministic parser is used by Spec, Plan, and Tasks Validators. The snapshot contains the ordered P1 requirement IDs and a SHA-256 digest of the exact file bytes. Consumers accept it only when checksum and ordered IDs exactly equal fresh parser output; empty, partial, malformed, unreadable, parser-invalid, or mismatched snapshots retain mandatory live parsing. The validator is never skipped and no verdict or marker is cached. Standalone commands do not create the snapshot.
+
+### Task VERIFY annotations
+
+Tasks may carry one or more `[VERIFY: <command>]` annotations — machine-checkable acceptance assertions the Developer runs from the repo root before marking the task `[X]`. `/sddp-tasks` auto-emits them when a deterministic check is derivable: a `plan.md` `## Testing Strategy` test command scoped to the task's file/requirement, a `grep` for an `→ exports:` symbol declaration, or a build/typecheck targeting the task's file. `/sddp-implement` parses them via the Task Tracker (`task.verify`) and passes a `Verify` array to the Developer; the first non-zero exit (or no-match for `grep`) is `errorType: verify-failure` and routes into the existing per-task error-recovery loop (analyze output, fix, retry once). `/sddp-analyze` flags malformed annotations (empty / contains a literal `]`) as LOW. Lines with `[VERIFY:]` may extend to 300 characters (200 otherwise); commands MUST NOT contain a literal `]`.
+
+## Phase Artifacts
+
+### Project bootstrap phases
+
+| Phase | Command | Produces | Gate |
+|-------|---------|----------|------|
+| **Product Strategist** | `/sddp-prd` | Canonical PRD + config registration; discover/resume: `specs/prd-discovery.md`, conditional `specs/prd-research.md` | Candidate and live PRD validation; `planning-ready` required by Project Planning and Autopilot |
+| **Solution Architect** | `/sddp-systemdesign` | Canonical SAD, `specs/adrs/*.md`, config update | Candidate and live SAD validation; complexity-driven approvals for compound/complex systems |
+| **DevOps Strategist** | `/sddp-devops` | `specs/dod.md`, config update | None |
+| **Project Planner** | `/sddp-projectplan` | `specs/project-plan.md`, config update | Registered PRD and SAD must both pass `planning-ready` validation |
+| **Project Amender** | `/sddp-amend` | Coordinated bootstrap artifact updates, config-preserving inline workflow execution | `project-instructions.md` + PRD + SAD + project plan exist; DOD optional |
+| **Project Initializer** | `/sddp-init` | `project-instructions.md`, config update | None |
+| **Prototype Retrospective Analyst** | `/sddp-regen` | Archived prototype (`prototype/`), retrospective (`specs/prototype-retrospective.md`), and regenerated canonical documents | `prototype/` must not exist; completed epics exist |
+
+### Feature-delivery phases
+
+| Phase | Command | Produces | Gate |
+|-------|---------|----------|------|
+| **Specify** | `/sddp-specify` | `spec.md` | Feature description provided |
+| **Clarify** | `/sddp-clarify` | Updated `spec.md` (clarifications + stress-test findings) | `spec.md` exists |
+| **Plan** | `/sddp-plan` | `plan.md`, `research.md`, conditionally `data-model.md`, `contracts/` | `spec.md` exists + **Spec Validator** PASS (0–3 unresolved markers; 4+ fails; any unresolved CRITICAL/HIGH stress-test finding fails independently; concrete P1 acceptance criteria; frontmatter complete) |
+| **Checklist** *(optional)* | `/sddp-checklist` | `checklists/*.md` | `spec.md` + `plan.md` exist |
+| **Tasks** | `/sddp-tasks` | `tasks.md` | `spec.md` + `plan.md` exist + **Plan Validator** PASS (100% P1 coverage in Requirement Coverage Map, no orphaned Architecture Decisions, declared dependencies installable) |
+| **Analyze** *(optional)* | `/sddp-analyze` | Markdown report (no files modified) | `spec.md` + `plan.md` + `tasks.md` exist |
+| **Implement** | `/sddp-implement` | Source code, marked tasks | `spec.md` + `plan.md` + `tasks.md` exist + **Tasks Validator** PASS (every P1 req has ≥1 task, no circular `after:` chains, `tasks.md` ≤ 6 KB, valid phase structure, checked-task provenance reconciled) |
+| **QC** | `/sddp-qc` | `qc-report.md`, `.qc-passed`, conditionally `manual-test.md` | `.completed` marker exists |
+| **Implement+QC Loop** *(optional)* | `/sddp-implement-qc-loop` | All implement + QC artifacts | `spec.md` + `plan.md` + `tasks.md` exist |
+
+### Phase-Boundary Validators
+
+Three phase boundaries run a mandatory structural validator (in addition to the artifact-exists check) before the next phase may start. A FAIL blocks the next phase: in autopilot the pipeline halts; interactively the user may override with "Proceed anyway" (the bypass is recorded in the conversation only — no persistent marker is written). Each validator is a read-only sub-agent that returns a PASS/FAIL verdict with a failing-items table.
+
+- **Spec → Plan** — `/sddp-plan` Step 1.6 delegates the Spec Validator (`_spec-validator.md`) against `spec.md`: counts literal unresolved `[NEEDS CLARIFICATION: ...]` markers and reports the exact count; counts 0, 1, 2, and 3 pass the ordinary-marker criterion, while 4+ fails. Any unresolved CRITICAL/HIGH stress-test finding fails independently at every marker count. The validator also enforces concrete acceptance criteria for every P1 user story or objective and frontmatter completeness (`spec_type`, `spec_maturity`).
+- **Plan → Tasks** — `/sddp-tasks` Step 1.5 delegates the Plan Validator (`_plan-validator.md`) against `plan.md` (with `spec.md` for P1 IDs): enforces 100% P1 requirement coverage in the Requirement Coverage Map (every P1 `FR/TR/OR/RR` row has non-empty `File Path(s)` and `Function(s)/Symbol(s)`), no orphaned Architecture Decisions (every `AD-###` is referenced by a coverage-map consumer cell or `## Project Structure` entry, or has an explicit `N/A`/`Orphan` line in `## Architecture Decisions`), and all declared dependencies installable (runs the package-manager installability check for real).
+- **Tasks → Implement** — `/sddp-implement` (via `references/gates.md`) delegates the Tasks Validator (`_tasks-validator.md`) against `tasks.md` (with current `spec.md` and `plan.md`): enforces complete deterministic parsing with line-numbered errors, ≤40 tasks, every P1 requirement has ≥1 task, no circular `after:T###` chains (static graph cycle check), `tasks.md` ≤ 6 KB, valid phase structure (Setup → Foundational → Delivery → Polish, no empty optional phases, unique sequential `T###` IDs), and semantic reconciliation of checked requirements, coverage paths/symbols, imports/exports, and dependencies. Stale checked tasks block Implement with exact reasons; they are never automatically unchecked.
+
+The Analyze phase remains optional and is not made mandatory by a gate bypass in this revision.
+
+## Agent Role Mapping
+
+| Command | Role | Canonical Workflow | Copilot | Antigravity | Windsurf | OpenCode | Codex | Claude Code |
+|---|---|---|---|---|---|---|---|---|
+| `/sddp-prd` | Product Strategist | `product-document` | `product-strategist.md` | `sddp-prd.md` | `sddp-prd.md` | `sddp-product-strategist.md` | `sddp-prd/SKILL.md` | `sddp-prd/SKILL.md` |
+| `/sddp-systemdesign` | Solution Architect | `system-design` | `solution-architect.md` | `sddp-systemdesign.md` | `sddp-systemdesign.md` | `sddp-solution-architect.md` | `sddp-systemdesign/SKILL.md` | `sddp-systemdesign/SKILL.md` |
+| `/sddp-devops` | DevOps Strategist | `deployment-operations` | `devops-strategist.md` | `sddp-devops.md` | `sddp-devops.md` | `sddp-devops-strategist.md` | `sddp-devops/SKILL.md` | `sddp-devops/SKILL.md` |
+| `/sddp-projectplan` | Project Planner | `project-planning` | `project-planner.md` | `sddp-projectplan.md` | `sddp-projectplan.md` | `sddp-project-planner.md` | `sddp-projectplan/SKILL.md` | `sddp-projectplan/SKILL.md` |
+| `/sddp-amend` | Project Amender | `amend-project` | `project-amender.md` | `sddp-amend.md` | `sddp-amend.md` | `sddp-project-amender.md` | `sddp-amend/SKILL.md` | `sddp-amend/SKILL.md` |
+| `/sddp-init` | Project Initializer | `init-project` | `project-initializer.md` | `sddp-init.md` | `sddp-init.md` | `sddp-project-initializer.md` | `sddp-init/SKILL.md` | `sddp-init/SKILL.md` |
+| `/sddp-regen` | Prototype Retrospective Analyst | `prototype-regen` | `prototype-retrospective-analyst.md` | `sddp-regen.md` | `sddp-regen.md` | `sddp-prototype-retrospective-analyst.md` | `sddp-regen/SKILL.md` | `sddp-regen/SKILL.md` |
+| `/sddp-specify` | Product Manager | `specify-feature` | `product-manager.md` | `sddp-specify.md` | `sddp-specify.md` | `sddp-product-manager.md` | `sddp-specify/SKILL.md` | `sddp-specify/SKILL.md` |
+| `/sddp-clarify` | Business Analyst | `clarify-spec` | `business-analyst.md` | `sddp-clarify.md` | `sddp-clarify.md` | `sddp-business-analyst.md` | `sddp-clarify/SKILL.md` | `sddp-clarify/SKILL.md` |
+| `/sddp-plan` | Software Architect | `plan-feature` | `software-architect.md` | `sddp-plan.md` | `sddp-plan.md` | `sddp-software-architect.md` | `sddp-plan/SKILL.md` | `sddp-plan/SKILL.md` |
+| `/sddp-checklist` | QA Engineer | `generate-checklist` | `qa-engineer.md` | `sddp-checklist.md` | `sddp-checklist.md` | `sddp-qa-engineer.md` | `sddp-checklist/SKILL.md` | `sddp-checklist/SKILL.md` |
+| `/sddp-tasks` | Project Manager | `generate-tasks` | `project-manager.md` | `sddp-tasks.md` | `sddp-tasks.md` | `sddp-project-manager.md` | `sddp-tasks/SKILL.md` | `sddp-tasks/SKILL.md` |
+| `/sddp-analyze` | Compliance Auditor | `analyze-compliance` | `compliance-auditor.md` | `sddp-analyze.md` | `sddp-analyze.md` | `sddp-compliance-auditor.md` | `sddp-analyze/SKILL.md` | `sddp-analyze/SKILL.md` |
+| `/sddp-implement` | Software Engineer | `implement-tasks` | `software-engineer.md` | `sddp-implement.md` | `sddp-implement.md` | `sddp-software-engineer.md` | `sddp-implement/SKILL.md` | `sddp-implement/SKILL.md` |
+| `/sddp-qc` | Quality Controller | `quality-control` | `qc-agent.md` | `sddp-qc.md` | `sddp-qc.md` | `sddp-qc-agent.md` | `sddp-qc/SKILL.md` | `sddp-qc/SKILL.md` |
+| `/sddp-implement-qc-loop` | Software Engineer | `implement-qc-loop` | `sddp-implement-qc-loop.prompt.md` | `sddp-implement-qc-loop.md` | `sddp-implement-qc-loop.md` | `sddp-implement-qc-loop.md` | `sddp-implement-qc-loop/SKILL.md` | `sddp-implement-qc-loop/SKILL.md` |
+| `/sddp-devsetup` | Environment Setup Analyst | `environment-setup` | `environment-setup.md` | `sddp-devsetup.md` | `sddp-devsetup.md` | `sddp-devsetup.md` | `sddp-devsetup/SKILL.md` | `sddp-devsetup/SKILL.md` |
+| `/sddp-autopilot` | Autopilot Runner | `autopilot-pipeline` | `sddp-autopilot.prompt.md` | `sddp-autopilot.md` | `sddp-autopilot.md` | `sddp-autopilot-pipeline.md` | `sddp-autopilot/SKILL.md` | `sddp-autopilot/SKILL.md` |
+
+### Framework Internals by tool
+
+- **Shared Runtime Output Contract** lives in `AGENTS.md` §Communication Style — shared terse-communication rules, exact-preservation boundaries, and auto-clarity exceptions used by workflow skills and sub-agents. The original `.github/skills/compact-communication/SKILL.md` is kept as a deprecation shim.
+- **Writing quality** is ambient through `AGENTS.md` under `Communication Style`. The expanded reference at `.github/skills/writing-quality/SKILL.md` lists the editing patterns and semantic safety limits. Runtime files must not reload it during ordinary execution. Strict drift reporting checks the ambient safeguards and rejects local load instructions.
+- **Artifact Conventions** use the ambient primer in `AGENTS.md` §Artifact Conventions. The expanded canonical reference remains `.github/skills/artifact-conventions/SKILL.md` for rationale, exceptions, and remediation details; strict drift reporting checks the runtime-critical contract.
+- **Shared Markdown Compression Contract** lives in `.github/skills/markdown-compression/SKILL.md` — allowlist, gated governance manifest, blocked targets, validation guarantees, and CLI usage for safe narrative-markdown compression.
+- **Canonical Workflows** live in `.github/sddp/workflows/<name>/WORKFLOW.md` — tool-agnostic command orchestration
+- **Support Skills** live in `.github/skills/<name>/SKILL.md` — reusable guidance, templates, and methods loaded by workflows and agents
+- **Copilot Wrappers** live in `.github/agents/` — tool mapping + sub-agent delegation
+- **Antigravity Workflows** live in `.agents/workflows/` — load canonical workflows and handle delegation inline
+- **Windsurf Workflows** live in `.windsurf/workflows/` — load canonical workflows and handle delegation inline
+- **OpenCode Agents** live in `.opencode/agents/` — primary agents with sub-agent delegation + commands in `.opencode/commands/`
+- **Codex Skills** live in `.agents/skills/` — directly editable Codex-native entry points that load canonical workflows, resolve canonical delegate paths inline, and use custom agents in `.codex/agents/`. They are authoritative runtime files, not generated build output. Interactive Codex wrappers explicitly ask in chat and wait for user answers instead of inferring the recommended option.
+- **Claude Code Skills** live in `.claude/skills/` — skill entry points with Task-based sub-agent delegation + agents in `.claude/agents/`
+
+### Markdown Compression Utility
+
+- `scripts/compress-markdown.mjs` — CLI for safe narrative-markdown compression. Supports `--check`, `--stdout`, `--narrative-only`, `--idempotent`, and in-place rewrite with one-time `.original.md` backup.
+- `scripts/lib/markdown-compression.mjs` — allowlist policy, exact governance manifest, deterministic compaction, and validation helpers.
+- Safe targets: `README.md`, `docs/**/*.md`, `specs/<feature>/research.md`, `specs/<feature>/analysis-report.md`, `specs/<feature>/manual-test.md`.
+- Gated target: `.github/sddp/workflows/implement-tasks/WORKFLOW.md`, with narrative-only compression inside `<rules>` and `<workflow>` blocks. New governance targets require exact per-file manifest entries and dry-run review.
+- Blocked targets: project instructions, workspace control-plane docs, unlisted workflow/instruction Markdown, project-level specs, ADRs, and parser-sensitive feature artifacts such as `spec.md`, `plan.md`, `tasks.md`, `qc-report.md`, `checklists/*.md`, and `autopilot-log.md`.
+
+### Prompt-contract review aids
+
+- `.github/skills/task-generation/assets/tasks-annotation-fixture.md` — minimal annotated `tasks.md` sample for parser and dependency dry-runs
+- `.github/sddp/workflows/implement-tasks/references/dry-run-review-checklist.md` — review checklist for task-format and implement-contract changes
+
+### QC sub-agents
+
+- **QC Auditor** — executes tests, linters, security scans, and collects coverage. Recommends missing tools based on detected tech stack.
+- **Story Verifier** — traces user stories and success criteria to implementation code via `{FR-###}` tags. Reports PASSED, PARTIAL, or FAILED per story.
+
+### Clarify sub-agents
+
+- **Adversarial Scanner** — scans a resolved spec for cross-requirement contradictions, constraint impossibilities, concurrent-trigger ambiguity, and boundary/scale stress. Returns ranked `STF-###` findings. Delegated by `/sddp-clarify` after collaborative clarification.
+
+### Deterministic prompt format
+
+Agent files follow the same instruction layout to reduce ambiguity:
+
+1. `Role`
+2. `Task`
+3. `Inputs`
+4. `Execution Rules`
+5. `Output Format`
+
+## Feature Workspace Convention
+
+Feature Workspaces are resolved as follows:
+
+- If your current branch matches `#####-feature-name`, the Specify phase uses `specs/<current-branch>/`.
+- If a git repository is active but your branch does not match that pattern, the Specify phase prompts you to enter the Feature Workspace name under `specs/` and validates new names in `00001-feature-name` format.
+- If no git repository is active, the Specify phase derives a suggested folder name from your feature description and prompts you to confirm or override it.
+- If git is in detached HEAD, the workflow stops and tells you to fix the repository state before running it again.
+
+### Resolution examples
+
+```text
+Current branch: 00007-payment-flow
+/sddp-specify Add one-click checkout
+→ Uses specs/00007-payment-flow/
+```
+
+```text
+Current branch: feature/payment-flow
+/sddp-specify Add one-click checkout
+→ Prompts for Feature Workspace name (e.g. 00007-payment-flow)
+→ Uses specs/00007-payment-flow/
+```
+
+```text
+No active git repo
+/sddp-specify Add one-click checkout
+→ Suggests 00007-add-one-click-checkout
+→ Uses specs/00007-add-one-click-checkout/ after confirmation
+```
+
+### Naming policy
+
+- New Feature Workspaces must use `00001-feature-name` format.
+- Existing non-prefixed Feature Workspaces are grandfathered and remain valid.
+- No bulk rename is required for existing non-prefixed folders.
+
+## Understanding `.github/sddp-config.md`
+
+`.github/sddp-config.md` stores document registration and pipeline settings shared across SDDP agents.
+
+| Setting | Purpose | Preferred source |
+|---------|---------|-----------------|
+| **Product Document** | Enriches feature specification context | `specs/prd.md` via `/sddp-prd` |
+| **Technical Context Document** | Architecture/stack constraints for planning | `specs/sad.md` via `/sddp-systemdesign` |
+| **Deployment & Operations Document** | Environments, CI/CD, infrastructure context | `specs/dod.md` via `/sddp-devops` |
+| **Project Plan** | Maps project epics to `/sddp-specify` inputs | `specs/project-plan.md` via `/sddp-projectplan` |
+| **Autopilot** (`true`/`false`) | Authorizes `/sddp-autopilot`; standalone commands stay interactive | Set manually |
+| **Derived QC Policy** | Pre-parsed coverage target and required QC categories | Auto-generated by `/sddp-init` from `project-instructions.md` |
+
+This file is managed by `/sddp-prd`, `/sddp-systemdesign`, `/sddp-devops`, `/sddp-projectplan`, `/sddp-amend`, `/sddp-init`, and `/sddp-plan`. Empty paths are normal when starting a project and permit documented default-path fallback. A non-empty registration is authoritative; if its target is missing or unreadable, bootstrap consumers fail closed and require registration repair rather than silently using another file.
+
+For Codex wrappers, interactive workflows rely on explicit wrapper instructions to ask and wait. `/sddp-autopilot` remains the dedicated unattended Codex workflow.
+
+## Autopilot Halt Conditions
+
+The autopilot pipeline stops immediately when any of these conditions occur:
+
+1. CRITICAL `project-instructions.md` violation
+2. Implement → QC loop exhausted (10 iterations)
+3. Manual verification lacks complete human attestation
+4. Expected gate artifact missing after a phase
+5. Feature already complete (current `.qc-passed` report/evidence digests validate)
+6. Document sufficiency check failure
+7. Real execution blocked (required implementation or QC action could not be completed for real)
+8. Context resolution failure (detached HEAD or repository error prevented feature directory resolution)
+
+Every automatic decision is logged to `autopilot-log.md` in the active Feature Workspace.
