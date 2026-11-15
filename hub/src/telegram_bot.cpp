@@ -258,7 +258,7 @@ static void handle_toggle(long chat_id, int slot) {
     if (device_send_command(s->mac, s->slot, new_state)) {
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
-        if (s->state.onoff.state == 0 && new_state != 0) s->activation_count++;
+        if (s->state.onoff.state == 0 && new_state != 0) sensor_registry_bump_activation(s);
         s->state.onoff.state = new_state;
         s_last_lamp_state[slot] = new_state;
         s_last_kb_push = millis();
@@ -335,6 +335,7 @@ static void handle_help(long chat_id) {
         "/start - Menu com botões toggle\n"
         "/status - Status geral do hub\n"
         "/list - Listar nodes [slot] 🔋\n"
+        "/day - Resumo do dia 📅\n"
         "/on <slot|all> - Liga\n"
         "/off <slot|all> - Desliga\n"
         "/help - Esta mensagem\n\n";
@@ -351,6 +352,18 @@ static void handle_help(long chat_id) {
     } else {
         s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
     }
+}
+
+// Handle /day command — resumo do dia (acionamentos/reconexões de hoje)
+static void handle_day(long chat_id) {
+    extern time_t gateway_ntp_epoch();
+    char buf[2048];
+    int listed = sensor_registry_daily_summary(buf, sizeof(buf), gateway_ntp_epoch());
+    if (listed == 0) {
+        s_tg_bot->sendMessage(String(chat_id), "📅 Nenhum sensor pareado hoje.", "");
+        return;
+    }
+    s_tg_bot->sendMessage(String(chat_id), buf, "");
 }
 
 // Process incoming messages
@@ -406,6 +419,9 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
+        }
+        else if (cmd == "/day") {
+            handle_day(chat_id_long);
         }
         else if (cmd == "/on") {
             handle_on_off(chat_id_long, args.c_str(), 1);

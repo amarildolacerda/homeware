@@ -422,7 +422,7 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             else if (state["relay_state"].is<uint8_t>()) val = (uint8_t)state["relay_state"];
             else if (state["relay_state"].is<bool>()) val = state["relay_state"] ? 1 : 0;
             if (val != 0xFF) {
-                if (sensor->state.onoff.state == 0 && val != 0) sensor->activation_count++;
+                if (sensor->state.onoff.state == 0 && val != 0) sensor_registry_bump_activation(sensor);
                 sensor->state.onoff.state = val;
             }
             break;

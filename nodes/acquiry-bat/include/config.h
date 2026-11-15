@@ -10,6 +10,17 @@
 #define CFG_BUTTON_PIN 0
 #define LED_PIN 2
 
+// Detecção de fonte de alimentação (dual power mode)
+// POWER_DETECT_PIN: GPIO que lê VBUS (HIGH = USB/fonte presente). -1 = desabilitado (fallback BATTERY_MODE)
+#define POWER_DETECT_PIN 5
+#define POWER_DETECT_ACTIVE_HIGH 1
+
+// Powered Mode (USB/fonte presente): sem deep sleep, dashboard + OTA ativos.
+#define POWERED_SEND_MIN_INTERVAL_MS 30000 // período mínimo entre envios/ciclos no Powered Mode
+#define POWERED_READ_INTERVAL_MS 5000      // frequência de leitura do sensor no Powered Mode (TCP: sincroniza com publish do rádio)
+#define POWERED_WIFI_RETRY_MS 30000        // intervalo de retentativa de reconexão WiFi no Powered Mode
+#define POWERED_LED_BLINK_MS 500           // blink do LED sem WiFi no Powered Mode
+
 #define LED_BLINK_SEND_MS 100
 
 #define ESPNOW_CHANNEL 1

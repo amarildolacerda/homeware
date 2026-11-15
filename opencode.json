@@ -24,7 +24,11 @@
           "sddp-technical-researcher": "allow",
           "sddp-test-evaluator": "allow",
           "sddp-test-planner": "allow",
-          "sddp-wbs-generator": "allow"
+          "sddp-wbs-generator": "allow",
+          "Commander": "allow",
+          "Planner": "allow",
+          "Worker": "allow",
+          "Reviewer": "allow"
         }
       }
     }

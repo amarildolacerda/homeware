@@ -70,7 +70,7 @@ Disponibilizar todos os recursos do dispositivo.
 
 ### Recursos
 - Wi‑Fi conectado continuamente
-- Dashboard Web
+- WebServer propria para o Dashboard Web, uma sidebar com as opções, mostrando o estado de leitura, permitir configurações... (aka projeto lamp)
 - OTA
 - Logs detalhados
 - Configurações remotas

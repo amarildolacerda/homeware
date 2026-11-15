@@ -10,6 +10,7 @@
 #include "semphr.h"
 #endif
 #include "common_console.h"
+#include <time.h>
 
 // FreeRTOS mutex protecting s_sensors[] from concurrent writes
 // (ESP-NOW recv_cb task + main loop + web server async tasks)
@@ -107,6 +108,66 @@ int sensor_registry_count_online() {
     return count;
 }
 
+// Incremento comum de acionamento: total (vida) + diário (hoje)
+void sensor_registry_bump_activation(virtual_sensor_t *s) {
+    if (!s) return;
+    s->activation_count++;
+    s->activation_count_day++;
+}
+
+// Rollover diário: zera os contadores "hoje" quando o dia (epoch/86400) muda.
+// Contadores diários são RAM-only — reboot zera (o resumo cobre desde o boot).
+void sensor_registry_daily_check(time_t epoch) {
+    if (epoch <= 100000) return; // sem relógio (NTP/browser), não avalia
+    static uint32_t s_current_day = 0;
+    uint32_t day = (uint32_t)(epoch / 86400);
+    if (s_current_day == 0) { s_current_day = day; return; }
+    if (day == s_current_day) return;
+    s_current_day = day;
+    sensor_registry_lock();
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS; i++) {
+        s_sensors[i].activation_count_day = 0;
+        s_sensors[i].reconnect_count_day = 0;
+    }
+    sensor_registry_unlock();
+    console.printf("[Gateway] Contadores diários zerados (novo dia)\n");
+}
+
+// Resumo do dia compartilhado (console + telegram). Retorna nº de sensores listados.
+int sensor_registry_daily_summary(char *out, size_t out_len, time_t epoch) {
+    if (!out || out_len == 0) return 0;
+    int pos = 0;
+    char date_buf[16] = "sem data";
+    if (epoch > 100000) {
+        struct tm *ti = localtime(&epoch);
+        if (ti) snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d",
+                         ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday);
+    }
+    pos += snprintf(out + pos, out_len - pos,
+                    "📅 Resumo do dia (%s)\n", date_buf);
+
+    int listed = 0;
+    bool truncated = false;
+    sensor_registry_lock();
+    for (int i = 0; i < MAX_VIRTUAL_SENSORS && !truncated; i++) {
+        virtual_sensor_t *s = &s_sensors[i];
+        if (!s->paired) continue;
+        if (out_len - pos < 96) { truncated = true; break; }
+        pos += snprintf(out + pos, out_len - pos,
+                        "• %s: %s | 🔋%d%% | acion=%u | recon=%u\n",
+                        s->name, s->online ? "online" : "offline",
+                        s->battery_pct, s->activation_count_day, s->reconnect_count_day);
+        listed++;
+    }
+    sensor_registry_unlock();
+    if (truncated)
+        pos += snprintf(out + pos, out_len - pos, "... e mais nodes\n");
+    pos += snprintf(out + pos, out_len - pos,
+                    "Total: %d pareados, %d online",
+                    sensor_registry_count_paired(), sensor_registry_count_online());
+    return listed;
+}
+
 bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip, uint8_t radio_type) {
     if (slot >= MAX_VIRTUAL_SENSORS) return false;
     sensor_registry_lock();
@@ -172,7 +233,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
     s->sequence = header->sequence;
     s->battery_pct = header->battery_pct;
     s->last_rssi = header->rssi;
-    if (!s->online) s->reconnect_count++;
+    if (!s->online) { s->reconnect_count++; s->reconnect_count_day++; }
     s->last_seen = millis();
     s->online = true;
     // Extract node IP from ESP-NOW header (v2+)
@@ -240,7 +301,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
         case SENSOR_TYPE_LIGHT: {
             if (payload_len >= sizeof(payload_onoff_t)) {
                 payload_onoff_t *p = (payload_onoff_t*)payload;
-                if (s->state.onoff.state == 0 && p->state != 0) s->activation_count++;
+                if (s->state.onoff.state == 0 && p->state != 0) sensor_registry_bump_activation(s);
                 s->state.onoff.state = p->state;
             }
             break;
@@ -283,7 +344,7 @@ bool sensor_registry_update_state(int slot, const espnow_header_t *header, const
             memcpy(&s->state.generic, payload, sizeof(payload_int_t));
             s->state.generic.label[sizeof(s->state.generic.label) - 1] = '\0';
             // Espelha 0/1 em onoff.state (união compatível) p/ fallback dashboard/MQTT
-            if (s->state.onoff.state == 0 && s->state.generic.value == 1) s->activation_count++;
+            if (s->state.onoff.state == 0 && s->state.generic.value == 1) sensor_registry_bump_activation(s);
             s->state.onoff.state = (s->state.generic.value <= 1) ? (uint8_t)s->state.generic.value
                                                                  : s->state.onoff.state;
             break;

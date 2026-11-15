@@ -66,6 +66,7 @@ void print_help() {
     console.println("\n=== Comandos ===");
     console.println("  h/?  - Esta ajuda");
     console.println("  l    - Listar sensores pareados");
+    console.println("  d    - Resumo do dia (acionamentos/reconexões)");
     console.printf( "  p    - Iniciar modo pareamento (%us)\n", PAIRING_WINDOW_MS / 1000);
     console.println("  c    - Limpar TODOS os sensores");
     console.println("  r    - Reiniciar");
@@ -89,6 +90,16 @@ void handle_console(char c) {
         case 'L':
             sensor_registry_print_all();
             break;
+
+        case 'd':
+        case 'D': {
+            char summary[1024];
+            int listed = sensor_registry_daily_summary(summary, sizeof(summary), gateway_ntp_epoch());
+            console.println("\n" + String(summary));
+            if (listed == 0)
+                console.println("(nenhum sensor pareado)");
+            break;
+        }
             
         case 'p':
         case 'P':
@@ -493,6 +504,9 @@ void loop() {
     if (s_ntp_synced) {
         s_ntp_epoch = time(nullptr);
     }
+
+    // Rollover dos contadores diários (resumo do dia) — avalia epoch NTP ou browser
+    sensor_registry_daily_check(gateway_ntp_epoch());
 
     // Agenda de reinício (usa NTP ou epoch do browser)
     {
