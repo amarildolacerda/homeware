@@ -9,6 +9,9 @@
 #include "common_console.h"
 
 #ifdef ESPNOW_ENABLED
+#ifdef ESP32
+#include <esp_idf_version.h>
+#endif
 
 /* ESP-NOW delivery uses BROADCAST (all clients receive and filter by
    sensor_mac/target_mac). Validated with QuickESPNow (qgw/qclient, both STA on
@@ -17,7 +20,11 @@
 
 // Forward declaration of C-linkage callback (used in init())
 #ifdef ESP32
+#if ESP_IDF_VERSION_MAJOR >= 5
+extern "C" void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+#else
 extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len);
+#endif
 #else
 extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len);
 #endif
@@ -615,14 +622,26 @@ void EspnowHandler::handle_rx(const uint8_t *mac, const uint8_t *data, int len) 
 
 // C-linkage callback registered with ESP-NOW
 #ifdef ESP32
-extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len) {
+#if ESP_IDF_VERSION_MAJOR >= 5
+extern "C" void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+    if (EspnowHandler::s_self && info && info->src_addr) {
+        EspnowHandler::s_self->handle_rx(info->src_addr, data, len);
+    }
+}
 #else
-extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
-#endif
+extern "C" void espnow_recv_cb(const uint8_t *mac, const uint8_t *data, int len) {
     if (EspnowHandler::s_self) {
         EspnowHandler::s_self->handle_rx(mac, data, len);
     }
 }
+#endif
+#else
+extern "C" void espnow_recv_cb(uint8_t *mac, uint8_t *data, uint8_t len) {
+    if (EspnowHandler::s_self) {
+        EspnowHandler::s_self->handle_rx(mac, data, len);
+    }
+}
+#endif
 
 // ---- Compatibility wrappers ----
 static EspnowHandler s_espnow_handler;
