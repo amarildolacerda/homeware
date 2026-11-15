@@ -133,7 +133,7 @@ struct telegram_config_t {
 
 | Nível | Emoji | Prioridade | Ação | Throttle |
 |-------|-------|------------|------|----------|
-| **CRITICAL** | 🔴 | Máxima | Ação imediata necessária | Sem throttle (sempre enviar) |
+| **CRITICAL** | 🔴 | Máxima | Ação imediata necessária | Enviar ao entrar no estado crítico; não repetir até normalizar |
 | **ALERT** | ⚠️ | Alta | Ação em breve necessária | 5-60 min |
 | **WARNING** | 🟡 | Média | Atenção necessária | 1-6 horas |
 | **INFO** | 🟢 | Baixa | Apenas informativo | 5-60 min |
@@ -191,8 +191,7 @@ struct telegram_config_t {
 ### 5.4 Throttling (Anti-Spam)
 
 ```cpp
-// Limites de envio por nível de prioridade
-#define TELEGRAM_THROTTLE_CRITICAL_MS   0       // Sem throttle (sempre enviar)
+// Alertas críticos são enviados na transição para o estado crítico.
 #define TELEGRAM_THROTTLE_ALERT_MS      300000  // 5 min entre alertas
 #define TELEGRAM_THROTTLE_WARNING_MS     3600000 // 1 hora entre avisos
 #define TELEGRAM_THROTTLE_INFO_MS       300000  // 5 min entre informativos
@@ -664,7 +663,7 @@ O usuário pode configurar a integração Telegram diretamente pelo dashboard do
 | **Alerta Umidade** | Notificar umidade fora do normal | true |
 | **Alerta RSSI** | Notificar sinal fraco | false |
 | **Alerta Memória** | Notificar heap baixo | false |
-| **Relatório Diário** | Enviar resumo às 08:00 | true |
+| **Relatório Diário** | Enviar um resumo consolidado às 08:00 | true |
 
 ### 17.3 Interface do Dashboard
 
