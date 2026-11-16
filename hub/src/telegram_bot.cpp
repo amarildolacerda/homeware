@@ -1,6 +1,6 @@
 #include "telegram_bot.h"
 #include "config.h"
-#include "config_store.h"
+#include "../include/config_store.h"
 #include "sensor_registry.h"
 #include "device_router.h"
 #include "mqtt_client.h"
@@ -18,7 +18,7 @@
 static bool s_tg_enabled = false;
 static bool s_tg_initialized = false;
 static unsigned long s_tg_last_poll = 0;
-static uint32_t s_tg_poll_interval = 2000;
+static uint32_t s_tg_poll_interval = 1000;
 static char s_tg_token[64];
 static char s_tg_chatid[20];
 static uint8_t s_tg_alerts_lvl = 0x0F;
@@ -129,14 +129,14 @@ static void format_uptime(unsigned long ms, char* buf, size_t len) {
 
 // Handle /status command
 static void handle_status(long chat_id) {
-    char buf[512];
+    char buf[2048];
     char uptime_str[32];
     format_uptime(millis(), uptime_str, sizeof(uptime_str));
-    
+
     int paired = sensor_registry_count_paired();
     int online = sensor_registry_count_online();
-    
-    snprintf(buf, sizeof(buf),
+
+    int pos = snprintf(buf, sizeof(buf),
         "📊 *Status do Hub*\n\n"
         "Device: `%s`\n"
         "IP: `%s`\n"
@@ -145,7 +145,7 @@ static void handle_status(long chat_id) {
         "Memória: %u bytes (%u%%)\n\n"
         "Sensores: %d pareados, %d online\n"
         "MQTT: %s\n"
-        "Telegram: %s",
+        "Telegram: %s\n\n",
         get_gateway_device_id(),
         WiFi.localIP().toString().c_str(),
         WiFi.SSID().c_str(),
@@ -158,7 +158,13 @@ static void handle_status(long chat_id) {
         mqtt_client_is_connected() ? "Conectado" : "Desconectado",
         s_tg_enabled ? "Ativo" : "Inativo"
     );
-    
+
+    if (pos < 0) pos = 0;
+    if (pos < (int)sizeof(buf)) {
+        extern time_t gateway_ntp_epoch();
+        sensor_registry_daily_summary(buf + pos, sizeof(buf) - pos, gateway_ntp_epoch());
+    }
+
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
@@ -332,13 +338,12 @@ static void handle_on_off(long chat_id, const char* args, uint8_t state) {
 
 // Handle /start and /help commands
 static void handle_help(long chat_id) {
-    const char* help = 
+    const char* help =
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
         "/start - Menu com botões toggle\n"
-        "/status - Status geral do hub\n"
+        "/status - Status geral + resumo do dia\n"
         "/list - Listar nodes [slot] 🔋\n"
-        "/day - Resumo do dia 📅\n"
         "/on <slot|all> - Liga\n"
         "/off <slot|all> - Desliga\n"
         "/help - Esta mensagem\n\n";
@@ -347,7 +352,7 @@ static void handle_help(long chat_id) {
        // "`/off 0`\n"
        // "`/on Entrada` (case-insensitive)\n\n"
        // "Configure alertas via dashboard: http://<hub-ip>/settings";
-    
+
     String keyboard = buildLampKeyboard();
     bool has_lamps = (keyboard != "[]");
     if (has_lamps) {
@@ -355,18 +360,6 @@ static void handle_help(long chat_id) {
     } else {
         s_tg_bot->sendMessage(String(chat_id), help, "Markdown");
     }
-}
-
-// Handle /day command — resumo do dia (acionamentos/reconexões de hoje)
-static void handle_day(long chat_id) {
-    extern time_t gateway_ntp_epoch();
-    char buf[2048];
-    int listed = sensor_registry_daily_summary(buf, sizeof(buf), gateway_ntp_epoch());
-    if (listed == 0) {
-        s_tg_bot->sendMessage(String(chat_id), "📅 Nenhum sensor pareado hoje.", "");
-        return;
-    }
-    s_tg_bot->sendMessage(String(chat_id), buf, "");
 }
 
 // Process incoming messages
@@ -422,9 +415,6 @@ static void process_messages(int num_new_messages) {
         }
         else if (cmd == "/list") {
             handle_list(chat_id_long);
-        }
-        else if (cmd == "/day") {
-            handle_day(chat_id_long);
         }
         else if (cmd == "/on") {
             handle_on_off(chat_id_long, args.c_str(), 1);
@@ -594,13 +584,15 @@ void telegram_bot_loop() {
     if (millis() - s_tg_last_poll < s_tg_poll_interval) return;
     s_tg_last_poll = millis();
     
-    // Get updates
+    // Get updates (mantém conexão TLS para reuso/pooling; evita reconectar a cada poll)
     int num_new_messages = s_tg_bot->getUpdates(s_tg_bot->last_message_received + 1);
-    s_tg_client.stop();
-    
+
     if (num_new_messages > 0) {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
+    } else if (num_new_messages < 0) {
+        // Erro na leitura/HTTP: força reconexão no próximo ciclo
+        s_tg_client.stop();
     }
     check_alerts();
 

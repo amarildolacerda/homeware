@@ -28,7 +28,7 @@
 #ifdef TELEGRAM_ENABLED
 #include "telegram_bot.h"
 #endif
-#include "config_store.h"
+#include "../include/config_store.h"
 
 time_t gateway_ntp_epoch();
 bool gateway_ntp_synced();
@@ -66,12 +66,11 @@ void print_help() {
     console.println("\n=== Comandos ===");
     console.println("  h/?  - Esta ajuda");
     console.println("  l    - Listar sensores pareados");
-    console.println("  d    - Resumo do dia (acionamentos/reconexões)");
     console.printf( "  p    - Iniciar modo pareamento (%us)\n", PAIRING_WINDOW_MS / 1000);
     console.println("  c    - Limpar TODOS os sensores");
     console.println("  r    - Reiniciar");
     console.println("  b    - Publicar todos os sensores via MQTT");
-    console.println("  s    - Status do gateway");
+    console.println("  s    - Status do gateway (+ resumo do dia)");
     console.println("  w    - Forçar portal WiFi");
     console.printf( "  m    - Modo de operacao (atual: %d)\n", op_mode_load());
     console.println("  m 0  - Terminal | m 1 - AP | m 2 - Hibrido");
@@ -91,16 +90,6 @@ void handle_console(char c) {
             sensor_registry_print_all();
             break;
 
-        case 'd':
-        case 'D': {
-            char summary[1024];
-            int listed = sensor_registry_daily_summary(summary, sizeof(summary), gateway_ntp_epoch());
-            console.println("\n" + String(summary));
-            if (listed == 0)
-                console.println("(nenhum sensor pareado)");
-            break;
-        }
-            
         case 'p':
         case 'P':
             if (s_radio_mgr.any_start_pairing()) {
@@ -141,11 +130,11 @@ void handle_console(char c) {
             console.printf("FW: %s\n", FW_VERSION);
             console.printf("Uptime: %lu s\n", millis() / 1000);
             console.printf("NTP: %s\n", s_ntp_synced ? "sincronizado" : "aguardando...");
-            console.printf("Sensores: %d pareados, %d online\n", 
+            console.printf("Sensores: %d pareados, %d online\n",
                           sensor_registry_count_paired(), sensor_registry_count_online());
             console.printf("Radio RX=%lu ACK=%lu CRC_ERR=%lu\n",
                           s_radio_mgr.total_rx_count(), s_radio_mgr.total_ack_count(), s_radio_mgr.total_crc_errors());
-            console.printf("MQTT: %s:%d (%s)\n", 
+            console.printf("MQTT: %s:%d (%s)\n",
                           mqtt_client_get_host(), mqtt_client_get_port(),
                           mqtt_client_is_connected() ? "conectado" : "desconectado");
             console.printf("WiFi: http://%s ch=%d (RSSI: %d dBm)\n",
@@ -157,6 +146,11 @@ void handle_console(char c) {
                     op == 0 ? "Terminal" : op == 1 ? "AP" : "Hibrido");
             }
             console.printf("Pareamento: %s\n", s_radio_mgr.any_pairing_active() ? "ATIVO" : "inativo");
+            {
+                char summary[1024];
+                sensor_registry_daily_summary(summary, sizeof(summary), gateway_ntp_epoch());
+                console.println("\n" + String(summary));
+            }
             console.printf("========================\n\n");
             break;
         }

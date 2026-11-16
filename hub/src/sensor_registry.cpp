@@ -1,6 +1,6 @@
 #include "sensor_registry.h"
 #include "config.h"
-#include "config_store.h"
+#include "../include/config_store.h"
 #include <Arduino.h>
 #ifdef ESP32
 #include "freertos/FreeRTOS.h"
@@ -181,6 +181,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     if (sensor_registry_find_by_mac(mac) >= 0) { sensor_registry_unlock(); return false; }
 
     virtual_sensor_t *s = &s_sensors[slot];
+    memset(s, 0, sizeof(virtual_sensor_t));
     mac_copy(s->mac, mac);
     s->type = type;
     s->slot = slot;
@@ -192,7 +193,10 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->last_seen = 0;
     s->paired = true;
     s->online = false;
-    memset(&s->state, 0, sizeof(s->state));
+    s->reconnect_count = 0;
+    s->activation_count = 0;
+    s->reconnect_count_day = 0;
+    s->activation_count_day = 0;
     snprintf(s->bridge_device_id, sizeof(s->bridge_device_id), "gw_%02X%02X%02X_%d", mac[3], mac[4], mac[5], slot);
     if (name && strlen(name) > 0) {
         strncpy(s->name, name, sizeof(s->name) - 1);
