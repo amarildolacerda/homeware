@@ -362,7 +362,9 @@ void web_server_init() {
                     obj["fw_version"] = s->fw_version;
                 }
                 obj["sequence"] = s->sequence;
-                obj["battery_pct"] = s->battery_pct;
+                if (s->battery_pct != BATTERY_LEVEL_UNAVAILABLE) {
+                    obj["battery_pct"] = s->battery_pct;
+                }
                 obj["last_rssi"] = s->last_rssi;
                 obj["free_heap"] = s->free_heap;
                 obj["last_seen"] = (s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;

@@ -188,12 +188,15 @@ static void handle_list(long chat_id) {
                 default: radio = "?"; break;
             }
             
-            pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s [%d] %s (%s) - %s 🔋 %d%%\n",
-                status, s->slot, s->name, radio,
-                state_str,
-                s->battery_pct
-            );
+            if (s->battery_pct == BATTERY_LEVEL_UNAVAILABLE) {
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "%s [%d] %s (%s) - %s\n",
+                    status, s->slot, s->name, radio, state_str);
+            } else {
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "%s [%d] %s (%s) - %s 🔋 %d%%\n",
+                    status, s->slot, s->name, radio, state_str, s->battery_pct);
+            }
             count++;
             
             if (pos > 900) { // Prevent buffer overflow

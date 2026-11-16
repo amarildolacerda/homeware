@@ -7,7 +7,7 @@ const char PAGE_PORTAL[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Configurar Gateway</title>
+<title>AgroHub Gateway</title>
 <style>
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--border:#e5e7eb;--border-strong:#d1d5db;--danger:#dc2626;--success:#16a34a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -677,6 +677,7 @@ function renderSensors(sensors) {
 }
 
 function battInline(pct) {
+  if (pct === 255) return '';
   if (pct===undefined||pct===null) return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:0%;background:var(--border);border-radius:3px"></span></span>';
   var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
   return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+c+';border-radius:3px"></span></span>';
@@ -903,7 +904,7 @@ function showPropsModal(slot) {
     '<div class="row"><span class="label">Chip</span><span class="value">'+chipName(s.client_chip)+'</span></div>'+
     (s.fw_version?'<div class="row"><span class="label">Versão FW</span><span class="value">'+escHtml(s.fw_version)+'</span></div>':'')+
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
-    '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
+    (s.battery_pct!==undefined && s.battery_pct!==255?'<div class="row"><span class="label">Bateria</span><span class="value">'+s.battery_pct+'%</span></div>':'')+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
     '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'__:__')+'</span></div>'+
     '<div class="row"><span class="label">Sequência</span><span class="value">'+s.sequence+'</span></div>'+

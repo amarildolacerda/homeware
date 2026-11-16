@@ -98,7 +98,6 @@ static StableWatchdog g_blink_wd;
 static bool s_relay_state = false;
 static int s_relay_pin = RELAY_PIN;
 static int s_button_pin = BUTTON_PIN;
-static int s_battery = 100;
 static bool s_button_last = HIGH;
 static unsigned long s_button_last_ms = 0;
 static int s_btn_press_count = 0;
@@ -841,7 +840,6 @@ static void handle_api_state(void)
         JsonDocument doc;
         doc["state"] = s_relay_state;
         doc["button"] = (digitalRead(s_button_pin) == LOW);
-        doc["battery"] = s_battery;
         doc["device_id"] = getDeviceId();
         doc["device_name"] = s_device_name;
         doc["gateway_connected"] = s_radio.is_paired();
@@ -1190,7 +1188,6 @@ static void handle_console(char c)
         console.printf("  Dispositivo: %s\n", getDeviceId());
         console.printf("  Nome:        %s\n", s_device_name);
         console.printf("  Lampada:     %s\n", s_relay_state ? "LIGADA" : "DESLIGADA");
-        console.printf("  Bateria:     %d %%\n", s_battery);
 
 #ifdef LED_PIN
         console.printf("  Led:         %s\n", digitalRead(LED_PIN) == LED_ON ? "LIGADO" : "DESLIGADO");
@@ -1754,6 +1751,11 @@ static uint8_t get_sensor_type()
     return SENSOR_TYPE_LIGHT;
 }
 
+static uint8_t get_battery_pct()
+{
+    return BATTERY_LEVEL_UNAVAILABLE;
+}
+
 static uint8_t get_sensor_payload(uint8_t *buf, uint8_t max_len)
 {
     payload_onoff_t pl;
@@ -1995,7 +1997,7 @@ void setup(void)
     WiFi.macAddress(my_mac);
     s_radio.set_mac(my_mac);
     s_radio.set_device_name(s_device_name);
-    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed, on_time_sync};
+    s_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, on_forward, on_pairing_failed, on_time_sync, get_battery_pct};
     s_radio.set_pair_interval(ESPNOW_PAIR_INTERVAL_MS);
     s_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
     s_radio.set_state_interval(STATE_UPDATE_INTERVAL);

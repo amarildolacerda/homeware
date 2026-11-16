@@ -437,6 +437,14 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
             publish_entity_config("light", entity, name, "Lâmpada", "", "", false, id, model);
             publish_entity_state("light", entity,
                                  sensor->state.onoff.state ? "ON" : "OFF");
+            build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+            char retired_battery_topic[128];
+            snprintf(retired_battery_topic, sizeof(retired_battery_topic),
+                     "%s/sensor/%s/config", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(retired_battery_topic, "", true);
+            snprintf(retired_battery_topic, sizeof(retired_battery_topic),
+                     "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+            s_mqtt.publish(retired_battery_topic, "", true);
             break;
         }
         case SENSOR_TYPE_ACQUIRY: {
@@ -459,9 +467,11 @@ bool mqtt_client_publish_discovery(virtual_sensor_t *sensor) {
         }
     }
 
-    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
-    publish_entity_config("sensor", entity, name, "Bateria", "battery", "%", false, id, model);
-    publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
+    if (sensor->battery_pct != BATTERY_LEVEL_UNAVAILABLE) {
+        build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+        publish_entity_config("sensor", entity, name, "Bateria", "battery", "%", false, id, model);
+        publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
+    }
 
     return true;
 }
@@ -580,8 +590,10 @@ bool mqtt_client_publish_state(virtual_sensor_t *sensor) {
         }
     }
 
-    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
-    publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
+    if (sensor->battery_pct != BATTERY_LEVEL_UNAVAILABLE) {
+        build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+        publish_entity_state("sensor", entity, String(sensor->battery_pct).c_str());
+    }
 
     return true;
 }
@@ -699,10 +711,11 @@ bool mqtt_client_publish_availability(virtual_sensor_t *sensor, bool online) {
             break;
     }
 
-    // Battery entity (common to all sensor types except repeater)
-    build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
-    snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
-    s_mqtt.publish(topic, payload, true); count++;
+    if (sensor->battery_pct != BATTERY_LEVEL_UNAVAILABLE) {
+        build_entity_id(entity, sizeof(entity), sensor->mac, sensor->slot, "bat");
+        snprintf(topic, sizeof(topic), "%s/sensor/%s/availability", MQTT_TOPIC_PREFIX, entity);
+        s_mqtt.publish(topic, payload, true); count++;
+    }
 
     console.printf("[MQTT] Availability %s for %s (%d entities)\n",
                    payload, sensor->name, count);

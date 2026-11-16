@@ -153,10 +153,17 @@ int sensor_registry_daily_summary(char *out, size_t out_len, time_t epoch) {
         virtual_sensor_t *s = &s_sensors[i];
         if (!s->paired) continue;
         if (out_len - pos < 96) { truncated = true; break; }
-        pos += snprintf(out + pos, out_len - pos,
-                        "• %s: %s | 🔋%d%% | acion=%u | recon=%u\n",
-                        s->name, s->online ? "online" : "offline",
-                        s->battery_pct, s->activation_count_day, s->reconnect_count_day);
+        if (s->battery_pct == BATTERY_LEVEL_UNAVAILABLE) {
+            pos += snprintf(out + pos, out_len - pos,
+                            "• %s: %s | acion=%u | recon=%u\n",
+                            s->name, s->online ? "online" : "offline",
+                            s->activation_count_day, s->reconnect_count_day);
+        } else {
+            pos += snprintf(out + pos, out_len - pos,
+                            "• %s: %s | 🔋%d%% | acion=%u | recon=%u\n",
+                            s->name, s->online ? "online" : "offline",
+                            s->battery_pct, s->activation_count_day, s->reconnect_count_day);
+        }
         listed++;
     }
     sensor_registry_unlock();
@@ -180,7 +187,7 @@ bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const 
     s->client_chip = client_chip;
     s->radio_type = radio_type;
     s->sequence = 0;
-    s->battery_pct = 100;
+    s->battery_pct = type == SENSOR_TYPE_LIGHT ? BATTERY_LEVEL_UNAVAILABLE : 100;
     s->last_rssi = -127;
     s->last_seen = 0;
     s->paired = true;
@@ -425,7 +432,7 @@ void sensor_registry_load() {
         s->client_chip = slots[i].client_chip;
         s->radio_type  = slots[i].radio_type;
         s->sequence    = 0;
-        s->battery_pct = 100;
+        s->battery_pct = s->type == SENSOR_TYPE_LIGHT ? BATTERY_LEVEL_UNAVAILABLE : 100;
         s->last_rssi   = -127;
         s->last_seen   = 0;
         s->online      = false;
@@ -462,10 +469,17 @@ void sensor_registry_print_all() {
             snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d",
                      s_sensors[i].ip[0], s_sensors[i].ip[1],
                      s_sensors[i].ip[2], s_sensors[i].ip[3]);
-            console.printf("  Slot %d: %s | MAC=%s | IP=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
-                          i, s_sensors[i].name, mac_str, ip_str, s_sensors[i].type,
-                          s_sensors[i].sequence, s_sensors[i].battery_pct,
-                          s_sensors[i].last_rssi, s_sensors[i].online ? "Yes" : "No");
+            if (s_sensors[i].battery_pct == BATTERY_LEVEL_UNAVAILABLE) {
+                console.printf("  Slot %d: %s | MAC=%s | IP=%s | Type=%d | Seq=%u | RSSI=%d | Online=%s\n",
+                              i, s_sensors[i].name, mac_str, ip_str, s_sensors[i].type,
+                              s_sensors[i].sequence, s_sensors[i].last_rssi,
+                              s_sensors[i].online ? "Yes" : "No");
+            } else {
+                console.printf("  Slot %d: %s | MAC=%s | IP=%s | Type=%d | Seq=%u | Batt=%d%% | RSSI=%d | Online=%s\n",
+                              i, s_sensors[i].name, mac_str, ip_str, s_sensors[i].type,
+                              s_sensors[i].sequence, s_sensors[i].battery_pct,
+                              s_sensors[i].last_rssi, s_sensors[i].online ? "Yes" : "No");
+            }
         }
     }
     console.printf("Total: %d paired, %d online\n", sensor_registry_count_paired(), sensor_registry_count_online());
