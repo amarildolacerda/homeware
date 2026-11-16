@@ -11,8 +11,22 @@ política de push, shared como fonte única, regras 1–51).
 
 ## Última posição
 
-**Data:** 2026-10-26 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.28`
-**Estado:** implementação CONCLUÍDA (não commitada, não pushada). Usuário pediu push para `dev` — **bloqueado: bash indisponível na sessão** (`H.loadWebAssemblyModule`, todos os comandos `git`/`platformio` falham). Falta build + bancada + commits.
+**Data:** 2026-11-15 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
+**Estado:** `hub_32_ota` compila. O polling do Telegram foi reforçado: inicializa cursor de updates, encerra TLS após cada poll, alerta crítico só é enviado ao entrar no estado e relatório diário é uma mensagem consolidada. Sem push. A alteração preexistente de `FW_VERSION` em `shared/src/shared_config.h` continua sem commit.
+
+### Trabalho concluído nesta sessão (sessão 7 — comandos Telegram param de responder)
+
+1. **Cursor do Telegram inicializado** (`hub/src/telegram_bot.cpp`): `last_message_received` começava sem valor definido na biblioteca; agora parte de 0.
+2. **Conexão TLS encerrada após `getUpdates()`**: força cada resposta/consulta a iniciar conexão limpa, evitando depender de socket persistente potencialmente obsoleto.
+3. **Alertas críticos sem repetição contínua**: bateria crítica e fumaça enviam imediatamente ao entrar em condição crítica e só podem enviar de novo após normalizar e reativar.
+4. **Relatório diário consolidado** em uma única mensagem, evitando envio serial de uma mensagem por node.
+5. **Validação**: `$HOME/.platformio/penv/bin/pio run -e hub_32_ota` passou (RAM 72.004 bytes; flash 1.446.210 bytes). Issue search não encontrou issue existente para esse sintoma.
+
+### Trabalho concluído nesta sessão (sessão 6 — build hub_32_ota)
+
+1. **Callback ESP-NOW do hub** (`hub/src/espnow_handler.cpp`): usa `esp_now_recv_info_t` e `src_addr` em ESP-IDF 5+, mantendo a assinatura antiga para versões anteriores e ESP8266.
+2. **Callbacks no shared** (`shared/src/espnow_node_protocol.cpp`): adapta recepção para ESP-IDF 5+ e envio para ESP-IDF 5.5+, preservando APIs antigas e ESP8266.
+3. **Validação**: `$HOME/.platformio/penv/bin/pio run -e hub_32_ota` passou. `firmware.bin` tem 1.482.448 bytes e cabe nos slots de 0x1D0000 configurados em `hub/partitions.csv`; não cabe em hubs com partição OTA antiga de 1 MiB (regra 35).
 
 ### Trabalho concluído nesta sessão (sessão 5 — gating WiFi/TCP do acquiry-bat)
 

@@ -1,6 +1,6 @@
 #include "telegram_bot.h"
 #include "config.h"
-#include "config_store.h"
+#include "../include/config_store.h"
 #include "sensor_registry.h"
 #include "device_router.h"
 #include "mqtt_client.h"
@@ -18,7 +18,7 @@
 static bool s_tg_enabled = false;
 static bool s_tg_initialized = false;
 static unsigned long s_tg_last_poll = 0;
-static uint32_t s_tg_poll_interval = 2000;
+static uint32_t s_tg_poll_interval = 1000;
 static char s_tg_token[64];
 static char s_tg_chatid[20];
 static uint8_t s_tg_alerts_lvl = 0x0F;
@@ -26,7 +26,6 @@ static uint16_t s_tg_alerts_type = 0x03FF;
 
 // Alert throttling (per-type timestamps)
 static unsigned long s_tg_throttle_gas = 0;
-static unsigned long s_tg_throttle_smoke = 0;
 static unsigned long s_tg_throttle_offline = 0;
 static unsigned long s_tg_throttle_reconnect = 0;
 static unsigned long s_tg_throttle_battery = 0;
@@ -35,6 +34,8 @@ static unsigned long s_tg_throttle_humidity = 0;
 static unsigned long s_tg_throttle_rssi = 0;
 static unsigned long s_tg_throttle_heap = 0;
 static unsigned long s_tg_throttle_daily = 0;
+static bool s_tg_critical_battery[MAX_VIRTUAL_SENSORS] = {false};
+static bool s_tg_critical_smoke[MAX_VIRTUAL_SENSORS] = {false};
 
 // Lamp keyboard feedback tracking (for hub-initiated changes)
 static uint8_t s_last_lamp_state[MAX_VIRTUAL_SENSORS];
@@ -42,7 +43,6 @@ static bool s_last_lamp_init = false;
 static unsigned long s_last_kb_push = 0;
 
 // Throttle intervals (ms)
-#define THROTTLE_CRITICAL_MS    0       // No throttle for critical
 #define THROTTLE_ALERT_MS       300000  // 5 min
 #define THROTTLE_WARNING_MS     3600000 // 1 hour
 #define THROTTLE_INFO_MS        300000  // 5 min
@@ -129,14 +129,14 @@ static void format_uptime(unsigned long ms, char* buf, size_t len) {
 
 // Handle /status command
 static void handle_status(long chat_id) {
-    char buf[512];
+    char buf[2048];
     char uptime_str[32];
     format_uptime(millis(), uptime_str, sizeof(uptime_str));
-    
+
     int paired = sensor_registry_count_paired();
     int online = sensor_registry_count_online();
-    
-    snprintf(buf, sizeof(buf),
+
+    int pos = snprintf(buf, sizeof(buf),
         "📊 *Status do Hub*\n\n"
         "Device: `%s`\n"
         "IP: `%s`\n"
@@ -145,7 +145,7 @@ static void handle_status(long chat_id) {
         "Memória: %u bytes (%u%%)\n\n"
         "Sensores: %d pareados, %d online\n"
         "MQTT: %s\n"
-        "Telegram: %s",
+        "Telegram: %s\n\n",
         get_gateway_device_id(),
         WiFi.localIP().toString().c_str(),
         WiFi.SSID().c_str(),
@@ -158,7 +158,13 @@ static void handle_status(long chat_id) {
         mqtt_client_is_connected() ? "Conectado" : "Desconectado",
         s_tg_enabled ? "Ativo" : "Inativo"
     );
-    
+
+    if (pos < 0) pos = 0;
+    if (pos < (int)sizeof(buf)) {
+        extern time_t gateway_ntp_epoch();
+        sensor_registry_daily_summary(buf + pos, sizeof(buf) - pos, gateway_ntp_epoch());
+    }
+
     s_tg_bot->sendMessage(String(chat_id), buf, "Markdown");
 }
 
@@ -188,12 +194,15 @@ static void handle_list(long chat_id) {
                 default: radio = "?"; break;
             }
             
-            pos += snprintf(buf + pos, sizeof(buf) - pos,
-                "%s [%d] %s (%s) - %s 🔋 %d%%\n",
-                status, s->slot, s->name, radio,
-                state_str,
-                s->battery_pct
-            );
+            if (s->battery_pct == BATTERY_LEVEL_UNAVAILABLE) {
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "%s [%d] %s (%s) - %s\n",
+                    status, s->slot, s->name, radio, state_str);
+            } else {
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "%s [%d] %s (%s) - %s 🔋 %d%%\n",
+                    status, s->slot, s->name, radio, state_str, s->battery_pct);
+            }
             count++;
             
             if (pos > 900) { // Prevent buffer overflow
@@ -258,6 +267,7 @@ static void handle_toggle(long chat_id, int slot) {
     if (device_send_command(s->mac, s->slot, new_state)) {
         char buf[128];
         snprintf(buf, sizeof(buf), "%s %s!", s->name, new_state ? "ligado" : "desligado");
+        if (s->state.onoff.state == 0 && new_state != 0) sensor_registry_bump_activation(s);
         s->state.onoff.state = new_state;
         s_last_lamp_state[slot] = new_state;
         s_last_kb_push = millis();
@@ -328,11 +338,11 @@ static void handle_on_off(long chat_id, const char* args, uint8_t state) {
 
 // Handle /start and /help commands
 static void handle_help(long chat_id) {
-    const char* help = 
+    const char* help =
         "🌱 *Bem-vindo ao AgriSense!*\n\n"
         "*Comandos disponíveis:*\n"
         "/start - Menu com botões toggle\n"
-        "/status - Status geral do hub\n"
+        "/status - Status geral + resumo do dia\n"
         "/list - Listar nodes [slot] 🔋\n"
         "/on <slot|all> - Liga\n"
         "/off <slot|all> - Desliga\n"
@@ -342,7 +352,7 @@ static void handle_help(long chat_id) {
        // "`/off 0`\n"
        // "`/on Entrada` (case-insensitive)\n\n"
        // "Configure alertas via dashboard: http://<hub-ip>/settings";
-    
+
     String keyboard = buildLampKeyboard();
     bool has_lamps = (keyboard != "[]");
     if (has_lamps) {
@@ -450,6 +460,7 @@ void telegram_bot_init() {
     // Create bot instance
     s_tg_bot = new UniversalTelegramBot(s_tg_token, s_tg_client);
     s_tg_bot->longPoll = 0; // Disable long poll for responsiveness
+    s_tg_bot->last_message_received = 0;
     
     s_tg_initialized = true;
     s_tg_last_poll = millis();
@@ -476,7 +487,11 @@ static void check_alerts() {
     // Per-sensor alerts
     for (int i=0;i<MAX_VIRTUAL_SENSORS;i++) {
         virtual_sensor_t *s = sensor_registry_get(i);
-        if (!s||!s->paired) continue;
+        if (!s||!s->paired) {
+            s_tg_critical_battery[i] = false;
+            s_tg_critical_smoke[i] = false;
+            continue;
+        }
         unsigned long offline_ms = s->online ? 0 : (millis() - s->last_seen);
         // Offline
         if (offline_ms > 300000 && is_alert_type_enabled(2) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_offline, THROTTLE_OFFLINE_MS)) {
@@ -489,22 +504,30 @@ static void check_alerts() {
             telegram_send_alert("🟢", b);
         }
         s_prev_online[i] = s->online;
-        if (!s->online) continue;
-        if (s->battery_pct < 10 && s->battery_pct >0 && is_alert_type_enabled(4) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_battery, THROTTLE_CRITICAL_MS)) {
+        bool critical_battery = s->online && s->battery_pct > 0 && s->battery_pct < 10;
+        bool critical_smoke = s->online &&
+            (s->type == SENSOR_TYPE_GAS || s->type == SENSOR_TYPE_DHT_GAS) &&
+            s->state.dht_gas.alarm;
+        if (critical_battery && !s_tg_critical_battery[i] &&
+            is_alert_type_enabled(4) && is_alert_level_enabled(0)) {
             char b[128]; snprintf(b,sizeof(b),"🔴 Bateria CRÍTICA %d%% em %s", s->battery_pct, s->name);
             telegram_send_alert("🔴", b);
-        } else if (s->battery_pct < 20 && is_alert_type_enabled(4) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_battery, THROTTLE_BATTERY_MS)) {
+        }
+        if (critical_smoke && !s_tg_critical_smoke[i] &&
+            is_alert_type_enabled(1) && is_alert_level_enabled(0)) {
+            char b[128]; snprintf(b,sizeof(b),"🔴 Fumaça detectada em %s", s->name);
+            telegram_send_alert("🔴", b);
+        }
+        s_tg_critical_battery[i] = critical_battery;
+        s_tg_critical_smoke[i] = critical_smoke;
+        if (!s->online) continue;
+        if (s->battery_pct >= 10 && s->battery_pct < 20 && is_alert_type_enabled(4) && is_alert_level_enabled(2) && check_throttle(s_tg_throttle_battery, THROTTLE_BATTERY_MS)) {
             char b[128]; snprintf(b,sizeof(b),"🟡 Bateria baixa %d%% em %s", s->battery_pct, s->name);
             telegram_send_alert("🟡", b);
         }
         if ((s->type==SENSOR_TYPE_GAS||s->type==SENSOR_TYPE_DHT_GAS) && s->state.dht_gas.gas_level > 400 && is_alert_type_enabled(0) && is_alert_level_enabled(1) && check_throttle(s_tg_throttle_gas, THROTTLE_GAS_MS)) {
             char b[128]; snprintf(b,sizeof(b),"⚠️ Gás %u ppm em %s", s->state.dht_gas.gas_level, s->name);
             telegram_send_alert("⚠️", b);
-        }
-        // Fumaça = alarm flag (CRITICAL)
-        if ((s->type==SENSOR_TYPE_GAS||s->type==SENSOR_TYPE_DHT_GAS) && s->state.dht_gas.alarm && is_alert_type_enabled(1) && is_alert_level_enabled(0) && check_throttle(s_tg_throttle_smoke, THROTTLE_CRITICAL_MS)) {
-            char b[128]; snprintf(b,sizeof(b),"🔴 Fumaça detectada em %s", s->name);
-            telegram_send_alert("🔴", b);
         }
         // Temperatura alta/baixa (DHT)
         if ((s->type==SENSOR_TYPE_TEMP_HUM||s->type==SENSOR_TYPE_DHT_GAS) && is_alert_type_enabled(5) && is_alert_level_enabled(1)) {
@@ -546,9 +569,9 @@ static void check_alerts() {
     }
     // Relatório diário 08:00
     if (tm_now && tm_now->tm_hour==8 && tm_now->tm_min==0 && is_alert_type_enabled(9) && is_alert_level_enabled(3) && check_throttle(s_tg_throttle_daily, THROTTLE_DAILY_MS)) {
-        int paired=sensor_registry_count_paired(); int online=sensor_registry_count_online();
-        char b[160]; snprintf(b,sizeof(b),"🟢 Resumo diário: %d/%d online | Heap %u | Uptime %lu min", online, paired, ESP.getFreeHeap(), millis()/60000);
-        telegram_send_alert("🟢", b);
+        char summary[2048];
+        sensor_registry_daily_summary(summary, sizeof(summary), epoch);
+        telegram_send_alert("🟢", summary);
     }
 }
 
@@ -561,12 +584,15 @@ void telegram_bot_loop() {
     if (millis() - s_tg_last_poll < s_tg_poll_interval) return;
     s_tg_last_poll = millis();
     
-    // Get updates
+    // Get updates (mantém conexão TLS para reuso/pooling; evita reconectar a cada poll)
     int num_new_messages = s_tg_bot->getUpdates(s_tg_bot->last_message_received + 1);
-    
+
     if (num_new_messages > 0) {
         console.printf("[TELEGRAM] Received %d messages\n", num_new_messages);
         process_messages(num_new_messages);
+    } else if (num_new_messages < 0) {
+        // Erro na leitura/HTTP: força reconexão no próximo ciclo
+        s_tg_client.stop();
     }
     check_alerts();
 

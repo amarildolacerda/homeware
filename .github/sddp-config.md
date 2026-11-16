@@ -1,0 +1,46 @@
+# SDD Project Configuration
+
+<!-- Managed by SDD bootstrap workflows. Keep headings and bold keys unchanged. -->
+
+## Product Document
+
+**Path**: specs/prd.md 
+
+## Technical Context Document
+
+**Path**: specs/sad.md 
+
+## Deployment & Operations Document
+
+**Path**: 
+
+## Project Plan
+
+**Path**: 
+
+## Checklist Settings
+
+**MaxChecklistCount**: 3
+
+## Autopilot
+
+<!-- Permission for /sddp-autopilot only. Standalone commands remain interactive. -->
+**Enabled**: true
+
+## Loop Settings
+
+**MaxIterations**: 10
+
+## QC Strictness
+
+<!-- Profile: standard | strict | minimal. Override Categories: comma-separated category:required|optional pairs. -->
+
+**Profile**: standard
+**Override Categories**:
+
+## Derived QC Policy
+
+<!-- Managed by /sddp-init. QC reads this section — do not edit manually. -->
+
+**Coverage Target**: 80
+**Required Categories**: coverage 

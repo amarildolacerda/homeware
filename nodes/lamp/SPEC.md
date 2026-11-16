@@ -50,7 +50,7 @@ Cliente ESP8266 (Wemos D1 Mini) que controla um relé ON/OFF. Comunica com o Gat
 
 - `GET /` — dashboard compacto: botão ON/OFF + badge estado; seção "Detalhes" collapsível (Gateway, RSSI, IP, Uptime, Alexa, Versão)
 - `GET /docs` — documentação da API
-- `GET /api/state` — JSON completo do dispositivo (state, button, battery, device_id, device_name, gateway_connected, paired, ip, rssi, uptime_s, slot, alexa_connected, fw_version, last_send_s)
+- `GET /api/state` — JSON completo do dispositivo (state, button, device_id, device_name, gateway_connected, paired, ip, rssi, uptime_s, slot, alexa_connected, fw_version, last_send_s). Não reporta nível de bateria; a lâmpada é alimentada por USB.
 - `GET /api/relay` — estado do relé `{"state":bool}`
 - `POST /api/relay` — controla relé com `{"state":true/false}`
 - `GET /api/pin?gpio=N` — leitura digital de GPIO

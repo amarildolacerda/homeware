@@ -25,6 +25,10 @@ typedef struct {
     unsigned long last_seen;
     bool paired;
     bool online;
+    uint16_t reconnect_count;
+    uint16_t activation_count;
+    uint16_t reconnect_count_day;   // reconexões hoje (RAM; reset à meia-noite)
+    uint16_t activation_count_day;  // acionamentos hoje (RAM; reset à meia-noite)
     uint8_t ip[4];
     uint16_t free_heap;
     union {
@@ -68,6 +72,9 @@ void sensor_registry_flush_if_dirty();
 void sensor_registry_load();
 void sensor_registry_clear_all();
 void sensor_registry_print_all();
+void sensor_registry_bump_activation(virtual_sensor_t *s);   // total + hoje
+void sensor_registry_daily_check(time_t epoch);              // rollover dos contadores diários
+int  sensor_registry_daily_summary(char *out, size_t out_len, time_t epoch);
 const char* sensor_type_to_string(uint8_t type);
 const char* sensor_type_friendly_name(uint8_t type);
 

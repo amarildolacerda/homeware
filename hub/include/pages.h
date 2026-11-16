@@ -7,7 +7,7 @@ const char PAGE_PORTAL[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Configurar Gateway</title>
+<title>AgroHub Gateway</title>
 <style>
 :root{--bg:#f4f4f4;--surface:#fff;--surface-2:#f9fafb;--text:#1f2937;--muted:#6b7280;--muted-subtle:#9ca3af;--primary:#5e6ad2;--border:#e5e7eb;--border-strong:#d1d5db;--danger:#dc2626;--success:#16a34a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -148,8 +148,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .sidebar .nav-group-list a:hover{color:var(--text);background:var(--primary-focus)}
 .sidebar .nav-group-list .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
 .sidebar .nav-group-list .empty{font-size:0.72rem;color:var(--muted-subtle);padding:6px 20px 6px 44px}
-.main{margin-left:0;flex:1;padding:24px;max-width:960px}
-#page{min-height:calc(100vh - 80px)}
+.main{margin-left:0;flex:1;min-width:0;padding:24px}
+#page{min-height:calc(100vh - 80px);width:100%}
 .mqtt-footer{position:fixed;bottom:0;right:0;left:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 24px;display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;z-index:10}
 .mqtt-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .mqtt-footer .dot.on{background:var(--success)}
@@ -677,6 +677,7 @@ function renderSensors(sensors) {
 }
 
 function battInline(pct) {
+  if (pct === 255) return '';
   if (pct===undefined||pct===null) return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:0%;background:var(--border);border-radius:3px"></span></span>';
   var c = pct > 50 ? '#4CAF50' : pct > 20 ? '#FFC107' : '#F44336';
   return '<span style="display:inline-block;width:28px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:'+Math.min(100,pct)+'%;background:'+c+';border-radius:3px"></span></span>';
@@ -903,7 +904,7 @@ function showPropsModal(slot) {
     '<div class="row"><span class="label">Chip</span><span class="value">'+chipName(s.client_chip)+'</span></div>'+
     (s.fw_version?'<div class="row"><span class="label">Versão FW</span><span class="value">'+escHtml(s.fw_version)+'</span></div>':'')+
     '<div class="row"><span class="label">MAC</span><span class="value">'+(s.mac||'--')+'</span></div>'+
-    '<div class="row"><span class="label">Bateria</span><span class="value">'+(s.battery_pct!==undefined?s.battery_pct+'%':'--')+'</span></div>'+
+    (s.battery_pct!==undefined && s.battery_pct!==255?'<div class="row"><span class="label">Bateria</span><span class="value">'+s.battery_pct+'%</span></div>':'')+
     '<div class="row"><span class="label">RSSI</span><span class="value">'+(s.last_rssi!==undefined?s.last_rssi+' dBm':'--')+'</span></div>'+
     '<div class="row"><span class="label">Última vez</span><span class="value">'+(s.last_seen>=0?fmtUptime(s.last_seen):'__:__')+'</span></div>'+
     '<div class="row"><span class="label">Sequência</span><span class="value">'+s.sequence+'</span></div>'+
@@ -1423,7 +1424,7 @@ async function loadTelegramConfig() {
     var data = await api('/api/config/telegram');
     document.getElementById('s-telegram-status').textContent = data.enabled ? 'Habilitado' : 'Desabilitado';
     document.getElementById('s-telegram-chatid').textContent = data.chat_id || '--';
-    document.getElementById('s-telegram-poll').textContent = (data.poll_interval_ms || 2000) + 'ms';
+    document.getElementById('s-telegram-poll').textContent = (data.poll_interval_ms || 1000) + 'ms';
     document.getElementById('telegram-sum').textContent = data.enabled ? 'Telegram ON' : 'Telegram OFF';
     document.getElementById('telegram-sum').className = 'badge ' + (data.enabled ? 'badge-ok' : 'badge-off');
   } catch(e) {}
@@ -1435,7 +1436,7 @@ async function showTelegramForm() {
     setTelegramEnabled(data.enabled || false);
     document.getElementById('telegram-token-input').value = data.token || '';
     document.getElementById('telegram-chatid-input').value = data.chat_id || '';
-    document.getElementById('telegram-poll-input').value = data.poll_interval_ms || 2000;
+    document.getElementById('telegram-poll-input').value = data.poll_interval_ms || 1000;
     // Alert levels
     document.getElementById('tg-alert-critical').checked = data.alert_critical !== false;
     document.getElementById('tg-alert-alert').checked = data.alert_alert !== false;

@@ -10,6 +10,7 @@
 #include "common_espnow.h"
 #include "common_util.h"
 #include "radio_node_strategy.h"
+#include "dashboard.h"
 
 #ifdef TCP_ENABLED
 #define WIFI_ENABLED
@@ -31,6 +32,21 @@ O dispositivo entra em deep sleep por s_interval_s segundos (default 60s) após 
 */
 
 static const char *TAG = "agri-acquiry-bat";
+
+enum PowerMode { BATTERY_MODE, POWERED_MODE };
+static PowerMode s_power_mode = BATTERY_MODE;
+
+static PowerMode detect_power_source() {
+#if POWER_DETECT_PIN >= 0
+    pinMode(POWER_DETECT_PIN, INPUT);
+    delay(10);
+    int v = digitalRead(POWER_DETECT_PIN);
+    if (POWER_DETECT_ACTIVE_HIGH) return (v == HIGH) ? POWERED_MODE : BATTERY_MODE;
+    return (v == LOW) ? POWERED_MODE : BATTERY_MODE;
+#else
+    return BATTERY_MODE;
+#endif
+}
 
 enum State
 {
@@ -73,6 +89,15 @@ static int s_pair_attempts = 0;
 static int s_data_retries = 0;
 static bool s_suspend = false;
 static bool s_suspend_from_telnet = false;
+static uint32_t s_tx_count = 0;
+static uint32_t s_rx_count = 0;
+
+// Dual Power — Powered Mode (dashboard web + OTA, sem deep sleep)
+static AcqStatus s_status = {};
+static unsigned long s_last_read_ms = 0;
+static unsigned long s_last_send_ms = 0;
+static unsigned long s_last_led_ms = 0;
+static unsigned long s_last_reconnect_ms = 0;
 
 static uint8_t s_broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -153,7 +178,7 @@ static int read_battery(void)
 #endif
 }
 
-static void read_acquiry(void)
+static void read_acquiry(bool verbose = true)
 {
     // Semântica nível+hold (ver cabeçalho): HIGH → estado 1; LOW → mantém 1 por
     // ACQUIRY_HOLD_TIME_MS e volta a 0. A versão anterior usava borda com
@@ -170,9 +195,71 @@ static void read_acquiry(void)
         s_acquiry_state = 0;
     }
     s_battery = read_battery();
-    console.printf("Sensor: acquiry=%d bat=%d%%\n", s_acquiry_state, s_battery);
+    s_status.value = s_acquiry_state;
+    s_status.label = s_acquiry_state ? ACQ_LABEL_ON : ACQ_LABEL_OFF;
+    s_status.battery = s_battery;
+    if (verbose)
+        console.printf("Sensor: acquiry=%d bat=%d%%\n", s_acquiry_state, s_battery);
     s_read_valid = true;
 }
+
+// --- Dual Power: Powered Mode ---
+
+// Sincroniza o estado do node com o AcqStatus publicado pelo dashboard
+static void dashboard_sync(void)
+{
+#ifdef TCP_ENABLED
+    s_status.paired = s_wifi_radio.is_paired();
+    s_status.slot = s_wifi_radio.assigned_slot();
+    s_status.tx_count = s_wifi_radio.tx_count();
+    s_status.rx_count = s_wifi_radio.rx_count();
+#else
+    s_status.paired = s_has_gateway;
+    s_status.slot = s_assigned_slot;
+    s_status.tx_count = s_tx_count;
+    s_status.rx_count = s_rx_count;
+#endif
+    s_status.device_name = s_device_name;
+    s_status.interval_s = s_interval_s;
+}
+
+// Callbacks do dashboard (/api/settings) — persistência + estado local
+static void cfg_on_name(const char *name)
+{
+    strncpy(s_device_name, name, sizeof(s_device_name) - 1);
+    s_device_name[sizeof(s_device_name) - 1] = '\0';
+    espnow_save_device_name(s_device_name);
+    console.printf("[%s] Nome alterado: %s\n", TAG, s_device_name);
+}
+
+static void cfg_on_interval(int seconds)
+{
+    s_interval_s = seconds;
+    EEPROM.begin(128);
+    EEPROM.put(EEPROM_INTERVAL_ADDR, s_interval_s);
+    EEPROM.commit();
+    EEPROM.end();
+    console.printf("[%s] Intervalo: %ds\n", TAG, s_interval_s);
+}
+
+static const AcqConfigCb s_cfg_cb = {cfg_on_name, cfg_on_interval};
+
+#ifdef TCP_ENABLED
+// Estado completo via TCP (JSON com battery/ip/heap; o rádio publica value/label a cada estado)
+static void send_state_payload(void)
+{
+    JsonDocument doc;
+    doc["device_id"] = getDeviceId();
+    doc["state"] = s_acquiry_state != 0;
+    doc["battery_pct"] = s_battery;
+    doc["fw_version"] = FW_VERSION;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["free_heap"] = ESP.getFreeHeap();
+    String payload;
+    serializeJson(doc, payload);
+    s_ack_received = s_wifi_radio.send_to_hub("/node/state", payload);
+}
+#endif
 
 #if !defined(TCP_ENABLED) && defined(ARDUINO_ARCH_ESP32)
 extern "C" void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
@@ -194,6 +281,7 @@ static void handle_espnow_recv(const uint8_t *mac, const uint8_t *data, int len)
     if (!data || len < 1)
         return;
     size_t data_len = (size_t)len;
+    s_rx_count++;
     switch (data[0])
     {
     case MSG_PAIR_RESPONSE:
@@ -318,7 +406,12 @@ static bool espnow_send_data(void)
     hdr->payload_len = sizeof(payload_int_t) + 4;
     if (!espnow_client_add_peer(s_broadcast_mac, TAG))
         return false;
-    return espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG);
+    if (espnow_send_wrapper(s_broadcast_mac, buf, sizeof(buf), TAG))
+    {
+        s_tx_count++;
+        return true;
+    }
+    return false;
 }
 #endif
 
@@ -404,11 +497,65 @@ static bool wifi_setup(bool force_config_portal)
     return false;
 }
 
+// --- Dual Power: Powered Mode (USB/fonte) — WiFi contínuo + dashboard + OTA ---
+static void setup_powered(void)
+{
+    // WiFi contínuo: conexão normal; falha → portal; portal expirado → restart
+    if (!wifi_setup(false))
+    {
+        console.printf("[%s] Portal expirou, reiniciando\n", TAG);
+        delay(2000);
+        ESP.restart();
+    }
+#ifdef ESP32
+    WiFi.setSleep(false);
+#else
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#endif
+
+#ifdef TCP_ENABLED
+    read_acquiry();
+    dashboard_sync();
+    uint8_t my_mac[6];
+    WiFi.macAddress(my_mac);
+    s_wifi_radio.set_mac(my_mac);
+    s_wifi_radio.set_device_name(s_device_name);
+    s_wifi_radio.set_device_id(getDeviceId());
+    s_wifi_radio.set_state_interval(STATE_UPDATE_INTERVAL);
+    s_wifi_radio.set_heartbeat_interval(HEARTBEAT_INTERVAL);
+    s_wifi_radio.callbacks = {get_sensor_type, get_sensor_payload, on_command, on_paired, on_restart, nullptr};
+    s_wifi_radio.begin();
+    console.printf("[%s] Powered Mode: TCP pronto\n", TAG);
+#else
+    s_espnow_ready = espnow_client_init(TAG);
+    if (s_espnow_ready)
+    {
+        esp_now_register_send_cb(espnow_send_cb);
+        esp_now_register_recv_cb(espnow_recv_cb);
+    }
+    WiFi.macAddress(s_my_mac);
+    memcpy(s_espnow_mac, s_my_mac, 6);
+    s_espnow_mac[0] ^= 0x02;
+    char mac_str[18];
+    mac_to_str(s_espnow_mac, mac_str, sizeof(mac_str));
+    console.printf("[%s] My MAC: %s, ESP-NOW: %s\n", TAG, WiFi.macAddress().c_str(), mac_str);
+    s_has_gateway = espnow_load_gateway_mac(s_gateway_mac, TAG);
+    read_acquiry();
+    dashboard_sync();
+    console.printf("[%s] Powered Mode: ESP-NOW pronto (ch %d)\n", TAG, WiFi.channel());
+#endif
+
+    dashboard_begin(&s_status, &s_cfg_cb);
+    console.printf("[%s] Powered Mode ativo — sem deep sleep\n", TAG);
+}
+
 void setup(void)
 {
     Serial.begin(115200);
     delay(500);
     console.begin();
+    s_power_mode = detect_power_source();
+    Serial.printf("Power mode: %s\n", s_power_mode == POWERED_MODE ? "POWERED" : "BATTERY");
     s_active_start = millis();
 
 #if !defined(ARDUINO_ARCH_ESP32)
@@ -433,6 +580,13 @@ void setup(void)
 
     randomSeed(analogRead(A0));
     init_hardware();
+
+    // Dual Power: Powered Mode tem fluxo próprio (dashboard + OTA, sem deep sleep)
+    if (s_power_mode == POWERED_MODE)
+    {
+        setup_powered();
+        return;
+    }
 
     bool button_pressed = (digitalRead(CFG_BUTTON_PIN) == LOW);
 #ifndef TCP_ENABLED
@@ -549,8 +703,163 @@ void setup(void)
 #endif
 }
 
+// Menu serial/telnet — compartilhado entre Battery e Powered Mode
+static void run_console_command(char c)
+{
+    switch (c)
+    {
+    case 's':
+    {
+        read_acquiry();
+        console.printf("WiFi: %s RSSI=%d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+        console.printf("Modo: %s\n", s_power_mode == POWERED_MODE ? "POWERED" : "BATTERY");
+        console.printf("Intervalo: %ds\n", s_interval_s);
+        break;
+    }
+    case 'i':
+    {
+        console.printf("Intervalo atual: %ds\n", s_interval_s);
+        console.printf("Digite novo intervalo (%d-%d s): ", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
+        unsigned long timeout = millis() + 10000;
+        int idx = 0;
+        char buf[8] = {0};
+        while (millis() < timeout && idx < 7)
+        {
+            console.loop();
+            int ch = Serial.read();
+            if (ch == -1)
+                ch = console.telnet_read();
+            if (ch >= '0' && ch <= '9')
+            {
+                buf[idx++] = (char)ch;
+                Serial.write(ch);
+            }
+            else if (ch == '\n' || ch == '\r')
+                break;
+            delay(10);
+        }
+        if (idx > 0)
+        {
+            int val = atoi(buf);
+            if (val >= DEEP_SLEEP_INTERVAL_MIN && val <= DEEP_SLEEP_INTERVAL_MAX)
+            {
+                s_interval_s = val;
+                EEPROM.begin(128);
+                EEPROM.put(EEPROM_INTERVAL_ADDR, s_interval_s);
+                EEPROM.commit();
+                EEPROM.end();
+                console.printf("\nIntervalo alterado para %ds\n", s_interval_s);
+            }
+            else
+                console.printf("\nInvalido (%d-%d)\n", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
+        }
+        else
+            console.printf("\nCancelado\n");
+        break;
+    }
+    case 'r':
+        console.printf("Restart...\n");
+        delay(100);
+        ESP.restart();
+        break;
+    case 'h':
+        console.printf("s=status i=intervalo r=restart p=parear h=ajuda\n");
+        if (s_power_mode == POWERED_MODE && WiFi.status() == WL_CONNECTED)
+            console.printf("Dashboard: http://%s\n", WiFi.localIP().toString().c_str());
+        break;
+    case 'p':
+        console.printf("[%s] Re-pairing...\n", TAG);
+#ifdef TCP_ENABLED
+        s_wifi_radio.force_repair();
+#else
+        s_has_gateway = false;
+        memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
+        s_assigned_slot = 0;
+#endif
+        s_suspend = false;
+        s_state = STATE_INIT;
+        break;
+    default:
+        break;
+    }
+}
+
+// --- Dual Power: Powered Mode loop (sem deep sleep; dashboard/OTA/console ativos) ---
+static void powered_maintain_wifi(void)
+{
+    unsigned long now = millis();
+    if (now - s_last_reconnect_ms < POWERED_WIFI_RETRY_MS)
+        return;
+    s_last_reconnect_ms = now;
+    console.printf("[%s] WiFi caiu, reconectando\n", TAG);
+    WiFi.begin(); // creds salvas
+}
+
+static void loop_powered(void)
+{
+    console.loop();
+    dashboard_loop();
+
+    // Console interativa sem suspender (não há deep sleep)
+    while (Serial.available() > 0)
+        run_console_command((char)Serial.read());
+    int tc;
+    while ((tc = console.telnet_read()) >= 0)
+        run_console_command((char)tc);
+
+    if (WiFi.status() != WL_CONNECTED)
+        powered_maintain_wifi();
+
+    unsigned long now = millis();
+#ifdef TCP_ENABLED
+    s_wifi_radio.loop();
+    // Leitura frequente mantém value/label frescos para o publish do rádio
+    if (now - s_last_read_ms >= POWERED_READ_INTERVAL_MS)
+    {
+        s_last_read_ms = now;
+        read_acquiry(false);
+        dashboard_sync();
+    }
+#else
+    unsigned long period = (unsigned long)s_interval_s * 1000UL;
+    if (period < POWERED_SEND_MIN_INTERVAL_MS)
+        period = POWERED_SEND_MIN_INTERVAL_MS;
+    if (now - s_last_send_ms >= period)
+    {
+        s_last_send_ms = now;
+        read_acquiry(false);
+        dashboard_sync();
+        // Mesma sequência do ciclo de bateria: pair request + dados (broadcast)
+        delay(200);
+        espnow_send_pair_request();
+        delay(100);
+        if (s_read_valid)
+        {
+            s_ack_received = false;
+            espnow_send_data();
+            s_status.last_send_ms = millis();
+        }
+    }
+#endif
+
+    // LED: aceso (LOW) com WiFi; blink sem conexão
+    if (WiFi.status() == WL_CONNECTED)
+        digitalWrite(LED_PIN, LOW);
+    else if (now - s_last_led_ms >= POWERED_LED_BLINK_MS)
+    {
+        s_last_led_ms = now;
+        digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    }
+}
+
 void loop(void)
 {
+    // Dual Power: Powered Mode não usa a máquina de estados de deep sleep
+    if (s_power_mode == POWERED_MODE)
+    {
+        loop_powered();
+        return;
+    }
     console.loop();
 #ifdef TCP_ENABLED
     s_wifi_radio.loop();
@@ -594,77 +903,7 @@ void loop(void)
         {
             menu_printed = false;
             console.printf("\n");
-            switch (c)
-            {
-            case 's':
-            {
-                read_acquiry();
-                console.printf("WiFi: %s RSSI=%d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
-                console.printf("Intervalo: %ds\n", s_interval_s);
-                break;
-            }
-            case 'i':
-            {
-                console.printf("Intervalo atual: %ds\n", s_interval_s);
-                console.printf("Digite novo intervalo (%d-%d s): ", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
-                unsigned long timeout = millis() + 10000;
-                int idx = 0;
-                char buf[8] = {0};
-                while (millis() < timeout && idx < 7)
-                {
-                    console.loop();
-                    int ch = Serial.read();
-                    if (ch == -1)
-                        ch = console.telnet_read();
-                    if (ch >= '0' && ch <= '9')
-                    {
-                        buf[idx++] = (char)ch;
-                        Serial.write(ch);
-                    }
-                    else if (ch == '\n' || ch == '\r')
-                        break;
-                    delay(10);
-                }
-                if (idx > 0)
-                {
-                    int val = atoi(buf);
-                    if (val >= DEEP_SLEEP_INTERVAL_MIN && val <= DEEP_SLEEP_INTERVAL_MAX)
-                    {
-                        s_interval_s = val;
-                        EEPROM.begin(128);
-                        EEPROM.put(EEPROM_INTERVAL_ADDR, s_interval_s);
-                        EEPROM.commit();
-                        EEPROM.end();
-                        console.printf("\nIntervalo alterado para %ds\n", s_interval_s);
-                    }
-                    else
-                        console.printf("\nInvalido (%d-%d)\n", DEEP_SLEEP_INTERVAL_MIN, DEEP_SLEEP_INTERVAL_MAX);
-                }
-                else
-                    console.printf("\nCancelado\n");
-                break;
-            }
-            case 'r':
-                console.printf("Restart...\n");
-                delay(100);
-                ESP.restart();
-                break;
-            case 'h':
-                console.printf("s=status i=intervalo r=restart p=parear h=ajuda\n");
-                break;
-            case 'p':
-                console.printf("[%s] Re-pairing...\n", TAG);
-#ifdef TCP_ENABLED
-                s_wifi_radio.force_repair();
-#else
-                s_has_gateway = false;
-                memset(s_gateway_mac, 0, sizeof(s_gateway_mac));
-                s_assigned_slot = 0;
-#endif
-                s_suspend = false;
-                s_state = STATE_INIT;
-                break;
-            }
+            run_console_command((char)c);
             console.printf("> ");
             menu_printed = true;
         }
@@ -780,18 +1019,7 @@ void loop(void)
             break;
         }
         digitalWrite(LED_PIN, LOW);
-        {
-            JsonDocument doc;
-            doc["device_id"] = getDeviceId();
-            doc["state"] = s_acquiry_state != 0;
-            doc["battery_pct"] = s_battery;
-            doc["fw_version"] = FW_VERSION;
-            doc["ip"] = WiFi.localIP().toString();
-            doc["free_heap"] = ESP.getFreeHeap();
-            String payload;
-            serializeJson(doc, payload);
-            s_ack_received = s_wifi_radio.send_to_hub("/node/state", payload);
-        }
+        send_state_payload();
         digitalWrite(LED_PIN, HIGH);
 #else
         delay(200);
@@ -841,18 +1069,7 @@ void loop(void)
                     break;
                 }
 #ifdef TCP_ENABLED
-                {
-                    JsonDocument doc;
-                    doc["device_id"] = getDeviceId();
-                    doc["state"] = s_acquiry_state != 0;
-                    doc["battery_pct"] = s_battery;
-                    doc["fw_version"] = FW_VERSION;
-                    doc["ip"] = WiFi.localIP().toString();
-                    doc["free_heap"] = ESP.getFreeHeap();
-                    String payload;
-                    serializeJson(doc, payload);
-                    s_ack_received = s_wifi_radio.send_to_hub("/node/state", payload);
-                }
+                send_state_payload();
 #else
                 s_ack_received = false;
                 espnow_send_data();

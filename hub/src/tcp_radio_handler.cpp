@@ -292,14 +292,18 @@ void TcpRadioHandler::handle_register(const uint8_t* mac, const char* device_id,
         virtual_sensor_t* sensor = sensor_registry_get(slot);
         if (sensor) {
             bool was_offline = !sensor->online;
+            if (was_offline) {
+                sensor->reconnect_count++;
+                sensor->reconnect_count_day++;
+            }
             sensor->online = true;
             sensor->last_seen = millis();
             if (was_offline && mqtt_client_is_connected()) {
                 mqtt_client_publish_availability(sensor, true);
             }
-            // refresh type/mac/radio/name in place
+            // refresh type/mac/radio in place; preserve user-assigned name
             sensor->type = sensor_type;
-            if (device_name && strlen(device_name) > 0) {
+            if ((sensor->name[0] == '\0') && device_name && strlen(device_name) > 0) {
                 strncpy(sensor->name, device_name, sizeof(sensor->name) - 1);
                 sensor->name[sizeof(sensor->name) - 1] = '\0';
             }
@@ -421,7 +425,10 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             else if (state["state"].is<bool>()) val = state["state"] ? 1 : 0;
             else if (state["relay_state"].is<uint8_t>()) val = (uint8_t)state["relay_state"];
             else if (state["relay_state"].is<bool>()) val = state["relay_state"] ? 1 : 0;
-            if (val != 0xFF) sensor->state.onoff.state = val;
+            if (val != 0xFF) {
+                if (sensor->state.onoff.state == 0 && val != 0) sensor_registry_bump_activation(sensor);
+                sensor->state.onoff.state = val;
+            }
             break;
         }
         case SENSOR_TYPE_ACQUIRY: {
@@ -429,7 +436,11 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             uint8_t val = 0xFF;
             if (state["state"].is<bool>()) val = state["state"] ? 1 : 0;
             else if (state["state"].is<uint8_t>()) val = (uint8_t)state["state"];
-            if (val != 0xFF) sensor->state.onoff.state = val ? 1 : 0;
+            if (val != 0xFF) {
+                uint8_t new_state = val ? 1 : 0;
+                if (sensor->state.onoff.state == 0 && new_state != 0) sensor_registry_bump_activation(sensor);
+                sensor->state.onoff.state = new_state;
+            }
             // Label dinâmico de estado (opcional, ex: "aberto"/"fechado")
             if (state["label"].is<const char*>()) {
                 strncpy(sensor->state.generic.label, state["label"].as<const char*>(),
@@ -446,8 +457,11 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
             else if (state["state"].is<uint8_t>()) sensor->state.generic.value = (uint8_t)state["state"];
             else if (state["value"].is<uint16_t>()) sensor->state.generic.value = state["value"];
             else if (state["value"].is<int>()) sensor->state.generic.value = (uint16_t)state["value"].as<int>();
-            sensor->state.onoff.state = (sensor->state.generic.value <= 1) ? (uint8_t)sensor->state.generic.value
-                                                                           : sensor->state.onoff.state;
+            if (sensor->state.generic.value <= 1) {
+                uint8_t new_state = (uint8_t)sensor->state.generic.value;
+                if (sensor->state.onoff.state == 0 && new_state != 0) sensor_registry_bump_activation(sensor);
+                sensor->state.onoff.state = new_state;
+            }
             // Label dinâmico de estado (opcional)
             if (state["label"].is<const char*>()) {
                 strncpy(sensor->state.generic.label, state["label"].as<const char*>(),
@@ -458,6 +472,10 @@ void TcpRadioHandler::handle_state(const char* device_id, JsonObject& state) {
     }
 
     bool was_offline = !sensor->online;
+    if (was_offline) {
+        sensor->reconnect_count++;
+        sensor->reconnect_count_day++;
+    }
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;
@@ -483,6 +501,10 @@ void TcpRadioHandler::handle_heartbeat(const char* device_id) {
     if (!sensor) return;
 
     bool was_offline = !sensor->online;
+    if (was_offline) {
+        sensor->reconnect_count++;
+        sensor->reconnect_count_day++;
+    }
     sensor->last_seen = millis();
     sensor->online = true;
     m_rx_count++;

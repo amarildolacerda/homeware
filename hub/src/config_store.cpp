@@ -1,4 +1,4 @@
-#include "config_store.h"
+#include "../include/config_store.h"
 #include "common_console.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
@@ -43,7 +43,7 @@ bool config_telegram_load(TelegramConfig *cfg) {
     strncpy(cfg->chat_id, chatid, sizeof(cfg->chat_id) - 1);
     cfg->chat_id[sizeof(cfg->chat_id) - 1] = '\0';
 
-    cfg->poll_interval = doc["poll_interval"] | 2000;
+    cfg->poll_interval = doc["poll_interval"] | 1000;
     if (cfg->poll_interval < 1000)  cfg->poll_interval = 1000;
     if (cfg->poll_interval > 60000) cfg->poll_interval = 60000;
 
@@ -85,7 +85,7 @@ bool config_telegram_load_defaults(TelegramConfig *cfg) {
     cfg->enabled       = false;
     cfg->token[0]      = '\0';
     cfg->chat_id[0]    = '\0';
-    cfg->poll_interval = 2000;
+    cfg->poll_interval = 1000;
     cfg->alerts_level  = 0x0F;   // all levels enabled
     cfg->alerts_type   = 0x03FF; // all alert types enabled
     return true;

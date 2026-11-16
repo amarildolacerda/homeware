@@ -29,6 +29,14 @@ void test_wd_healthy_arms_and_never_fires(void);
 void test_wd_flipflop_does_not_disarm(void);
 void test_wd_healthy_then_broken_fires(void);
 void test_wd_reset_disarms(void);
+void test_radio_mode_compiled_both(void);
+void test_radio_mode_id_and_label(void);
+void test_radio_mode_parse_valid(void);
+void test_radio_mode_parse_invalid(void);
+void test_radio_mode_save_load_roundtrip(void);
+void test_radio_mode_load_invalid_falls_back_to_default(void);
+void test_radio_mode_save_ignores_unknown_mode(void);
+void test_radio_mode_set_active(void);
 
 void setUp(void) {
     fake_millis_set(0);
@@ -65,6 +73,14 @@ int main(int argc, char** argv) {
     RUN_TEST(test_wd_flipflop_does_not_disarm);
     RUN_TEST(test_wd_healthy_then_broken_fires);
     RUN_TEST(test_wd_reset_disarms);
+    RUN_TEST(test_radio_mode_compiled_both);
+    RUN_TEST(test_radio_mode_id_and_label);
+    RUN_TEST(test_radio_mode_parse_valid);
+    RUN_TEST(test_radio_mode_parse_invalid);
+    RUN_TEST(test_radio_mode_save_load_roundtrip);
+    RUN_TEST(test_radio_mode_load_invalid_falls_back_to_default);
+    RUN_TEST(test_radio_mode_save_ignores_unknown_mode);
+    RUN_TEST(test_radio_mode_set_active);
     UNITY_END();
     return 0;
 }

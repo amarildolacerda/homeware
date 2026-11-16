@@ -12,9 +12,9 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "executable": "/mnt/windows/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
             "projectEnvName": "hub_32_ota",
-            "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "toolchainBinDir": "/home/kza/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "preLaunchTask": {
                 "type": "PlatformIO",
@@ -25,18 +25,18 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "executable": "/mnt/windows/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
             "projectEnvName": "hub_32_ota",
-            "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "toolchainBinDir": "/home/kza/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "/mnt/c/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
+            "executable": "/mnt/windows/git/homeware/hub/.pio/build/hub_32_ota/firmware.elf",
             "projectEnvName": "hub_32_ota",
-            "toolchainBinDir": "/home/kzuca/.platformio/packages/toolchain-xtensa-esp32/bin",
+            "toolchainBinDir": "/home/kza/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "loadMode": "manual"
         }

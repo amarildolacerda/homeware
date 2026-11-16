@@ -106,6 +106,8 @@ typedef struct __attribute__((packed)) {
 ```
 
 `ESPNOW_HEADER_FIXED_SIZE` = tamanho do header sem `payload`.
+`battery_pct = 0xFF` indica que o dispositivo não mede bateria (por exemplo,
+lamp alimentada por USB); o gateway não deve expor entidade nem alerta de bateria.
 
 ## 4. Tipos de Mensagem (`espnow_msg_type_t`)
 

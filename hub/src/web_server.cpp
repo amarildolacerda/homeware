@@ -5,7 +5,7 @@
 extern RadioManager s_radio_mgr;
 #include "mqtt_client.h"
 #include "config.h"
-#include "config_store.h"
+#include "../include/config_store.h"
 #include "pages.h"
 #include "log_buffer.h"
 #include "common_console.h"
@@ -362,7 +362,9 @@ void web_server_init() {
                     obj["fw_version"] = s->fw_version;
                 }
                 obj["sequence"] = s->sequence;
-                obj["battery_pct"] = s->battery_pct;
+                if (s->battery_pct != BATTERY_LEVEL_UNAVAILABLE) {
+                    obj["battery_pct"] = s->battery_pct;
+                }
                 obj["last_rssi"] = s->last_rssi;
                 obj["free_heap"] = s->free_heap;
                 obj["last_seen"] = (s->last_seen > 0) ? (long)(millis() - s->last_seen) : -1;
@@ -687,8 +689,8 @@ void web_server_init() {
         cfg.token[sizeof(cfg.token) - 1] = '\0';
         strncpy(cfg.chat_id, doc["chat_id"] | "", sizeof(cfg.chat_id) - 1);
         cfg.chat_id[sizeof(cfg.chat_id) - 1] = '\0';
-        cfg.poll_interval = doc["poll_interval_ms"] | 2000;
-        if (cfg.poll_interval < 1000 || cfg.poll_interval > 60000) cfg.poll_interval = 2000;
+        cfg.poll_interval = doc["poll_interval_ms"] | 1000;
+        if (cfg.poll_interval < 1000 || cfg.poll_interval > 60000) cfg.poll_interval = 1000;
         
         // Alert levels
         uint8_t lvl = 0;
