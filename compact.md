@@ -11,8 +11,17 @@ política de push, shared como fonte única, regras 1–51).
 
 ## Última posição
 
-**Data:** 2026-11-15 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
-**Estado:** `hub_32_ota` compila. O polling do Telegram foi reforçado: inicializa cursor de updates, encerra TLS após cada poll, alerta crítico só é enviado ao entrar no estado e relatório diário é uma mensagem consolidada. Sem push. A alteração preexistente de `FW_VERSION` em `shared/src/shared_config.h` continua sem commit.
+**Data:** 2026-11-16 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
+**Estado:** fix do botão Ligar/Desligar do hub (lamp não recebia comando). `SelectableNodeProtocol` não propagava `callbacks` — corrigido no `shared` (regra 56). Build `nodes/lamp` env `esp8266_espnow` OK. Sem push.
+
+### Trabalho concluído nesta sessão (sessão 8 — botão ligar/desligar do hub não chega ao lamp)
+
+1. **Causa raiz** (`shared/src/selectable_node_protocol.*`): `NodeProtocol::callbacks` é membro por instância. O `lamp` (envs `esp8266_espnow`/`esp8266_ota` têm `RADIO_SELECT_ENABLED`) usa `s_radio.callbacks = {...}`, que ficava só no `SelectableNodeProtocol`; `m_espnow` e `m_tcp` continuavam com `nullptr`. Resultado: `on_command` nunca chamado (botão do hub inócuo), `get_sensor_payload` nunca chamado (estado nunca atualiza no hub) e `get_sensor_type` nulo → registra como `SENSOR_TYPE_ONOFF` (TCP) / 0 (ESP-NOW).
+2. **Fix**: novo `SelectableNodeProtocol::sync_callbacks()` copiando `callbacks` para `m_espnow` e `m_tcp`, chamado em `set_mode()`, `begin()` e `loop()` (cobre atribuição depois do `begin`).
+3. **Defensivo**: `NodeCallbacks callbacks = {}` em `node_protocol.h` — callback ausente é `nullptr` (já checado), não ponteiro indefinido.
+4. **Validação**: `pio run -e esp8266_espnow` no `nodes/lamp` SUCCESS. `tests/unit` (native) **não compila por breakage pré-existente** (`platform.h` inclui `ESP8266WiFi.h` no env native, sem mock) — não relacionado a esta mudança.
+5. **Bancada pendente**: reflashar o lamp, conferir que o tipo passa a 9 (Lâmpada) no card do hub e que `[lamp] Command received` / `TCP cmd: ON` aparece no serial ao clicar. No hub, `[tcp] Command queued for ...` (modo TCP) ou `[ESP-NOW] cmd to <mac> hop 1/6` (modo ESP-NOW).
+6. **Follow-up em aberto**: `dest_for_chip()` (hub) envia unicast ESP32→ESP8266 para o MAC WiFi do registry, enquanto a regra 19 pede derivar o MAC alt (`mywifi_espnow_mac`, hoje sem uso). Não alterado por falta de validação em bancada.
 
 ### Trabalho concluído nesta sessão (sessão 7 — comandos Telegram param de responder)
 
