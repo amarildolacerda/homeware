@@ -11,8 +11,35 @@ política de push, shared como fonte única, regras 1–51).
 
 ## Última posição
 
-**Data:** 2026-11-16 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
-**Estado:** fix do botão Ligar/Desligar do hub (lamp não recebia comando). `SelectableNodeProtocol` não propagava `callbacks` — corrigido no `shared` (regra 56). Build `nodes/lamp` env `esp8266_espnow` OK. Sem push.
+**Data:** 2026-11-18 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
+**Estado:** `esp32_c3` recebe `POWERED_USB=1`; macros duplicadas removidas. Powered Mode inicia dashboard e Telnet (porta 23). Dashboard confirmado acessível pelo usuário em `http://192.168.1.59/`. Build C3 passou; upload Telnet mais recente bloqueado porque `/dev/ttyACM0` estava ocupado. Sem push.
+
+### Trabalho concluído nesta sessão (sessão 12 — Telnet em Powered Mode)
+
+1. Telnet usa `WiFiServer` na porta 23; `console.begin()` inicia o listener e `loop_powered()` aceita clientes/processa comandos.
+2. `console.set_banner(DEVICE_NAME)` identifica a sessão remota; `setup_powered()` mostra o IP e a porta quando WiFi está conectado.
+3. Build `esp32_c3` passou. A tentativa de upload falhou porque `/dev/ttyACM0` estava ocupado; nenhum processo foi encerrado.
+
+### Trabalho concluído nesta sessão (sessão 11 — dashboard em Powered Mode)
+
+1. Verificado que `setup()` chama `setup_powered()` quando o modo detectado é `POWERED_MODE`.
+2. `setup_powered()` já chama `dashboard_begin()`; isso registra `/` e `/docs` e inicia o servidor na porta 80. `loop_powered()` chama `dashboard_loop()` em cada iteração.
+3. Nenhuma alteração de código necessária para ativar o dashboard. Acessar `http://<IP-do-node>/` após conectar ao WiFi.
+
+### Trabalho concluído nesta sessão (sessão 10 — avisos de defines duplicados)
+
+1. Removido `-DWIFI_ENABLED` dos envs TCP: `main.cpp` já ativa WiFi quando `TCP_ENABLED` está definido.
+2. No C3, mantido somente `WIFI_CHANNEL=4` (valor efetivo anterior; o define `=1` duplicado não era usado no código).
+3. Removidas as definições locais duplicadas `WIFI_CONFIG_PORTAL_SSID/PASS` de `config.h`; o valor efetivo já era o default do `shared_config.h`.
+4. Validação: builds `esp32_c3`, `esp8266_tcp` e `esp8266_ota` passaram sem avisos de macro redefinida. Ainda há warnings independentes de APIs deprecated e variáveis unused.
+
+### Trabalho concluído nesta sessão (sessão 9 — reinício do acquiry-bat ESP32-C3)
+
+1. **Causa raiz do assert**: stack da placa mostrou `ConsoleOutput::begin()` → `NetworkServer::begin()` → `lwip_socket()` → `sys_mutex_lock()`, antes de `WiFi.mode()` inicializar `Network.begin()`. Movido `console.begin()` para depois de `WiFi.mode(WIFI_STA)` em `nodes/acquiry-bat/src/main.cpp`.
+2. **Modo de alimentação**: por decisão do usuário, `platformio.ini` define `-DPOWERED_USB=1` somente em `env:esp32_c3`; `detect_power_source()` consome a flag e retorna `POWERED_MODE`. Outros alvos mantêm a detecção atual.
+3. **Robustez adicional**: expiração do portal WiFi em Powered Mode não reinicia e deixa a reconexão para `powered_maintain_wifi()`.
+4. **Validação**: `pio run -e esp32_c3` passou; firmware gravado/verificado em `/dev/ttyACM0`. A captura posterior não encontrou linhas de monitor; build ainda avisa redefinição de `WIFI_CHANNEL`.
+5. **Próximo passo**: abrir monitor a 115200 antes de resetar a placa e confirmar o banner/boot. O firmware não imprime telemetria continuamente.
 
 ### Trabalho concluído nesta sessão (sessão 8 — botão ligar/desligar do hub não chega ao lamp)
 
