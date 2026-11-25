@@ -3,7 +3,8 @@
 # Uso: ./flash.sh [-p <porta>] [-d <dir_projeto>]
 set -e
 
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT_DIR"
 
 PORT="/dev/ttyUSB0"
 PROJECT="hub"
@@ -26,8 +27,9 @@ fi
 if [ -f .venv/bin/activate ]; then
     source .venv/bin/activate
 fi
+source "$ROOT_DIR/pio_env.sh"
 
 echo "==> Building + flashing $PROJECT on $PORT ..."
-pio run -d "$PROJECT" -t upload --upload-port "$PORT"
+"$PIO" run -d "$PROJECT" -t upload --upload-port "$PORT"
 
 echo "==> Done. Use ./monitor.sh -p $PORT para acompanhar a saída."

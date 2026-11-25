@@ -20,7 +20,8 @@ política de push, shared como fonte única, regras 1–57).
 2. **`setup.sh`**: removido `pip --user`. Ordem agora: `pio` no PATH → `~/.platformio/penv/bin/pio` → criar/reparar `.venv` e instalar PlatformIO dentro dele. Bloco antigo que só procurava o bin do user-site foi trocado por fallback para `.venv/bin` + mensagem de PATH persistente.
 3. **`setup_venv.sh`**: passou a recriar o venv quando ele está ausente **ou quebrado** — validação por saída não-vazia de `python -m pip --version` (um arquivo executável de 0 bytes responde exit 0 sem saída, então `-x` sozinho não detecta).
 4. **`AGENTS.md`**: regra 57 registrada (PEP 668 / setup sem pip de sistema).
-5. **Validação**: `bash setup.sh` → EXIT=0, sem erros de externally-managed; `pio --version` = 6.2.0 (via `~/.platformio/penv/bin`); `.venv` recriado com deps de `requirements.txt`. Commits locais em `dev`, sem push.
+5. **Validação**: `bash setup.sh` → EXIT=0, sem erros de externally-managed; `pio --version` = 6.2.0 (via `~/.platformio/penv/bin`); `.venv` recriado com deps de `requirements.txt`.
+6. **Sequência do usuário**: `cd hub && ./flash.sh -o 192.168.1.14` falhou com `platformio: comando não encontrado` — o `export PATH` dentro do `setup.sh` não persiste no shell. Criado `pio_env.sh` (raiz) que resolve o executável; scripts `flash.sh`, `hub/flash.sh`, `hub/build.sh`, `hub/monitor.sh`, `hub/erase.sh` agora sourceiam e chamam `"$PIO"`. Validado com `PATH=/usr/bin:/bin`: resolve para `~/.platformio/penv/bin/pio` 6.2.0. Sem push; OTA não executado por mim.
 
 ### Trabalho concluído nesta sessão (sessão 12 — Telnet em Powered Mode)
 
