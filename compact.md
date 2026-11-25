@@ -22,6 +22,7 @@ política de push, shared como fonte única, regras 1–57).
 4. **`AGENTS.md`**: regra 57 registrada (PEP 668 / setup sem pip de sistema).
 5. **Validação**: `bash setup.sh` → EXIT=0, sem erros de externally-managed; `pio --version` = 6.2.0 (via `~/.platformio/penv/bin`); `.venv` recriado com deps de `requirements.txt`.
 6. **Sequência do usuário**: `cd hub && ./flash.sh -o 192.168.1.14` falhou com `platformio: comando não encontrado` — o `export PATH` dentro do `setup.sh` não persiste no shell. Criado `pio_env.sh` (raiz) que resolve o executável; scripts `flash.sh`, `hub/flash.sh`, `hub/build.sh`, `hub/monitor.sh`, `hub/erase.sh` agora sourceiam e chamam `"$PIO"`. Validado com `PATH=/usr/bin:/bin`: resolve para `~/.platformio/penv/bin/pio` 6.2.0. Sem push; OTA não executado por mim.
+7. **Dúvida respondida (sem código)**: tipos 8/9 não vêm do nome do device — o node envia `sensor_type` no `/node/register` (TCP) ou PAIR_REQUEST (ESP-NOW); hub só persiste/refresha no re-register. `nodes/switch` → 8 (Interruptor), `nodes/lamp` → 9 (Lâmpada, desde commit 81a90da em 2026-08-03; antes era 8). Firmware lamp antigo ou pré-fix de `sync_callbacks()` (fallback TCP = ONOFF) também registra 8. Conferir via `GET /api/sensors` (`type`, `type_name`, `fw_version`); corrigir com reflash + reboot do node ou `b` no console do hub.
 
 ### Trabalho concluído nesta sessão (sessão 12 — Telnet em Powered Mode)
 
