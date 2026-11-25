@@ -5,14 +5,22 @@
 > Atualize-o ao final de cada sessão (data + seção "Última posição").
 
 Regras gerais do projeto continuam valendo em `AGENTS.md` (branch `dev`,
-política de push, shared como fonte única, regras 1–51).
+política de push, shared como fonte única, regras 1–57).
 
 ---
 
 ## Última posição
 
-**Data:** 2026-11-18 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
-**Estado:** `esp32_c3` recebe `POWERED_USB=1`; macros duplicadas removidas. Powered Mode inicia dashboard e Telnet (porta 23). Dashboard confirmado acessível pelo usuário em `http://192.168.1.59/`. Build C3 passou; upload Telnet mais recente bloqueado porque `/dev/ttyACM0` estava ocupado. Sem push.
+**Data:** 2026-11-25 · **Branch:** `dev` · **Tag/versão:** inalterada (shared `FW_VERSION v1.2.29`)
+**Estado:** `setup.sh` corrigido e rodou até o fim (EXIT=0). `.venv` estava quebrado (shebang `/mnt/c/git/homeware/...`, `bin/python` de 0 bytes) e foi recriado. Sem push.
+
+### Trabalho concluído nesta sessão (sessão 13 — setup.sh não rodava)
+
+1. **Causa**: Ubuntu 24.04 / Python 3.12 com PEP 668 (*externally-managed-environment*). `python3 -m pip install --user -U platformio` falhou duas vezes; como a segunda tentativa vinha depois de `||`, o `set -e` abortou o script antes de chegar ao `pio --version`.
+2. **`setup.sh`**: removido `pip --user`. Ordem agora: `pio` no PATH → `~/.platformio/penv/bin/pio` → criar/reparar `.venv` e instalar PlatformIO dentro dele. Bloco antigo que só procurava o bin do user-site foi trocado por fallback para `.venv/bin` + mensagem de PATH persistente.
+3. **`setup_venv.sh`**: passou a recriar o venv quando ele está ausente **ou quebrado** — validação por saída não-vazia de `python -m pip --version` (um arquivo executável de 0 bytes responde exit 0 sem saída, então `-x` sozinho não detecta).
+4. **`AGENTS.md`**: regra 57 registrada (PEP 668 / setup sem pip de sistema).
+5. **Validação**: `bash setup.sh` → EXIT=0, sem erros de externally-managed; `pio --version` = 6.2.0 (via `~/.platformio/penv/bin`); `.venv` recriado com deps de `requirements.txt`. Commits locais em `dev`, sem push.
 
 ### Trabalho concluído nesta sessão (sessão 12 — Telnet em Powered Mode)
 
