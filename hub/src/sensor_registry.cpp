@@ -178,6 +178,11 @@ int sensor_registry_daily_summary(char *out, size_t out_len, time_t epoch) {
 bool sensor_registry_add(const uint8_t *mac, uint8_t type, uint16_t slot, const char *name, uint8_t client_chip, uint8_t radio_type) {
     if (slot >= MAX_VIRTUAL_SENSORS) return false;
     sensor_registry_lock();
+    if (s_sensors[slot].paired) {
+        sensor_registry_unlock();
+        console.printf("[Gateway] Add slot %d: already occupied by %s\n", slot, s_sensors[slot].name);
+        return false;
+    }
     if (sensor_registry_find_by_mac(mac) >= 0) { sensor_registry_unlock(); return false; }
 
     virtual_sensor_t *s = &s_sensors[slot];
@@ -430,7 +435,10 @@ void sensor_registry_load() {
         virtual_sensor_t *s = &s_sensors[i];
         s->paired      = true;
         s->type        = slots[i].sensor_type;
-        s->slot        = slots[i].slot;
+        if (slots[i].slot != i) {
+            console.printf("[CFG] slot mismatch storage=%d index=%d, fixing to %d\n", slots[i].slot, i, i);
+        }
+        s->slot        = (uint8_t)i;
         memcpy(s->mac, slots[i].mac, 6);
         strncpy(s->name, slots[i].name, sizeof(s->name) - 1);
         s->client_chip = slots[i].client_chip;
