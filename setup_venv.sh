@@ -7,7 +7,9 @@ VENV_DIR=".venv"
 PYTHON="${PYTHON:-python3}"
 
 echo "Creating virtualenv in $VENV_DIR ..."
-if [ ! -d "$VENV_DIR" ]; then
+if [ ! -x "$VENV_DIR/bin/python" ] || [ -z "$("$VENV_DIR/bin/python" -m pip --version 2>/dev/null)" ]; then
+    echo "    venv missing/broken (e.g. stale shebang from another path) — recreating."
+    rm -rf "$VENV_DIR"
     "$PYTHON" -m venv "$VENV_DIR"
 fi
 

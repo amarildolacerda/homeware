@@ -5,4 +5,5 @@ PORT="${1:-/dev/ttyUSB0}"
 ENV="${2:-hub_32_lora}"
 
 cd "$SCRIPT_DIR"
-platformio run -e "$ENV" -t erase --upload-port "$PORT"
+source "$SCRIPT_DIR/../pio_env.sh"
+"$PIO" run -e "$ENV" -t erase --upload-port "$PORT"

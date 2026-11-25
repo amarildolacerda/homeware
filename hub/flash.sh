@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../pio_env.sh"
 PORT="/dev/ttyUSB0"
 ENV="hub_32_ota"
 
@@ -14,7 +15,7 @@ while getopts ":p:o:e:" opt; do
 done
 
 if [ -n "$OTA_IP" ]; then
-    platformio run -e "$ENV" --target upload --upload-port "$OTA_IP"
+    "$PIO" run -e "$ENV" --target upload --upload-port "$OTA_IP"
 else
-    platformio run -e "$ENV" --target upload --upload-port "$PORT"
+    "$PIO" run -e "$ENV" --target upload --upload-port "$PORT"
 fi

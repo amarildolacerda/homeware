@@ -14,7 +14,13 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 # ---- helpers ----
 
 find_pio() {
-    for p in pio platformio "$HOME/.local/bin/platformio"; do
+    for p in \
+        pio \
+        platformio \
+        "$HOME/.local/bin/pio" \
+        "$HOME/.local/bin/platformio" \
+        "$HOME/.platformio/penv/bin/pio" \
+        "$HOME/.platformio/penv/bin/platformio"; do
         if command -v "$p" &>/dev/null; then echo "$p"; return; fi
     done
     echo "PlatformIO CLI not found" >&2; exit 1

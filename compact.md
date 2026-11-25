@@ -5,14 +5,62 @@
 > Atualize-o ao final de cada sessão (data + seção "Última posição").
 
 Regras gerais do projeto continuam valendo em `AGENTS.md` (branch `dev`,
-política de push, shared como fonte única, regras 1–51).
+política de push, shared como fonte única, regras 1–57).
 
 ---
 
 ## Última posição
 
-**Data:** 2026-11-15 · **Branch:** `dev` · **Tag/versão:** shared `FW_VERSION v1.2.29`
-**Estado:** `hub_32_ota` compila. O polling do Telegram foi reforçado: inicializa cursor de updates, encerra TLS após cada poll, alerta crítico só é enviado ao entrar no estado e relatório diário é uma mensagem consolidada. Sem push. A alteração preexistente de `FW_VERSION` em `shared/src/shared_config.h` continua sem commit.
+**Data:** 2026-11-25 · **Branch:** `dev` → `main_v1.2.30` → `main` · **Tag/versão:** `v1.2.30`
+**Estado:** `setup.sh`/scripts corrigidos; tipo da Sacada Branca confirmado como light após reflash. Promoção para produção em andamento (shared `b1dc22a` já pushed em `dev`).
+
+### Trabalho concluído nesta sessão (sessão 13 — setup.sh não rodava)
+
+1. **Causa**: Ubuntu 24.04 / Python 3.12 com PEP 668 (*externally-managed-environment*). `python3 -m pip install --user -U platformio` falhou duas vezes; como a segunda tentativa vinha depois de `||`, o `set -e` abortou o script antes de chegar ao `pio --version`.
+2. **`setup.sh`**: removido `pip --user`. Ordem agora: `pio` no PATH → `~/.platformio/penv/bin/pio` → criar/reparar `.venv` e instalar PlatformIO dentro dele. Bloco antigo que só procurava o bin do user-site foi trocado por fallback para `.venv/bin` + mensagem de PATH persistente.
+3. **`setup_venv.sh`**: passou a recriar o venv quando ele está ausente **ou quebrado** — validação por saída não-vazia de `python -m pip --version` (um arquivo executável de 0 bytes responde exit 0 sem saída, então `-x` sozinho não detecta).
+4. **`AGENTS.md`**: regra 57 registrada (PEP 668 / setup sem pip de sistema).
+5. **Validação**: `bash setup.sh` → EXIT=0, sem erros de externally-managed; `pio --version` = 6.2.0 (via `~/.platformio/penv/bin`); `.venv` recriado com deps de `requirements.txt`.
+6. **Sequência do usuário**: `cd hub && ./flash.sh -o 192.168.1.14` falhou com `platformio: comando não encontrado` — o `export PATH` dentro do `setup.sh` não persiste no shell. Criado `pio_env.sh` (raiz) que resolve o executável; scripts `flash.sh`, `hub/flash.sh`, `hub/build.sh`, `hub/monitor.sh`, `hub/erase.sh` agora sourceiam e chamam `"$PIO"`. Validado com `PATH=/usr/bin:/bin`: resolve para `~/.platformio/penv/bin/pio` 6.2.0. Sem push; OTA não executado por mim.
+7. **Dúvida respondida (sem código)**: tipos 8/9 não vêm do nome do device — o node envia `sensor_type` no `/node/register` (TCP) ou PAIR_REQUEST (ESP-NOW); hub só persiste/refresha no re-register. `nodes/switch` → 8 (Interruptor), `nodes/lamp` → 9 (Lâmpada, desde commit 81a90da em 2026-08-03; antes era 8). Firmware lamp antigo ou pré-fix de `sync_callbacks()` (fallback TCP = ONOFF) também registra 8. Conferir via `GET /api/sensors` (`type`, `type_name`, `fw_version`); corrigir com reflash + reboot do node ou `b` no console do hub.
+8. **Investigação no hub 192.168.1.14**: `Sacada Branca` (slot 0, IP .43) = type 8/onoff; `Deposito` (slot 4, IP .150) = type 9/light — ambos `fw_version v1.2.29` e ambos reportam `"type":"lampada"` no `/api/state` do node (campo hardcoded, não prova o tipo registrado). `Deposito` expõe `repeater_supported` no `/api/state` (build `esp8266_espnow`, REPEATER_ENABLED); `Sacada Branca` não expõe (build `esp8266_ota`, REPEATER_ENABLED comentado) → **não são o mesmo .bin**. Ambos têm `radio_mode` (feature de 2026-11-01), mas o fix `sync_callbacks()` do shared é `ad33fdb` (2026-11-16): diagnose mais provável é o .bin da Sacada Branca ser anterior a esse fix, com `callbacks.get_sensor_type == nullptr` → fallback `SENSOR_TYPE_ONOFF` (8) no `/node/register`. Uptime: Sacada Branca 1d3h47m, Deposito 34m. Correção: recompilar/flashar Sacada Branca com `nodes/lamp` + shared atual e reboot; conferir `type` no `/api/sensors`. **Confirmado pelo usuário: funcionou** — Sacada Branca passou a type 9/light após reflash com o build atual.
+9. **Promoção v1.2.30 (autorizada pelo usuário)**: commitado `hub/src/sensor_registry.cpp` (guard de slot ocupado + correção do slot lido do NVS) no `dev`; bump `FW_VERSION` para `v1.2.30` no shared (`b1dc22a`, pushed em `origin/dev` do submodule). `bridge/` é gitignored e não tem versão versionada para bump. Próximos passos: commitar ponteiro do submodule + docs no dev, push `origin/dev`, criar/push `main_v1.2.30`, merge em `main`, tag `v1.2.30` e push.
+
+### Trabalho concluído nesta sessão (sessão 12 — Telnet em Powered Mode)
+
+1. Telnet usa `WiFiServer` na porta 23; `console.begin()` inicia o listener e `loop_powered()` aceita clientes/processa comandos.
+2. `console.set_banner(DEVICE_NAME)` identifica a sessão remota; `setup_powered()` mostra o IP e a porta quando WiFi está conectado.
+3. Build `esp32_c3` passou. A tentativa de upload falhou porque `/dev/ttyACM0` estava ocupado; nenhum processo foi encerrado.
+
+### Trabalho concluído nesta sessão (sessão 11 — dashboard em Powered Mode)
+
+1. Verificado que `setup()` chama `setup_powered()` quando o modo detectado é `POWERED_MODE`.
+2. `setup_powered()` já chama `dashboard_begin()`; isso registra `/` e `/docs` e inicia o servidor na porta 80. `loop_powered()` chama `dashboard_loop()` em cada iteração.
+3. Nenhuma alteração de código necessária para ativar o dashboard. Acessar `http://<IP-do-node>/` após conectar ao WiFi.
+
+### Trabalho concluído nesta sessão (sessão 10 — avisos de defines duplicados)
+
+1. Removido `-DWIFI_ENABLED` dos envs TCP: `main.cpp` já ativa WiFi quando `TCP_ENABLED` está definido.
+2. No C3, mantido somente `WIFI_CHANNEL=4` (valor efetivo anterior; o define `=1` duplicado não era usado no código).
+3. Removidas as definições locais duplicadas `WIFI_CONFIG_PORTAL_SSID/PASS` de `config.h`; o valor efetivo já era o default do `shared_config.h`.
+4. Validação: builds `esp32_c3`, `esp8266_tcp` e `esp8266_ota` passaram sem avisos de macro redefinida. Ainda há warnings independentes de APIs deprecated e variáveis unused.
+
+### Trabalho concluído nesta sessão (sessão 9 — reinício do acquiry-bat ESP32-C3)
+
+1. **Causa raiz do assert**: stack da placa mostrou `ConsoleOutput::begin()` → `NetworkServer::begin()` → `lwip_socket()` → `sys_mutex_lock()`, antes de `WiFi.mode()` inicializar `Network.begin()`. Movido `console.begin()` para depois de `WiFi.mode(WIFI_STA)` em `nodes/acquiry-bat/src/main.cpp`.
+2. **Modo de alimentação**: por decisão do usuário, `platformio.ini` define `-DPOWERED_USB=1` somente em `env:esp32_c3`; `detect_power_source()` consome a flag e retorna `POWERED_MODE`. Outros alvos mantêm a detecção atual.
+3. **Robustez adicional**: expiração do portal WiFi em Powered Mode não reinicia e deixa a reconexão para `powered_maintain_wifi()`.
+4. **Validação**: `pio run -e esp32_c3` passou; firmware gravado/verificado em `/dev/ttyACM0`. A captura posterior não encontrou linhas de monitor; build ainda avisa redefinição de `WIFI_CHANNEL`.
+5. **Próximo passo**: abrir monitor a 115200 antes de resetar a placa e confirmar o banner/boot. O firmware não imprime telemetria continuamente.
+
+### Trabalho concluído nesta sessão (sessão 8 — botão ligar/desligar do hub não chega ao lamp)
+
+1. **Causa raiz** (`shared/src/selectable_node_protocol.*`): `NodeProtocol::callbacks` é membro por instância. O `lamp` (envs `esp8266_espnow`/`esp8266_ota` têm `RADIO_SELECT_ENABLED`) usa `s_radio.callbacks = {...}`, que ficava só no `SelectableNodeProtocol`; `m_espnow` e `m_tcp` continuavam com `nullptr`. Resultado: `on_command` nunca chamado (botão do hub inócuo), `get_sensor_payload` nunca chamado (estado nunca atualiza no hub) e `get_sensor_type` nulo → registra como `SENSOR_TYPE_ONOFF` (TCP) / 0 (ESP-NOW).
+2. **Fix**: novo `SelectableNodeProtocol::sync_callbacks()` copiando `callbacks` para `m_espnow` e `m_tcp`, chamado em `set_mode()`, `begin()` e `loop()` (cobre atribuição depois do `begin`).
+3. **Defensivo**: `NodeCallbacks callbacks = {}` em `node_protocol.h` — callback ausente é `nullptr` (já checado), não ponteiro indefinido.
+4. **Validação**: `pio run -e esp8266_espnow` no `nodes/lamp` SUCCESS. `tests/unit` (native) **não compila por breakage pré-existente** (`platform.h` inclui `ESP8266WiFi.h` no env native, sem mock) — não relacionado a esta mudança.
+5. **Bancada pendente**: reflashar o lamp, conferir que o tipo passa a 9 (Lâmpada) no card do hub e que `[lamp] Command received` / `TCP cmd: ON` aparece no serial ao clicar. No hub, `[tcp] Command queued for ...` (modo TCP) ou `[ESP-NOW] cmd to <mac> hop 1/6` (modo ESP-NOW).
+6. **Follow-up em aberto**: `dest_for_chip()` (hub) envia unicast ESP32→ESP8266 para o MAC WiFi do registry, enquanto a regra 19 pede derivar o MAC alt (`mywifi_espnow_mac`, hoje sem uso). Não alterado por falta de validação em bancada.
 
 ### Trabalho concluído nesta sessão (sessão 7 — comandos Telegram param de responder)
 

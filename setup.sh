@@ -30,10 +30,23 @@ if [ "$FRESH_INSTALL" -eq 1 ]; then
     fi
 fi
 
-echo "==> Installing PlatformIO (pip user install) ..."
-if ! command -v pio >/dev/null 2>&1 || [ "$FRESH_INSTALL" -eq 1 ]; then
-    "$PYTHON" -m pip install --user -U platformio \
-        || pip install -U platformio
+echo "==> Ensuring PlatformIO is available (PEP 668 safe: no pip --user) ..."
+if command -v pio >/dev/null 2>&1; then
+    echo "    Using pio from PATH: $(command -v pio)"
+elif [ -x "$HOME/.platformio/penv/bin/pio" ]; then
+    export PATH="$HOME/.platformio/penv/bin:$PATH"
+    echo "    Using pio from ~/.platformio/penv/bin"
+else
+    echo "    No pio found — installing into .venv."
+    if [ -f setup_venv.sh ]; then
+        ./setup_venv.sh
+    elif [ ! -x .venv/bin/python ]; then
+        "$PYTHON" -m venv .venv
+    fi
+    export PATH="$PWD/.venv/bin:$PATH"
+    if ! command -v pio >/dev/null 2>&1; then
+        .venv/bin/python -m pip install -U platformio
+    fi
 fi
 
 echo "==> Adding user to dialout group (serial port access) ..."
@@ -51,11 +64,11 @@ fi
 
 echo "==> Ensuring 'pio' is on PATH ..."
 if ! command -v pio >/dev/null 2>&1; then
-    PY_USER_BIN="$("$PYTHON" -m site --user-base)/bin"
-    export PATH="$PY_USER_BIN:$PATH"
-    echo "    Add to your shell profile: export PATH=\"$PY_USER_BIN:\$PATH\""
+    export PATH="$PWD/.venv/bin:$PATH"
+    echo "    Add to your shell profile: export PATH=\"$PWD/.venv/bin:\$PATH\""
 fi
-command -v pio >/dev/null 2>&1 || { echo "pio not found on PATH"; exit 1; }
+command -v pio >/dev/null 2>&1 || { echo "pio not found — run setup_venv.sh and activate .venv"; exit 1; }
+echo "    Persistent PATH: export PATH=\"$(dirname "$(command -v pio)"):\$PATH\""
 
 echo "==> PlatformIO version:"
 pio --version

@@ -37,8 +37,14 @@ enum PowerMode { BATTERY_MODE, POWERED_MODE };
 static PowerMode s_power_mode = BATTERY_MODE;
 
 static PowerMode detect_power_source() {
-#if POWER_DETECT_PIN >= 0
+#if defined(POWERED_USB) && POWERED_USB
+    return POWERED_MODE;
+#elif POWER_DETECT_PIN >= 0
+#if defined(ARDUINO_ARCH_ESP32)
+    pinMode(POWER_DETECT_PIN, INPUT_PULLDOWN);
+#else
     pinMode(POWER_DETECT_PIN, INPUT);
+#endif
     delay(10);
     int v = digitalRead(POWER_DETECT_PIN);
     if (POWER_DETECT_ACTIVE_HIGH) return (v == HIGH) ? POWERED_MODE : BATTERY_MODE;
@@ -500,12 +506,15 @@ static bool wifi_setup(bool force_config_portal)
 // --- Dual Power: Powered Mode (USB/fonte) — WiFi contínuo + dashboard + OTA ---
 static void setup_powered(void)
 {
-    // WiFi contínuo: conexão normal; falha → portal; portal expirado → restart
+    // WiFi contínuo: conexão normal; falha → portal; após expirar, segue
+    // offline e deixa powered_maintain_wifi() tentar novamente no loop.
     if (!wifi_setup(false))
     {
-        console.printf("[%s] Portal expirou, reiniciando\n", TAG);
-        delay(2000);
-        ESP.restart();
+        console.printf("[%s] Portal expirou, iniciando offline\n", TAG);
+    }
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        console.printf("[%s] Telnet: %s:23\n", TAG, WiFi.localIP().toString().c_str());
     }
 #ifdef ESP32
     WiFi.setSleep(false);
@@ -553,7 +562,6 @@ void setup(void)
 {
     Serial.begin(115200);
     delay(500);
-    console.begin();
     s_power_mode = detect_power_source();
     Serial.printf("Power mode: %s\n", s_power_mode == POWERED_MODE ? "POWERED" : "BATTERY");
     s_active_start = millis();
@@ -564,6 +572,8 @@ void setup(void)
 #endif
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
+    console.begin();
+    console.set_banner(DEVICE_NAME);
 
     getDeviceId(); // initializes device ID from chip_id()
     espnow_load_device_name(s_device_name, sizeof(s_device_name));

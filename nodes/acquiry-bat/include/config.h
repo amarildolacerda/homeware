@@ -29,8 +29,6 @@
 #define ESPNOW_MAX_PAIR_ATTEMPTS 10
 #define ESPNOW_PAIR_TIMEOUT_MS 30000
 
-#define WIFI_CONFIG_PORTAL_SSID "AgriSense_Acquiry_Bat"
-#define WIFI_CONFIG_PORTAL_PASS "password123"
 #define WIFI_CONFIG_PORTAL_TIMEOUT_S 120
 #define WIFI_CONNECT_TIMEOUT_MS 30000
 // ESP-NOW puro: timeout curto só para herdar o canal do AP (sem exigir IP/portal)
